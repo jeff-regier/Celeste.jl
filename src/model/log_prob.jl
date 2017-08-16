@@ -36,7 +36,7 @@ function make_star_logpdf(images::Vector{Image},
     subprior = prior.star
 
     function star_logprior(state::Vector{Float64})
-        brightness, colors, u = state[1], state[2:5], state[6:end]
+        brightness, colors, pos = state[1], state[2:5], state[6:end]
         return color_logprior(brightness, colors, prior, true)
     end
 
@@ -86,7 +86,7 @@ function make_galaxy_logpdf(images::Vector{Image},
     subprior = prior.galaxy
 
     function galaxy_logprior(state::Vector{Float64})
-        brightness, colors, u, gal_shape =
+        brightness, colors, pos, gal_shape =
             state[1], state[2:5], state[6:7], state[8:end]
 
         # brightness prior
@@ -152,11 +152,11 @@ function state_log_likelihood(is_star::Bool,                # source is star
 
     # load star/gal mixture components (make sure these reflect
     gdev, gaxis, gangle, gscale = gal_shape
-    source_params[1][lidx.u]       = position
-    source_params[1][lidx.e_dev]   = gdev
-    source_params[1][lidx.e_axis]  = gaxis
-    source_params[1][lidx.e_angle] = gangle
-    source_params[1][lidx.e_scale] = gscale
+    source_params[1][lidx.pos]       = position
+    source_params[1][lidx.gal_fracdev]   = gdev
+    source_params[1][lidx.gal_ab]  = gaxis
+    source_params[1][lidx.gal_angle] = gangle
+    source_params[1][lidx.gal_scale] = gscale
 
     # iterate over the pixels, summing pixel-specific poisson rates
     ll = 0.
@@ -190,10 +190,10 @@ function state_log_likelihood(is_star::Bool,                # source is star
             for s in 2:S  # excludes source #1
                 # determine if background source is star/gal; get fluxes
                 params_s  = source_params[s]
-                s_is_star = params_s[lidx.a[1,1]] > .5
+                s_is_star = params_s[lidx.is_star[1,1]] > .5
                 type_idx  = s_is_star ? 1 : 2
-                flux_s    = colors_to_fluxes(params_s[lidx.r[type_idx]],
-                                             params_s[lidx.c[:,type_idx]])
+                flux_s    = colors_to_fluxes(params_s[lidx.flux[type_idx]],
+                                             params_s[lidx.color[:,type_idx]])
                 populate_fsm!(bvn_derivs,
                               fs0m, fs1m,
                               s, hw,
@@ -216,7 +216,7 @@ function state_log_likelihood(is_star::Bool,                # source is star
             pixel_rate = fluxes[img.b] * this_rate + background_rate
 
             # multiply by image's gain for this pixel
-            rate     = pixel_rate * img.iota_vec[h]
+            rate     = pixel_rate * img.nelec_per_nmgy[h]
             pixel_ll = logpdf(Poisson(rate[1]), round(Int, img.pixels[h, w]))
             ll += pixel_ll
         end
@@ -231,14 +231,14 @@ end
 ###########################################################################
 
 
-type StarPrior
+struct StarPrior
     brightness::LogNormal
     color_component::Categorical
     colors::Vector{MvNormal}
 end
 
 
-type GalaxyPrior
+struct GalaxyPrior
     brightness::LogNormal
     color_component::Categorical
     colors::Vector{MvNormal}
@@ -248,7 +248,7 @@ type GalaxyPrior
 end
 
 
-type Prior
+struct Prior
     is_star::Bernoulli
     star::StarPrior
     galaxy::GalaxyPrior
@@ -261,14 +261,14 @@ Construct a `Prior` object, contains StarPrior and GalaxyPrior objects
 function construct_prior()
     pp = load_prior()
     star_prior = StarPrior(
-        LogNormal(pp.r_μ[1], sqrt(pp.r_σ²[1])),
+        LogNormal(pp.flux_mean[1], sqrt(pp.flux_var[1])),
         Categorical(pp.k[:,1]),
-        [MvNormal(pp.c_mean[:,k,1], pp.c_cov[:,:,k,1]) for k in 1:D])
+        [MvNormal(pp.color_mean[:,k,1], pp.color_cov[:,:,k,1]) for k in 1:NUM_COLOR_COMPONENTS])
 
     gal_prior = GalaxyPrior(
-        LogNormal(pp.r_μ[2], sqrt(pp.r_σ²[2])),
+        LogNormal(pp.flux_mean[2], sqrt(pp.flux_var[2])),
         Categorical(pp.k[:,2]),
-        [MvNormal(pp.c_mean[:,k,2], pp.c_cov[:,:,k,2]) for k in 1:D],
+        [MvNormal(pp.color_mean[:,k,2], pp.color_cov[:,:,k,2]) for k in 1:NUM_COLOR_COMPONENTS],
         LogNormal(0, 10),
         Beta(1, 1),
         Beta(1, 1))
@@ -287,7 +287,7 @@ function color_logprior(brightness::Float64,
                         is_star::Bool)
     subprior      = is_star ? prior.star : prior.galaxy
     ll_brightness = logpdf(subprior.brightness, exp(brightness))
-    ll_component  = [logpdf(subprior.colors[k], colors) for k in 1:D]
+    ll_component  = [logpdf(subprior.colors[k], colors) for k in 1:NUM_COLOR_COMPONENTS]
     ll_color      = logsumexp(ll_component + log.(subprior.color_component.p))
     return ll_brightness + ll_color
 end
@@ -335,8 +335,8 @@ function colors_to_fluxes(brightness::Float64, colors::Vector{Float64})
     ret[3] = lnr     # r flux
     ret[4] = lnr + colors[3]        # ln(i/r) = c3 => lni = lnr - c3
     ret[5] = ret[4] + colors[4]     # ln(z/i) = c4 => lnz = lni - c4
-    ret[2] = -colors[2] + lnr       # ln(r/g) = c2 => lng = c2 + lnr
-    ret[1] = -colors[1] + ret[2]    # ln(g/u) = c1 => lnu = c1 + lng
+    ret[2] = -colors[2] + lnr       # ln(r/g) = color_var => lng = color_var + lnr
+    ret[1] = -colors[1] + ret[2]    # ln(g/u) = color_mean => lnu = color_mean + lng
     return exp.(ret)
 end
 
@@ -398,35 +398,35 @@ function catalog_entry_to_latent_state_params(ce::CatalogEntry)
     ret = Vector{Float64}(length(lidx))
 
     # galaxy shape params
-    ret[lidx.u]       = ce.pos
-    ret[lidx.e_dev]   = ce.gal_frac_dev
-    ret[lidx.e_axis]  = ce.gal_ab
-    ret[lidx.e_scale] = ce.gal_scale
-    ret[lidx.e_angle] = ce.gal_angle
+    ret[lidx.pos]       = ce.pos
+    ret[lidx.gal_fracdev]   = ce.gal_frac_dev
+    ret[lidx.gal_ab]  = ce.gal_ab
+    ret[lidx.gal_scale] = ce.gal_scale
+    ret[lidx.gal_angle] = ce.gal_angle
 
     # star, gal r flux
     star_lnr, star_cols = fluxes_to_colors(ce.star_fluxes)
     gal_lnr, gal_cols   = fluxes_to_colors(ce.gal_fluxes)
-    ret[lidx.r]         = [star_lnr, gal_lnr]
-    ret[lidx.c]         = hcat([star_cols, gal_cols]...)
+    ret[lidx.flux]         = [star_lnr, gal_lnr]
+    ret[lidx.color]         = hcat([star_cols, gal_cols]...)
 
     # set the prob star/prob gal
-    ret[lidx.a] = clamp(ce.is_star, eps_prob_a, 1-eps_prob_a)
+    ret[lidx.is_star] = clamp(ce.is_star, eps_prob_a, 1-eps_prob_a)
     ret
 end
 
 
 function extract_star_state(ls::Array{Float64, 1})
-    return [[ls[lidx.r[1]]]; ls[lidx.c[:, 1]]; ls[lidx.u]]
+    return [[ls[lidx.flux[1]]]; ls[lidx.color[:, 1]]; ls[lidx.pos]]
 end
 
 
 function extract_galaxy_state(ls::Array{Float64, 1})
-    gal_shape = [ls[lidx.e_dev]  ,
-                 ls[lidx.e_axis] ,
-                 ls[lidx.e_angle],
-                 ls[lidx.e_scale]]
-    return [[ls[lidx.r[2]]]; ls[lidx.c[:, 2]]; ls[lidx.u];
+    gal_shape = [ls[lidx.gal_fracdev]  ,
+                 ls[lidx.gal_ab] ,
+                 ls[lidx.gal_angle],
+                 ls[lidx.gal_scale]]
+    return [[ls[lidx.flux[2]]]; ls[lidx.color[:, 2]]; ls[lidx.pos];
             unconstrain_gal_shape(gal_shape)]
 end
 

@@ -8,43 +8,43 @@ using Celeste.DeterministicVI.ElboMaximize: Config, maximize!, elbo_optim_option
 using Optim
 
 function verify_sample_star(vs, pos)
-    @test vs[ids.a[2]] <= 0.01
+    @test vs[ids.is_star[2]] <= 0.01
 
-    @test isapprox(vs[ids.u[1]], pos[1], atol=0.1)
-    @test isapprox(vs[ids.u[2]], pos[2], atol=0.1)
+    @test isapprox(vs[ids.pos[1]], pos[1], atol=0.1)
+    @test isapprox(vs[ids.pos[2]], pos[2], atol=0.1)
 
-    brightness_hat = exp(vs[ids.r1[1]] + 0.5 * vs[ids.r2[1]])
+    brightness_hat = exp(vs[ids.flux_loc[1]] + 0.5 * vs[ids.flux_scale[1]])
     @test isapprox(brightness_hat / sample_star_fluxes[3], 1.0, atol=0.01)
 
     true_colors = log.(sample_star_fluxes[2:5] ./ sample_star_fluxes[1:4])
     for b in 1:4
-        @test isapprox(vs[ids.c1[b, 1]], true_colors[b], atol=0.2)
+        @test isapprox(vs[ids.color_mean[b, 1]], true_colors[b], atol=0.2)
     end
 end
 
 function verify_sample_galaxy(vs, pos)
-    @test vs[ids.a[2]] >= 0.99
+    @test vs[ids.is_star[2]] >= 0.99
 
-    @test isapprox(vs[ids.u[1]], pos[1], atol=0.1)
-    @test isapprox(vs[ids.u[2]], pos[2], atol=0.1)
+    @test isapprox(vs[ids.pos[1]], pos[1], atol=0.1)
+    @test isapprox(vs[ids.pos[2]], pos[2], atol=0.1)
 
-    @test isapprox(vs[ids.e_axis] , 0.7, atol=0.05)
-    @test isapprox(vs[ids.e_dev]  , 0.1, atol=0.08)
-    @test isapprox(vs[ids.e_scale], 4.0, atol=0.2)
+    @test isapprox(vs[ids.gal_ab] , 0.7, atol=0.05)
+    @test isapprox(vs[ids.gal_fracdev]  , 0.1, atol=0.08)
+    @test isapprox(vs[ids.gal_scale], 4.0, atol=0.2)
 
-    phi_hat = vs[ids.e_angle]
+    phi_hat = vs[ids.gal_angle]
     phi_hat -= floor(phi_hat / pi) * pi
     five_deg = 5 * pi/180
     @test isapprox(phi_hat, pi/4, atol=five_deg)
 
-    brightness_hat = exp(vs[ids.r1[2]] + 0.5 * vs[ids.r2[2]])
+    brightness_hat = exp(vs[ids.flux_loc[2]] + 0.5 * vs[ids.flux_scale[2]])
     @show brightness_hat
     @show sample_galaxy_fluxes[3]
     @test isapprox(brightness_hat / sample_galaxy_fluxes[3], 1.0, atol=0.05)
 
     true_colors = log.(sample_galaxy_fluxes[2:5] ./ sample_galaxy_fluxes[1:4])
     for b in 1:4
-        @test isapprox(vs[ids.c1[b, 2]], true_colors[b], atol=0.2)
+        @test isapprox(vs[ids.color_mean[b, 2]], true_colors[b], atol=0.2)
     end
 end
 
@@ -56,7 +56,7 @@ function test_star_optimization()
 
     # Newton's method converges on a small galaxy unless we start with
     # a high star probability.
-    vp[1][ids.a] = [0.8, 0.2]
+    vp[1][ids.is_star] = [0.8, 0.2]
 
     cfg = Config(ea, vp; loc_width=1.0)
     maximize!(ea, vp, cfg)

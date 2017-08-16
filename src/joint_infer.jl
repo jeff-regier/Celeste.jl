@@ -20,7 +20,7 @@ gdlog = nothing
 const BoxMaxThreshold = convert(UInt64, 20*60*1e9)::UInt64
 const OneMinute = 0x0000000df8475800 # in nanoseconds
 
-type BoxKillSwitch <: Function
+mutable struct BoxKillSwitch <: Function
     started::UInt64
     numfin_threshold::Int64
     numfin::Atomic{Int64}
@@ -417,7 +417,7 @@ Partitions sources via the cyclades algorithm. Finds the batch size which return
 """
 function partition_cyclades_dynamic_auto_batchsize(target_sources, neighbor_map, ea_vec)
     n_threads = nthreads()
-    
+
     # Sample batch sizes at intervals
     n_to_sample = 100
     stepsize = max(1, trunc(Int, length(target_sources) / n_to_sample))
@@ -434,7 +434,7 @@ function partition_cyclades_dynamic_auto_batchsize(target_sources, neighbor_map,
             # Find average load imbalance within the batch as a percentage
 	    times = [sum([estimate_time(ea_vec[source_index].patches) for source_index in component]) for component in batch]
             times = load_balance_across_threads(n_threads, times)
-            estimated_imbalance = mean(maximum(times) - times) 
+            estimated_imbalance = mean(maximum(times) - times)
 	    score += estimated_imbalance
         end
         if score <= best_score
@@ -793,7 +793,7 @@ function process_sources_kernel!(ea_vec::Vector{ElboArgs},
         if within_batch_shuffling
             shuffle!(source_assignment)
         end
-	
+
 	#tic()
         for i in source_assignment
             maximize!(ea_vec[i], vp_vec[i], cfg_vec[i])
@@ -828,4 +828,3 @@ function show_pixels_processed()
     n_active, n_inactive = get_pixels_processed()
     Log.message("$(Time(now())): (active,inactive) pixels processed: \($n_active,$n_inactive\)")
 end
-

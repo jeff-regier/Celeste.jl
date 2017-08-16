@@ -51,7 +51,7 @@ end
 # of sources.
 # ----------------
 
-type CentSRBarrier
+struct CentSRBarrier
     thread_counter::Atomic{Int}
     num_threads::Int
     sense::Int
@@ -81,7 +81,7 @@ end
 # ----------------
 # container for multiprocessing/multithreading-specific information
 # ----------------
-type MultiInfo
+struct MultiInfo
     dt::Dtree
     ni::Int
     ci::Int
@@ -95,7 +95,7 @@ end
 # ----------------
 # container for bounding boxes and associated data
 # ----------------
-type BoxInfo
+struct BoxInfo
     state::Atomic{Int}
     box_idx::Int
     catalog::Vector{CatalogEntry}

@@ -48,8 +48,8 @@ end
 
 
 """
-Given a function (lnpdf), that takes in a D dimensional vector (th),
-this function fixes D-1 of the dimensions of th, and returns a function
+Given a function (lnpdf), that takes in a NUM_COLOR_COMPONENTS dimensional vector (th),
+this function fixes NUM_COLOR_COMPONENTS-1 of the dimensions of th, and returns a function
 handle that only varies with respect to dimension d.
 """
 function curry_dim(lnpdf::Function, th0::Vector{Float64}, dim::Int)
@@ -179,7 +179,7 @@ end
 function write_star_unit_flux(img0::Image,
                               pos::Array{Float64, 1},
                               pixels::Matrix{Float64})
-    iota = median(img0.iota_vec)
+    iota = median(img0.nelec_per_nmgy)
     for k in 1:length(img0.psf)
         the_mean = SVector{2}(WCS.world_to_pix(img0.wcs, pos)) + img0.psf[k].xiBar
         the_cov = img0.psf[k].tauBar
@@ -195,8 +195,8 @@ function write_galaxy_unit_flux(img0::Image,
                                 gal_angle::Float64,
                                 gal_scale::Float64,
                                 pixels::Matrix{Float64})
-    iota = median(img0.iota_vec)
-    e_devs = [gal_frac_dev, 1 - gal_frac_dev]
+    iota = median(img0.nelec_per_nmgy)
+    gal_fracdevs = [gal_frac_dev, 1 - gal_frac_dev]
     #XiXi = DeterministicVI.get_bvn_cov(ce.gal_ab, ce.gal_angle, ce.gal_scale)
     XiXi = Model.get_bvn_cov(gal_ab, gal_angle, gal_scale)
 
@@ -206,7 +206,7 @@ function write_galaxy_unit_flux(img0::Image,
                 the_mean = SVector{2}(WCS.world_to_pix(img0.wcs, pos)) +
                            img0.psf[k].xiBar
                 the_cov = img0.psf[k].tauBar + gproto.nuBar * XiXi
-                intensity = iota * img0.psf[k].alphaBar * e_devs[i] *
+                intensity = iota * img0.psf[k].alphaBar * gal_fracdevs[i] *
                     gproto.etaBar
                 write_gaussian(the_mean, the_cov, intensity, pixels)
             end
@@ -247,8 +247,8 @@ following website:
 http://blog.stata.com/2016/05/26/gelman-rubin-convergence-diagnostic-using-multiple-chains/
 """
 function potential_scale_reduction_factor(chains)
-    # each chain has to be size N x D, we have M chains
-    N, D  = size(chains[1])
+    # each chain has to be size N x NUM_COLOR_COMPONENTS, we have M chains
+    N, NUM_COLOR_COMPONENTS  = size(chains[1])
     M     = length(chains)
 
     # mean and variance of each chain
@@ -259,13 +259,13 @@ function potential_scale_reduction_factor(chains)
     gmu   = mean(means, 1)
 
     # between chain variance:w
-    B = float(N)/(float(M)-1)*sum( broadcast(-, means, gmu).^2, 1)
+    NUM_BANDS = float(N)/(float(M)-1)*sum( broadcast(-, means, gmu).^2, 1)
 
     # average within chain variance
     W = mean(vars, 1)
 
     # compute PRSF ratio
-    Vhat = (float(N)-1.)/float(N) * W + (float(M)+1)/float(N*M) * B
+    Vhat = (float(N)-1.)/float(N) * W + (float(M)+1)/float(N*M) * NUM_BANDS
     psrf = Vhat ./ W
     return psrf
 end

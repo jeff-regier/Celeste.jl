@@ -2,7 +2,7 @@
 Store pre-allocated memory in this data structures, which contains
 intermediate values used in the ELBO calculation.
 """
-immutable HessianSubmatrices{NumType <: Number}
+struct HessianSubmatrices{NumType <: Number}
     u_u::Matrix{NumType}
     shape_shape::Matrix{NumType}
 end
@@ -14,10 +14,10 @@ of the E_G_s and E_G2_s Hessian.
 
 Args:
     NumType: The numeric type of the hessian.
-    i: The type of celestial source, from 1:Ia
+    i: The type of celestial source, from 1:NUM_SOURCE_TYPES
 """
 function HessianSubmatrices(NumType::DataType, i::Int)
-    @assert 1 <= i <= Ia
+    @assert 1 <= i <= NUM_SOURCE_TYPES
     shape_p = length(shape_standard_alignment[i])
 
     u_u = zeros(NumType, 2, 2)
@@ -26,7 +26,7 @@ function HessianSubmatrices(NumType::DataType, i::Int)
 end
 
 
-immutable ElboIntermediateVariables{NumType <: Number}
+struct ElboIntermediateVariables{NumType <: Number}
     # Vectors of star and galaxy bvn quantities from all sources for a pixel.
     # The vector has one element for each active source, in the same order
     # as ea.active_sources.
@@ -41,7 +41,7 @@ immutable ElboIntermediateVariables{NumType <: Number}
 
     # Subsets of the Hessian of E_G_s and E_G2_s that allow us to use BLAS
     # functions to accumulate Hessian terms. There is one submatrix for
-    # each celestial object type in 1:Ia
+    # each celestial object type in 1:NUM_SOURCE_TYPES
     E_G_s_hsub_vec::Vector{HessianSubmatrices{NumType}}
     E_G2_s_hsub_vec::Vector{HessianSubmatrices{NumType}}
 
@@ -91,9 +91,9 @@ function ElboIntermediateVariables(NumType::DataType,
     var_G_s = SensitiveFloat(E_G_s)
 
     E_G_s_hsub_vec =
-        HessianSubmatrices{NumType}[ HessianSubmatrices(NumType, i) for i=1:Ia ]
+        HessianSubmatrices{NumType}[ HessianSubmatrices(NumType, i) for i=1:NUM_SOURCE_TYPES ]
     E_G2_s_hsub_vec =
-        HessianSubmatrices{NumType}[ HessianSubmatrices(NumType, i) for i=1:Ia ]
+        HessianSubmatrices{NumType}[ HessianSubmatrices(NumType, i) for i=1:NUM_SOURCE_TYPES ]
 
     E_G = SensitiveFloat{NumType}(length(CanonicalParams), num_active_sources,
                                   calculate_gradient, calculate_hessian)
@@ -119,7 +119,7 @@ function clear!{NumType <: Number}(elbo_vars::ElboIntermediateVariables{NumType}
     clear!(elbo_vars.E_G2_s)
     clear!(elbo_vars.var_G_s)
 
-    for i in 1:Ia
+    for i in 1:NUM_SOURCE_TYPES
         fill!(elbo_vars.E_G_s_hsub_vec[i].u_u, zero(NumType))
         fill!(elbo_vars.E_G_s_hsub_vec[i].shape_shape, zero(NumType))
         fill!(elbo_vars.E_G2_s_hsub_vec[i].u_u, zero(NumType))
@@ -152,7 +152,7 @@ end
 Some parameter to a function has invalid values. The message should explain what parameter is
 invalid and why.
 """
-type InvalidInputError <: Exception
+struct InvalidInputError <: Exception
     message::String
 end
 
@@ -161,7 +161,7 @@ end
 ElboArgs stores the arguments needed to evaluate the variational objective
 function.
 """
-immutable ElboArgs
+struct ElboArgs
     # the overall number of sources: we don't necessarily visit them
     # all or optimize them all, but if we do visit a pixel where any
     # of these are active, we use it in the elbo calculation

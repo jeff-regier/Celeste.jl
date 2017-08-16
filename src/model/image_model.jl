@@ -1,5 +1,5 @@
 # See https://github.com/jeff-regier/Celeste.jl/wiki/About-SDSS-and-Stripe-82
-immutable SkyIntensity
+struct SkyIntensity
     sky_small::Matrix{Float32} # background flux per pixel, in DNs
     sky_x::Vector{Float32} # interpolation coordinates
     sky_y::Vector{Float32}
@@ -61,7 +61,7 @@ end
 
 
 """An image, taken though a particular filter band"""
-type Image
+mutable struct Image
     # The image height.
     H::Int
 
@@ -91,7 +91,7 @@ type Image
 
     # The expected number of photons contributed to this image
     # by a source 1 nanomaggie in brightness. (varies by row)
-    iota_vec::Array{Float32, 1}
+    nelec_per_nmgy::Array{Float32, 1}
 
     # storing a RawPSF here isn't ideal, because it's an SDSS type
     # not a Celeste type

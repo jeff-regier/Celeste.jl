@@ -75,14 +75,14 @@ result of joint inference are the same.
 
 Return true if vp params are the same, false otherwise
 """
-function compare_vp_params(r1, r2)
+function compare_vp_params(flux_loc, flux_scale)
 
-    length(r1) == length(r2) || return false
+    length(flux_loc) == length(flux_scale) || return false
 
-    # Check the existence and equivalence of each source's vp in r2
-    for i in eachindex(r1)
-        a = r1[i].vs
-        b = r2[i].vs
+    # Check the existence and equivalence of each source's vp in flux_scale
+    for i in eachindex(flux_loc)
+        a = flux_loc[i].vs
+        b = flux_scale[i].vs
         if !(isapprox(a, b))
             println("compare_vp_params: Mismatch - $(a) vs $(b)")
             print("norm(a - b): ", norm(a - b))

@@ -30,7 +30,7 @@ A data type to store functions related to optimizing a PSF fit. Initialize
 using the transform and number of components, and then call fit_psf
 to perform a fit to a specificed psf and initial parameters.
 """
-type PsfOptimizer
+mutable struct PsfOptimizer
     psf_transform::DataTransform
     ftol::Float64
     grtol::Float64
@@ -232,16 +232,16 @@ function initialize_psf_params(K::Int; for_test::Bool=false)
             # Choose asymmetric values for testing.
             psf_params[k] = zeros(length(PsfParams))
             psf_params[k][psf_ids.mu] = [0.1, 0.2]
-            psf_params[k][psf_ids.e_axis] = 0.8
-            psf_params[k][psf_ids.e_angle] = pi / 4
-            psf_params[k][psf_ids.e_scale] = sqrt(2 * k)
+            psf_params[k][psf_ids.gal_ab] = 0.8
+            psf_params[k][psf_ids.gal_angle] = pi / 4
+            psf_params[k][psf_ids.gal_scale] = sqrt(2 * k)
             psf_params[k][psf_ids.weight] = 1 / K + k / 10
         else
             psf_params[k] = zeros(length(PsfParams))
             psf_params[k][psf_ids.mu] = [0.0, 0.0]
-            psf_params[k][psf_ids.e_axis] = 0.95
-            psf_params[k][psf_ids.e_angle] = 0.0
-            psf_params[k][psf_ids.e_scale] = sqrt(2 * k)
+            psf_params[k][psf_ids.gal_ab] = 0.95
+            psf_params[k][psf_ids.gal_angle] = 0.0
+            psf_params[k][psf_ids.gal_scale] = sqrt(2 * k)
             psf_params[k][psf_ids.weight] = 1 / K
         end
     end
@@ -272,11 +272,11 @@ function get_psf_transform(
         bounds[k] = ParamBounds()
         bounds[k][:mu] = ParamBox[ ParamBox(-5.0, 5.0, scale[psf_ids.mu[1]]),
                                    ParamBox(-5.0, 5.0, scale[psf_ids.mu[2]]) ]
-        bounds[k][:e_axis] = ParamBox[ ParamBox(0.1, 1.0, scale[psf_ids.e_axis] ) ]
-        bounds[k][:e_angle] =
-            ParamBox[ ParamBox(-4 * pi, 4 * pi, scale[psf_ids.e_angle] ) ]
-        bounds[k][:e_scale] =
-            ParamBox[ ParamBox(0.05, 10.0, scale[psf_ids.e_scale] ) ]
+        bounds[k][:gal_ab] = ParamBox[ ParamBox(0.1, 1.0, scale[psf_ids.gal_ab] ) ]
+        bounds[k][:gal_angle] =
+            ParamBox[ ParamBox(-4 * pi, 4 * pi, scale[psf_ids.gal_angle] ) ]
+        bounds[k][:gal_scale] =
+            ParamBox[ ParamBox(0.05, 10.0, scale[psf_ids.gal_scale] ) ]
 
         # Note that the weights do not need to sum to one.
         bounds[k][:weight] = ParamBox[ ParamBox(0.05, 2.0, scale[psf_ids.weight] ) ]
@@ -407,7 +407,7 @@ function evaluate_psf_pixel_fit!{NumType <: Number}(
     clear!(pixel_value)
 
     K = length(psf_params)
-    sigma_ids = (psf_ids.e_axis, psf_ids.e_angle, psf_ids.e_scale)
+    sigma_ids = (psf_ids.gal_ab, psf_ids.gal_angle, psf_ids.gal_scale)
     @inbounds for k = 1:K
         # I will put in the weights later so that the log pdf sensitive float
         # is accurate.
@@ -490,13 +490,13 @@ function get_sigma_from_params{NumType <: Number}(psf_params::Vector{Vector{NumT
     sig_sf_vec = Vector{GalaxySigmaDerivs{NumType}}(K)
     bvn_vec = Vector{BvnComponent{NumType}}(K)
     for k = 1:K
-        sigma_vec[k] = get_bvn_cov(psf_params[k][psf_ids.e_axis],
-            psf_params[k][psf_ids.e_angle],
-            psf_params[k][psf_ids.e_scale])
+        sigma_vec[k] = get_bvn_cov(psf_params[k][psf_ids.gal_ab],
+            psf_params[k][psf_ids.gal_angle],
+            psf_params[k][psf_ids.gal_scale])
         sig_sf_vec[k] = GalaxySigmaDerivs(
-            psf_params[k][psf_ids.e_angle],
-            psf_params[k][psf_ids.e_axis],
-            psf_params[k][psf_ids.e_scale], sigma_vec[k], 1.0, true)
+            psf_params[k][psf_ids.gal_angle],
+            psf_params[k][psf_ids.gal_ab],
+            psf_params[k][psf_ids.gal_scale], sigma_vec[k], 1.0, true)
 
         bvn_vec[k] =
             BvnComponent(SVector{2,NumType}(psf_params[k][psf_ids.mu]), sigma_vec[k], 1.0)

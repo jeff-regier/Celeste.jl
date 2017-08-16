@@ -3,9 +3,6 @@ import FITSIO
 import WCS
 using Celeste.SDSSIO
 
-const band_letters = ['u', 'g', 'r', 'i', 'z']
-
-
 @testset "the identity WCSTransform works as expected" begin
     rand_coord = rand(2, 10)
     @test WCS.pix_to_world(SampleData.wcs_id, rand_coord) == rand_coord

@@ -15,7 +15,7 @@ Attributes:
                   sky for each band
   - pixel_center: The pixel location of center in each band.
 """
-immutable SkyPatch
+struct SkyPatch
     center::Vector{Float64}
     radius_pix::Float64
 

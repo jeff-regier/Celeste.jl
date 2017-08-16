@@ -30,7 +30,7 @@ const is_production_run = haskey(ENV, "CELESTE_PROD") && ENV["CELESTE_PROD"] != 
 
 #
 # ------ bounding box ------
-immutable BoundingBox
+struct BoundingBox
     ramin::Float64
     ramax::Float64
     decmin::Float64
@@ -47,7 +47,7 @@ end
 
 # ------
 # to time parts of Celeste
-type InferTiming
+mutable struct InferTiming
     query_fids::Float64
     read_photoobj::Float64
     read_img::Float64
@@ -214,7 +214,7 @@ function detect_sources(images::Vector{SDSSIO.RawImage})
             # threshold. Set other band fluxes to NaN, to indicate which
             # band the flux is measured in. We'll use this information below
             # when merging detections in different bands.
-            gal_fluxes = fill(NaN, B)
+            gal_fluxes = fill(NaN, NUM_BANDS)
             gal_fluxes[image.b] = sep_catalog.flux[i]
 
             gal_ab = sep_catalog.a[i] / sep_catalog.b[i]
@@ -480,7 +480,7 @@ end
 # ------
 # optimization result container
 
-immutable OptimizedSource
+struct OptimizedSource
     thingid::Int64
     objid::String
     init_ra::Float64
@@ -704,7 +704,7 @@ end
 Store the contents of the `field_extents.fits` file, so it doesn't
 have to be loaded repeatedly.
 """
-type FieldExtent
+struct FieldExtent
     run::Int16
     camcol::UInt8
     field::Int16

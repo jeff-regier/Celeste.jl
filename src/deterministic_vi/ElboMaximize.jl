@@ -22,7 +22,7 @@ using ..DeterministicVI.ConstraintTransforms: TransformDerivatives,
 # defaults for optional arguments to `maximize!` #
 ##################################################
 
-immutable Config{N,T}
+struct Config{N,T}
     bound_params::VariationalParams{T}
     free_params::VariationalParams{T}
     free_initial_input::Vector{T}
@@ -64,26 +64,26 @@ function elbo_constraints{T}(bound::VariationalParams{T},
     boxes = Vector{Vector{ParameterConstraint{BoxConstraint}}}(n_sources)
     simplexes = Vector{Vector{ParameterConstraint{SimplexConstraint}}}(n_sources)
     for src in 1:n_sources
-        i1, i2 = ids.u[1], ids.u[2]
+        i1, i2 = ids.pos[1], ids.pos[2]
         u1, u2 = bound[src][i1], bound[src][i2]
         boxes[src] = [
             ParameterConstraint(BoxConstraint(u1 - loc_width, u1 + loc_width, loc_scale), i1),
             ParameterConstraint(BoxConstraint(u2 - loc_width, u2 + loc_width, loc_scale), i2),
-            ParameterConstraint(BoxConstraint(1e-2, 0.99, 1.0), ids.e_dev),
-            ParameterConstraint(BoxConstraint(1e-2, 0.99, 1.0), ids.e_axis),
-            ParameterConstraint(BoxConstraint(-10.0, 10.0, 1.0), ids.e_angle),
-            ParameterConstraint(BoxConstraint(0.10, 70.0, 1.0), ids.e_scale),
-            ParameterConstraint(BoxConstraint(-1.0, 10.0, 1.0), ids.r1),
-            ParameterConstraint(BoxConstraint(1e-4, 0.10, 1.0), ids.r2),
-            ParameterConstraint(BoxConstraint(-10.0, 10.0, 1.0), ids.c1[:, 1]),
-            ParameterConstraint(BoxConstraint(-10.0, 10.0, 1.0), ids.c1[:, 2]),
-            ParameterConstraint(BoxConstraint(1e-4, 1.0, 1.0), ids.c2[:, 1]),
-            ParameterConstraint(BoxConstraint(1e-4, 1.0, 1.0), ids.c2[:, 2])
+            ParameterConstraint(BoxConstraint(1e-2, 0.99, 1.0), ids.gal_fracdev),
+            ParameterConstraint(BoxConstraint(1e-2, 0.99, 1.0), ids.gal_ab),
+            ParameterConstraint(BoxConstraint(-10.0, 10.0, 1.0), ids.gal_angle),
+            ParameterConstraint(BoxConstraint(0.10, 70.0, 1.0), ids.gal_scale),
+            ParameterConstraint(BoxConstraint(-1.0, 10.0, 1.0), ids.flux_loc),
+            ParameterConstraint(BoxConstraint(1e-4, 0.10, 1.0), ids.flux_scale),
+            ParameterConstraint(BoxConstraint(-10.0, 10.0, 1.0), ids.color_mean[:, 1]),
+            ParameterConstraint(BoxConstraint(-10.0, 10.0, 1.0), ids.color_mean[:, 2]),
+            ParameterConstraint(BoxConstraint(1e-4, 1.0, 1.0), ids.color_var[:, 1]),
+            ParameterConstraint(BoxConstraint(1e-4, 1.0, 1.0), ids.color_var[:, 2])
         ]
         simplexes[src] = [
-            ParameterConstraint(SimplexConstraint(0.005, 1.0, 2), ids.a),
-            ParameterConstraint(SimplexConstraint(0.01/D, 1.0, D), ids.k[:, 1]),
-            ParameterConstraint(SimplexConstraint(0.01/D, 1.0, D), ids.k[:, 2])
+            ParameterConstraint(SimplexConstraint(0.005, 1.0, 2), ids.is_star),
+            ParameterConstraint(SimplexConstraint(0.01/NUM_COLOR_COMPONENTS, 1.0, NUM_COLOR_COMPONENTS), ids.k[:, 1]),
+            ParameterConstraint(SimplexConstraint(0.01/NUM_COLOR_COMPONENTS, 1.0, NUM_COLOR_COMPONENTS), ids.k[:, 2])
         ]
     end
     return ConstraintBatch(boxes, simplexes)
@@ -171,7 +171,7 @@ end
 # Objective #
 #-----------#
 
-immutable Objective{N,T} <: Function
+struct Objective{N,T} <: Function
     ea::ElboArgs
     vp::VariationalParams{T}
     cfg::Config{N,T}
@@ -185,7 +185,7 @@ end
 # Gradient #
 #----------#
 
-immutable Gradient{N,T} <: Function
+struct Gradient{N,T} <: Function
     ea::ElboArgs
     vp::VariationalParams{T}
     cfg::Config{N,T}
@@ -203,7 +203,7 @@ end
 # Hessian #
 #---------#
 
-immutable Hessian{N,T} <: Function
+struct Hessian{N,T} <: Function
     ea::ElboArgs
     vp::VariationalParams{T}
     cfg::Config{N,T}

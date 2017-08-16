@@ -30,7 +30,7 @@ function make_star_loglike(imgs::Array{Image},
 
           # sky pixel intensity (sky image)
           epsilon    = img.sky[1, 1]
-          iota       = img.iota_vec[1]
+          iota       = img.nelec_per_nmgy[1]
           sky_pixels = [epsilon * iota for h=1:img.H, w=1:img.W]
 
           # create and cache unit flux src image
@@ -90,7 +90,7 @@ function make_gal_loglike(imgs::Array{Image},
         for img in imgs
             # sky pixel intensity (sky image)
             epsilon    = img.sky[1, 1]
-            iota       = img.iota_vec[1]
+            iota       = img.nelec_per_nmgy[1]
             sky_pixels = [epsilon * iota for h=1:img.H, w=1:img.W]
 
             # create and cache unit flux src image
@@ -160,7 +160,7 @@ function make_single_image_logflux_loglike(img0::Image,
                                            gal_scale::Float64    = 4.)
     # sky pixel intensity
     epsilon    = img0.sky[1, 1]
-    iota       = img0.iota_vec[1]
+    iota       = img0.nelec_per_nmgy[1]
     sky_pixels = [epsilon * iota for h=1:img0.H, w=1:img0.W]
 
     # create and cache unit flux src image
@@ -249,12 +249,12 @@ function logflux_logprior(lnfluxes::Vector{Float64}; is_star::Bool=true)
     lnr, colors = logfluxes_to_colors(lnfluxes)
 
     # compute brightness distribution
-    llr = logpdf(Normal(pp.r_μ[type_i], 2*pp.r_σ²[type_i]), lnr)
+    llr = logpdf(Normal(pp.flux_mean[type_i], 2*pp.flux_var[type_i]), lnr)
 
     # compute color likelihoods (mixture model --- computes all component lls)
-    nc, nk, ns = size(pp.c_mean)
-    llk = [logpdf(MvNormal(pp.c_mean[:,k,type_i],
-                           pp.c_cov[:,:,k,type_i]), colors)
+    nc, nk, ns = size(pp.color_mean)
+    llk = [logpdf(MvNormal(pp.color_mean[:,k,type_i],
+                           pp.color_cov[:,:,k,type_i]), colors)
            for k in 1:nk]
     lnpik = log.(pp.k[:, type_i])
     llc   = Model.logsumexp(llk .+ lnpik)
@@ -286,12 +286,12 @@ function sample_logfluxes(; is_star=true, lnr=nothing)
 
     # sample log r
     if lnr == nothing
-        lnr = rand(Normal(pp.r_μ[type_i], 2*pp.r_σ²[type_i]))
+        lnr = rand(Normal(pp.flux_mean[type_i], 2*pp.flux_var[type_i]))
     end
 
     # sample colors
     k = rand(Distributions.Categorical(pp.k[:, type_i]))
-    c = rand(MvNormal(pp.c_mean[:,k,type_i], pp.c_cov[:,:,k,type_i]))
+    c = rand(MvNormal(pp.color_mean[:,k,type_i], pp.color_cov[:,:,k,type_i]))
 
     # convert to fluxes
     lnfluxes = log.(Model.colors_to_fluxes(lnr, c))
@@ -306,20 +306,20 @@ function sample_colors(; is_star=true)
     type_i = is_star ? 1 : 2
     # sample colors
     k = rand(Distributions.Categorical(pp.k[:, type_i]))
-    c = rand(MvNormal(pp.c_mean[:,k,type_i], pp.c_cov[:,:,k,type_i]))
+    c = rand(MvNormal(pp.color_mean[:,k,type_i], pp.color_cov[:,:,k,type_i]))
     return c
 end
 
 function sample_logr(; is_star=true)
     type_i = is_star ? 1 : 2
-    lnr = rand(Normal(pp.r_μ[type_i], 2*pp.r_σ²[type_i]))
+    lnr = rand(Normal(pp.flux_mean[type_i], 2*pp.flux_var[type_i]))
     return lnr
 end
 
 
 function sample_fluxes(i::Int, r_s)
     k_s = rand(Distributions.Categorical(pp.k[i]))
-    c_s = rand(Distributions.MvNormal(pp.c[i][:, k_s], pp.c[i][:, :, k_s]))
+    c_s = rand(Distributions.MvNormal(pp.color[i][:, k_s], pp.color[i][:, :, k_s]))
 
     l_s = Vector{Float64}(5)
     l_s[3] = r_s

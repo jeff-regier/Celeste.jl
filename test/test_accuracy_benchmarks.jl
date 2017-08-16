@@ -38,12 +38,12 @@ end
 
 @testset "variational params -> data frame -> catalog entry conversion" begin
     variational_params = DeterministicVI.generic_init_source([1.0, 2.0])
-    variational_params[Model.ids.e_axis] = 0.5
-    variational_params[Model.ids.e_scale] = 10.0
-    variational_params[Model.ids.e_angle] = -pi / 4
-    variational_params[Model.ids.r1[2]] = log(20.0)
-    variational_params[Model.ids.a[1]] = 0.01
-    variational_params[Model.ids.a[2]] = 0.99
+    variational_params[Model.ids.gal_ab] = 0.5
+    variational_params[Model.ids.gal_scale] = 10.0
+    variational_params[Model.ids.gal_angle] = -pi / 4
+    variational_params[Model.ids.flux_loc[2]] = log(20.0)
+    variational_params[Model.ids.is_star[1]] = 0.01
+    variational_params[Model.ids.is_star[2]] = 0.99
 
     data = AccuracyBenchmark.variational_parameters_to_data_frame_row("12345", variational_params)
     # we'll just check a few particularly troublesome parameters :)

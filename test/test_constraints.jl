@@ -1,6 +1,6 @@
 module ConstraintTransformsTests
 
-using Celeste.Model: CanonicalParams, ids, D
+using Celeste.Model: CanonicalParams, ids, NUM_COLOR_COMPONENTS
 
 using Celeste.DeterministicVI.ElboMaximize: elbo_constraints
 
@@ -373,7 +373,7 @@ constraints = elbo_constraints(bound, loc_width, loc_scale)
 for src in 1:n_sources
     u1_box = constraints.boxes[src][1].constraint
     u2_box = constraints.boxes[src][2].constraint
-    u1, u2 = bound[src][ids.u[1]], bound[src][ids.u[2]]
+    u1, u2 = bound[src][ids.pos[1]], bound[src][ids.pos[2]]
     @test u1_box === BoxConstraint(u1 - loc_width, u1 + loc_width, loc_scale)
     @test u2_box === BoxConstraint(u2 - loc_width, u2 + loc_width, loc_scale)
 end
@@ -417,18 +417,18 @@ function star_constraints(bound; loc_width = 1.5e-3, loc_scale = 1.0)
     boxes = Vector{Vector{ParameterConstraint{BoxConstraint}}}(n_sources)
     simplexes = Vector{Vector{ParameterConstraint{SimplexConstraint}}}(n_sources)
     for src in 1:n_sources
-        i1, i2 = ids.u[1], ids.u[2]
+        i1, i2 = ids.pos[1], ids.pos[2]
         u1, u2 = bound[src][i1], bound[src][i2]
         boxes[src] = [
             ParameterConstraint(BoxConstraint(u1 - loc_width, u1 + loc_width, loc_scale), i1),
             ParameterConstraint(BoxConstraint(u2 - loc_width, u2 + loc_width, loc_scale), i2),
-            ParameterConstraint(BoxConstraint(-1.0, 10.0, 1.0), ids.r1[1]),
-            ParameterConstraint(BoxConstraint(-10.0, 10.0, 1.0), ids.c1[:, 1]),
-            ParameterConstraint(BoxConstraint(1e-4, 1.0, 1.0), ids.c2[:, 1])
+            ParameterConstraint(BoxConstraint(-1.0, 10.0, 1.0), ids.flux_loc[1]),
+            ParameterConstraint(BoxConstraint(-10.0, 10.0, 1.0), ids.color_mean[:, 1]),
+            ParameterConstraint(BoxConstraint(1e-4, 1.0, 1.0), ids.color_var[:, 1])
         ]
         simplexes[src] = [
-            ParameterConstraint(SimplexConstraint(0.005, 1.0, 2), ids.a)
-            ParameterConstraint(SimplexConstraint(0.01/D, 1.0, D), ids.k[:, 1])
+            ParameterConstraint(SimplexConstraint(0.005, 1.0, 2), ids.is_star)
+            ParameterConstraint(SimplexConstraint(0.01/NUM_COLOR_COMPONENTS, 1.0, NUM_COLOR_COMPONENTS), ids.k[:, 1])
         ]
     end
     return ConstraintBatch(boxes, simplexes)

@@ -21,7 +21,7 @@ const DEFAULT_MASK_PLANES = ["S_MASK_INTERP",  # bad pixel (was interpolated)
 const BAND_CHAR_TO_NUM = Dict('u'=>1, 'g'=>2, 'r'=>3, 'i'=>4, 'z'=>5)
 
 
-immutable RunCamcolField
+struct RunCamcolField
     run::Int16
     camcol::UInt8
     field::Int16
@@ -195,7 +195,7 @@ function read_mask(strategy, rcf, b, mask_planes=DEFAULT_MASK_PLANES; data=nothi
 end
 
 
-immutable RawImage
+struct RawImage
     rcf::RunCamcolField
     b::Int  # band index
     pixels::Matrix{Float32} # in nMgy, sky-subtracted and calibrated
@@ -286,11 +286,11 @@ function convert(::Type{Image}, r::RawImage)
         r.pixels[i, j] = (r.gain / r.calibration[i]) * (r.pixels[i, j] + sky_ij)
     end
 
-    iota_vec = r.gain ./ r.calibration
+    nelec_per_nmgy = r.gain ./ r.calibration
 
     Image(H, W, r.pixels, r.b, r.wcs, celeste_psf,
           r.rcf.run, r.rcf.camcol, r.rcf.field,
-          r.sky, iota_vec, r.raw_psf_comp)
+          r.sky, nelec_per_nmgy, r.raw_psf_comp)
 end
 
 # -----------------------------------------------------------------------------
