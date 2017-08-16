@@ -46,11 +46,11 @@ function load_bvn_mixtures!{NumType <: Number}(
         psf = patches[s, n].psf
         sp  = source_params[s]
 
-        # TODO: it's a lucky coincidence that lidx.u = ids.u.
+        # TODO: it's a lucky coincidence that lidx.pos = ids.pos.
         # That's why this works when called from both log_prob.jl with `sp`
         # and elbo_objective.jl with `vp`.
         # We need a safer way to let both methods call this method.
-        world_loc = sp[lidx.u]
+        world_loc = sp[lidx.pos]
         m_pos = Model.linear_world_to_pix(patches[s, n].wcs_jacobian,
                                           patches[s, n].center,
                                           patches[s, n].pixel_center, world_loc)
@@ -65,16 +65,16 @@ function load_bvn_mixtures!{NumType <: Number}(
 
         # Convolve the galaxy representations with the PSF.
         for i = 1:2 # i indexes dev vs exp galaxy types.
-            e_dev_dir = (i == 1) ? 1. : -1.
-            e_dev_i = (i == 1) ? sp[lidx.e_dev] : 1. - sp[lidx.e_dev]
+            gal_fracdev_dir = (i == 1) ? 1. : -1.
+            gal_fracdev_i = (i == 1) ? sp[lidx.gal_fracdev] : 1. - sp[lidx.gal_fracdev]
 
             # Galaxies of type 1 have 8 components, and type 2 have 6 components.
             for j in 1:ifelse(i == 1, 8, 6)
                 for k = 1:psf_K
                     gal_mcs[k, j, i, s] = GalaxyCacheComponent(
-                        e_dev_dir, e_dev_i, galaxy_prototypes[i][j], psf[k],
+                        gal_fracdev_dir, gal_fracdev_i, galaxy_prototypes[i][j], psf[k],
                         m_pos,
-                        sp[lidx.e_axis], sp[lidx.e_angle], sp[lidx.e_scale],
+                        sp[lidx.gal_ab], sp[lidx.gal_angle], sp[lidx.gal_scale],
                         calculate_gradient && (s in active_sources),
                         calculate_hessian)
                 end
@@ -196,14 +196,14 @@ function accum_star_pos!{NumType <: Number}(
 
         # Accumulate the derivatives.
         for u_id in 1:2
-            fs0m.d[star_ids.u[u_id]] += bvn_derivs.f_pre[1] * bvn_u_d[u_id]
+            fs0m.d[star_ids.pos[u_id]] += bvn_derivs.f_pre[1] * bvn_u_d[u_id]
         end
 
         if fs0m.has_hessian
             # Hessian terms involving only the location parameters.
             # TODO: redundant term
             for u_id1 in 1:2, u_id2 in 1:2
-                fs0m.h[star_ids.u[u_id1], star_ids.u[u_id2]] +=
+                fs0m.h[star_ids.pos[u_id1], star_ids.pos[u_id2]] +=
                     bvn_derivs.f_pre[1] * (bvn_uu_h[u_id1, u_id2] +
                     bvn_u_d[u_id1] * bvn_u_d[u_id2])
             end
@@ -224,7 +224,7 @@ function accum_galaxy_pos!{NumType <: Number}(
                     wcs_jacobian::Array{Float64, 2},
                     is_active_source::Bool)
     eval_bvn_pdf!(bvn_derivs, gcc.bmc, x)
-    f = bvn_derivs.f_pre[1] * gcc.e_dev_i
+    f = bvn_derivs.f_pre[1] * gcc.gal_fracdev_i
     fs1m.v[] += f
 
     if fs1m.has_gradient && is_active_source
@@ -240,24 +240,24 @@ function accum_galaxy_pos!{NumType <: Number}(
 
             # Accumulate the derivatives.
             @inbounds for u_id in 1:2
-                fs1m.d[gal_ids.u[u_id]] += f * bvn_u_d[u_id]
+                fs1m.d[gal_ids.pos[u_id]] += f * bvn_u_d[u_id]
             end
 
             @inbounds for gal_id in 1:length(gal_shape_ids)
                 fs1m.d[gal_shape_alignment[gal_id]] += f * bvn_s_d[gal_id]
             end
 
-            # The e_dev derivative. e_dev just scales the entire component.
+            # The gal_fracdev derivative. gal_fracdev just scales the entire component.
             # The direction is positive or negative depending on whether this
             # is an exp or dev component.
-            @inbounds fs1m.d[gal_ids.e_dev] += gcc.e_dev_dir * bvn_derivs_f_pre[1]
+            @inbounds fs1m.d[gal_ids.gal_fracdev] += gcc.gal_fracdev_dir * bvn_derivs_f_pre[1]
 
             if fs1m.has_hessian
                 # The Hessians:
                 bvn_uu_h = Const(bvn_derivs.bvn_uu_h)
                 bvn_ss_h = Const(bvn_derivs.bvn_ss_h)
                 bvn_us_h = Const(bvn_derivs.bvn_us_h)
-                gal_ids_u = Const(gal_ids.u)
+                gal_ids_u = Const(gal_ids.pos)
 
                 # Hessian terms involving only the shape parameters.
                 @inbounds for shape_id1 in 1:length(gal_shape_ids)
@@ -291,18 +291,18 @@ function accum_galaxy_pos!{NumType <: Number}(
                   end
                 end
 
-                # Do the e_dev hessian terms.
-                devi = gal_ids.e_dev
+                # Do the gal_fracdev hessian terms.
+                devi = gal_ids.gal_fracdev
                 @inbounds for u_id in 1:2
-                    ui = gal_ids.u[u_id]
+                    ui = gal_ids.pos[u_id]
                     fs1m.h[ui, devi] +=
-                        bvn_derivs_f_pre[1] * gcc.e_dev_dir * bvn_u_d[u_id]
+                        bvn_derivs_f_pre[1] * gcc.gal_fracdev_dir * bvn_u_d[u_id]
                     fs1m.h[devi, ui] = fs1m.h[ui, devi]
                 end
                 @inbounds for shape_id in 1:length(gal_shape_ids)
                     si = gal_shape_alignment[shape_id]
                     fs1m.h[si, devi] +=
-                        bvn_derivs_f_pre[1] * gcc.e_dev_dir * bvn_s_d[shape_id]
+                        bvn_derivs_f_pre[1] * gcc.gal_fracdev_dir * bvn_s_d[shape_id]
                     fs1m.h[devi, si] = fs1m.h[si, devi]
                 end
             end # if calculate hessian

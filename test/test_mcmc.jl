@@ -63,7 +63,7 @@ function test_star_loglike()
     th = vcat([lnfluxes, lu]...)
 
     # create loglike
-    init_pos = deepcopy(vp[1][ids.u])
+    init_pos = deepcopy(vp[1][ids.pos])
     star_loglike, constrain_pos, unconstrain_pos =
         MCMC.make_star_loglike(dat_images, init_pos)
 

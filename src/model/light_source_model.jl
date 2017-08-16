@@ -2,10 +2,10 @@ import JLD
 
 
 # The number of components in the color prior.
-const D = 8
+const num_color_components = 8
 
 # The number of types of celestial objects (here, stars and galaxies).
-const Ia = 2
+const num_source_types = 2
 
 
 type CatalogEntry
@@ -79,39 +79,39 @@ const galaxy_prototypes = get_galaxy_prototypes()
 
 
 immutable PriorParams
-    a::Vector{Float64}  # formerly Phi
-    r_μ::Vector{Float64}
-    r_σ²::Vector{Float64}
-    k::Matrix{Float64}  # formerly Xi
-    c_mean::Array{Float64, 3} # formerly Omega
-    c_cov::Array{Float64, 4} # formerly Lambda
-    e_scale_μ::Float64
-    e_scale_σ²::Float64
+    is_star::Vector{Float64}
+    flux_mean::Vector{Float64}
+    flux_var::Vector{Float64}
+    k::Matrix{Float64}
+    color_mean::Array{Float64, 3}
+    color_cov::Array{Float64, 4}
+    gal_scale_mean::Float64
+    gal_scale_var::Float64
 end
 
 
 function load_prior()
     # set a = [.99, .01] if stars are underrepresented
     # due to the greater flexibility of the galaxy model
-    #a = [0.28, 0.72]
-    a = [0.099, 0.001]
-    k = Matrix{Float64}(D, Ia)
-    c_mean = Array{Float64}(B - 1, D, Ia)
-    c_cov = Array{Float64}(B - 1, B - 1, D, Ia)
+    #is_star = [0.28, 0.72]
+    is_star = [0.099, 0.001]
+    k = Matrix{Float64}(num_color_components, num_source_types)
+    color_mean = Array{Float64}(num_bands - 1, num_color_components, num_source_types)
+    color_cov = Array{Float64}(num_bands - 1, num_bands - 1, num_color_components, num_source_types)
 
     prior_params = [JLD.load(joinpath(cfgdir, "star_prior.jld")),
                     JLD.load(joinpath(cfgdir, "gal_prior.jld"))]
     for i in 1:2
         k[:, i] = prior_params[i]["c_weights"]
-        c_mean[:, :, i] = prior_params[i]["c_means"]
-        c_cov[:, :, :, i] = prior_params[i]["c_covs"]
+        color_mean[:, :, i] = prior_params[i]["c_means"]
+        color_cov[:, :, :, i] = prior_params[i]["c_covs"]
     end
 
     # log normal parameters for the r-band brightness prior.
     # these were fit by maximum likelihood to the output of primary
     # on one field.
-    r_μ = Float64[1.5035546, 1.07431]
-    r_σ² = Float64[1.9039063^2, 1.1177502^2]
+    flux_mean = Float64[1.5035546, 1.07431]
+    flux_var = Float64[1.9039063^2, 1.1177502^2]
 
     # If I remove this next statement, compile time for
     # benchmark_infer.jl jumps from 13 seconds to 300 seconds!
@@ -126,10 +126,10 @@ function load_prior()
     # log normal prior parameters (location, scale) on galaxy scale.
     # determined by fitting a univariate log normal to primary's
     # output the region of stripe 82 we use for validation
-    e_scale_μ = 0.5015693
-    e_scale_σ² = 0.8590007^2
+    gal_scale_mean = 0.5015693
+    gal_scale_var = 0.8590007^2
 
-    PriorParams(a, r_μ, r_σ², k, c_mean, c_cov, e_scale_μ, e_scale_σ²)
+    PriorParams(is_star, flux_mean, flux_var, k, color_mean, color_cov, gal_scale_mean, gal_scale_var)
 end
 
 

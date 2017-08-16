@@ -40,17 +40,17 @@ Return a default-initialized VariationalParams instance.
 """
 function generic_init_source(init_pos::Vector{Float64})
     ret = Vector{Float64}(length(CanonicalParams))
-    ret[ids.a] = 0.5
-    ret[ids.u] = init_pos
-    ret[ids.r1] = log(2.0)
-    ret[ids.r2] = 1e-3
-    ret[ids.e_dev] = 0.5
-    ret[ids.e_axis] = 0.5
-    ret[ids.e_angle] = 0.0
-    ret[ids.e_scale] = 1.0
+    ret[ids.is_star] = 0.5
+    ret[ids.pos] = init_pos
+    ret[ids.flux_loc] = log(2.0)
+    ret[ids.flux_scale] = 1e-3
+    ret[ids.gal_fracdev] = 0.5
+    ret[ids.gal_ab] = 0.5
+    ret[ids.gal_angle] = 0.0
+    ret[ids.gal_scale] = 1.0
     ret[ids.k] = 1.0 / size(ids.k, 1)
-    ret[ids.c1] = 0.0
-    ret[ids.c2] =  1e-2
+    ret[ids.color_mean] = 0.0
+    ret[ids.color_var] =  1e-2
     ret
 end
 
@@ -64,30 +64,30 @@ function catalog_init_source(ce::CatalogEntry; max_gal_scale=Inf)
 
     # TODO: don't do this thresholding for background sources,
     # just for sources that are being optimized
-    ret[ids.a[1]] = ce.is_star ? 0.8: 0.2
-    ret[ids.a[2]] = ce.is_star ? 0.2: 0.8
+    ret[ids.is_star[1]] = ce.is_star ? 0.8: 0.2
+    ret[ids.is_star[2]] = ce.is_star ? 0.2: 0.8
 
-    ret[ids.r1[1]] = log(max(0.1, ce.star_fluxes[3]))
-    ret[ids.r1[2]] = log(max(0.1, ce.gal_fluxes[3]))
+    ret[ids.flux_loc[1]] = log(max(0.1, ce.star_fluxes[3]))
+    ret[ids.flux_loc[2]] = log(max(0.1, ce.gal_fluxes[3]))
 
-    function get_color(c2, c1)
-        c2 > 0 && c1 > 0 ? min(max(log(c2 / c1), -9.), 9.) :
-            c2 > 0 && c1 <= 0 ? 3.0 :
-                c2 <= 0 && c1 > 0 ? -3.0 : 0.0
+    function get_color(color_var, color_mean)
+        color_var > 0 && color_mean > 0 ? min(max(log(color_var / color_mean), -9.), 9.) :
+            color_var > 0 && color_mean <= 0 ? 3.0 :
+                color_var <= 0 && color_mean > 0 ? -3.0 : 0.0
     end
 
     function get_colors(raw_fluxes)
         [get_color(raw_fluxes[c+1], raw_fluxes[c]) for c in 1:4]
     end
 
-    ret[ids.c1[:, 1]] = get_colors(ce.star_fluxes)
-    ret[ids.c1[:, 2]] = get_colors(ce.gal_fluxes)
+    ret[ids.color_mean[:, 1]] = get_colors(ce.star_fluxes)
+    ret[ids.color_mean[:, 2]] = get_colors(ce.gal_fluxes)
 
-    ret[ids.e_dev] = min(max(ce.gal_frac_dev, 0.015), 0.985)
+    ret[ids.gal_fracdev] = min(max(ce.gal_frac_dev, 0.015), 0.985)
 
-    ret[ids.e_axis] = ce.is_star ? .8 : min(max(ce.gal_ab, 0.015), 0.985)
-    ret[ids.e_angle] = ce.gal_angle
-    ret[ids.e_scale] = ce.is_star ? 0.2 : min(max_gal_scale, max(ce.gal_scale, 0.2))
+    ret[ids.gal_ab] = ce.is_star ? .8 : min(max(ce.gal_ab, 0.015), 0.985)
+    ret[ids.gal_angle] = ce.gal_angle
+    ret[ids.gal_scale] = ce.is_star ? 0.2 : min(max_gal_scale, max(ce.gal_scale, 0.2))
 
     ret
 end

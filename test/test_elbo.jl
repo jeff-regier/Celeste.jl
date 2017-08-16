@@ -42,20 +42,20 @@ end
 
 
 @testset "test bvn cov" begin
-    e_axis = .7
-    e_angle = pi/5
-    e_scale = 2.
+    gal_ab = .7
+    gal_angle = pi/5
+    gal_scale = 2.
 
-    manual_11 = e_scale^2 * (1 + (e_axis^2 - 1) * (sin(e_angle))^2)
-    util_11 = DeterministicVI.get_bvn_cov(e_axis, e_angle, e_scale)[1,1]
+    manual_11 = gal_scale^2 * (1 + (gal_ab^2 - 1) * (sin(gal_angle))^2)
+    util_11 = DeterministicVI.get_bvn_cov(gal_ab, gal_angle, gal_scale)[1,1]
     @test util_11 ≈ manual_11
 
-    manual_12 = e_scale^2 * (1 - e_axis^2) * (cos(e_angle)sin(e_angle))
-    util_12 = DeterministicVI.get_bvn_cov(e_axis, e_angle, e_scale)[1,2]
+    manual_12 = gal_scale^2 * (1 - gal_ab^2) * (cos(gal_angle)sin(gal_angle))
+    util_12 = DeterministicVI.get_bvn_cov(gal_ab, gal_angle, gal_scale)[1,2]
     @test util_12 ≈ manual_12
 
-    manual_22 = e_scale^2 * (1 + (e_axis^2 - 1) * (cos(e_angle))^2)
-    util_22 = DeterministicVI.get_bvn_cov(e_axis, e_angle, e_scale)[2,2]
+    manual_22 = gal_scale^2 * (1 + (gal_ab^2 - 1) * (cos(gal_angle))^2)
+    util_22 = DeterministicVI.get_bvn_cov(gal_ab, gal_angle, gal_scale)[2,2]
     @test util_22 ≈ manual_22
 end
 
@@ -132,7 +132,7 @@ end
 
     for bad_a in [.3, .5, .9]
         vp_a = deepcopy(vp)
-        vp_a[1][ids.a] = [ 1.0 - bad_a, bad_a ]
+        vp_a[1][ids.is_star] = [ 1.0 - bad_a, bad_a ]
         bad_a_lik = DeterministicVI.elbo_likelihood(ea, vp_a)
         @test best.v[] > bad_a_lik.v[]
     end
@@ -141,7 +141,7 @@ end
         for w2 in -2:2
             if !(h2 == 0 && w2 == 0)
                 vp_mu = deepcopy(vp)
-                vp_mu[1][ids.u] += [h2 * .5, w2 * .5]
+                vp_mu[1][ids.pos] += [h2 * .5, w2 * .5]
                 bad_mu = DeterministicVI.elbo_likelihood(ea, vp_mu)
                 @test best.v[] > bad_mu.v[]
             end
@@ -150,7 +150,7 @@ end
 
     for delta in [.7, .9, 1.1, 1.3]
         vp_r1 = deepcopy(vp)
-        vp_r1[1][ids.r1] += log(delta)
+        vp_r1[1][ids.flux_loc] += log(delta)
         bad_r1 = DeterministicVI.elbo_likelihood(ea, vp_r1)
         @test best.v[] > bad_r1.v[]
     end
@@ -158,7 +158,7 @@ end
     for b in 1:4
         for delta in [-.3, .3]
             vp_c1 = deepcopy(vp)
-            vp_c1[1][ids.c1[b, 1]] += delta
+            vp_c1[1][ids.color_mean[b, 1]] += delta
             bad_c1 = DeterministicVI.elbo_likelihood(ea, vp_c1)
             @test best.v[] > bad_c1.v[]
         end
@@ -168,12 +168,12 @@ end
 
 @testset "galaxy truth is most likely" begin
     ea, vp, catalog = gen_sample_galaxy_dataset(perturb=false)
-    vp[1][ids.a] = [ 0.01, .99 ]
+    vp[1][ids.is_star] = [ 0.01, .99 ]
     best = DeterministicVI.elbo_likelihood(ea, vp)
 
     for bad_a in [.3, .5, .9]
         vp_a = deepcopy(vp)
-        vp_a[1][ids.a] = [ 1.0 - bad_a, bad_a ]
+        vp_a[1][ids.is_star] = [ 1.0 - bad_a, bad_a ]
         bad_a = DeterministicVI.elbo_likelihood(ea, vp_a)
         @test best.v[] > bad_a.v[];
     end
@@ -182,7 +182,7 @@ end
         for w2 in -2:2
             if !(h2 == 0 && w2 == 0)
                 vp_mu = deepcopy(vp)
-                vp_mu[1][ids.u] += [h2 * .5, w2 * .5]
+                vp_mu[1][ids.pos] += [h2 * .5, w2 * .5]
                 bad_mu = DeterministicVI.elbo_likelihood(ea, vp_mu)
                 @test best.v[] > bad_mu.v[]
             end
@@ -191,12 +191,12 @@ end
 
     for bad_scale in [.8, 1.2]
         vp_r1 = deepcopy(vp)
-        vp_r1[1][ids.r1] += 2 * log(bad_scale)
+        vp_r1[1][ids.flux_loc] += 2 * log(bad_scale)
         bad_r1 = DeterministicVI.elbo_likelihood(ea, vp_r1)
         @test best.v[] > bad_r1.v[]
     end
 
-    for n in [:e_axis, :e_angle, :e_scale]
+    for n in [:gal_ab, :gal_angle, :gal_scale]
         for bad_scale in [.8, 1.2]
             vp_bad = deepcopy(vp)
             vp_bad[1][getfield(ids, n)] *= bad_scale
@@ -208,7 +208,7 @@ end
     for b in 1:4
         for delta in [-.3, .3]
             vp_c1 = deepcopy(vp)
-            vp_c1[1][ids.c1[b, 2]] += delta
+            vp_c1[1][ids.color_mean[b, 2]] += delta
             bad_c1 = DeterministicVI.elbo_likelihood(ea, vp_c1)
             @test best.v[] > bad_c1.v[]
         end

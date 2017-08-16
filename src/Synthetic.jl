@@ -51,7 +51,7 @@ end
 
 function write_star(img0::Image, ce::CatalogEntry, pixels::Matrix{Float64};
                     expectation=false)
-    iota = median(img0.iota_vec)
+    iota = median(img0.nelec_per_nmgy)
     for k in 1:length(img0.psf)
         the_mean = SVector{2}(WCS.world_to_pix(img0.wcs, ce.pos)) + img0.psf[k].xiBar
         the_cov = img0.psf[k].tauBar
@@ -64,8 +64,8 @@ end
 
 function write_galaxy(img0::Image, ce::CatalogEntry, pixels::Matrix{Float64};
                       expectation=false)
-    iota = median(img0.iota_vec)
-    e_devs = [ce.gal_frac_dev, 1 - ce.gal_frac_dev]
+    iota = median(img0.nelec_per_nmgy)
+    gal_fracdevs = [ce.gal_frac_dev, 1 - ce.gal_frac_dev]
     XiXi = DeterministicVI.get_bvn_cov(ce.gal_ab, ce.gal_angle, ce.gal_scale)
 
     for i in 1:2
@@ -75,7 +75,7 @@ function write_galaxy(img0::Image, ce::CatalogEntry, pixels::Matrix{Float64};
                            img0.psf[k].xiBar
                 the_cov = img0.psf[k].tauBar + gproto.nuBar * XiXi
                 intensity = ce.gal_fluxes[img0.b] * iota *
-                    img0.psf[k].alphaBar * e_devs[i] * gproto.etaBar
+                    img0.psf[k].alphaBar * gal_fracdevs[i] * gproto.etaBar
                 write_gaussian(the_mean, the_cov, intensity, pixels,
                     expectation=expectation)
             end
@@ -85,7 +85,7 @@ end
 
 function gen_image(img0::Image, n_bodies::Vector{CatalogEntry}; expectation=false)
     epsilon = img0.sky[1, 1]
-    iota = img0.iota_vec[1]
+    iota = img0.nelec_per_nmgy[1]
 
     if expectation
         pixels = [epsilon * iota for h=1:img0.H, w=1:img0.W]
@@ -101,12 +101,12 @@ function gen_image(img0::Image, n_bodies::Vector{CatalogEntry}; expectation=fals
     sky = SkyIntensity(fill(epsilon, img0.H, img0.W),
                        collect(1:img0.H), collect(1:img0.W),
                        ones(img0.H))
-    iota_vec = fill(iota, img0.H)
+    nelec_per_nmgy = fill(iota, img0.H)
 
     return Image(img0.H, img0.W, pixels, img0.b, img0.wcs,
                  img0.psf,
                  img0.run_num, img0.camcol_num, img0.field_num,
-                 sky, iota_vec,
+                 sky, nelec_per_nmgy,
                  img0.raw_psf_comp)
 end
 
@@ -126,7 +126,7 @@ const pp = Model.load_prior()
 
 function sample_fluxes(i::Int, r_s)
     k_s = rand(Distributions.Categorical(pp.k[i]))
-    c_s = rand(Distributions.MvNormal(pp.c[i][:, k_s], pp.c[i][:, :, k_s]))
+    c_s = rand(Distributions.MvNormal(pp.color[i][:, k_s], pp.color[i][:, :, k_s]))
 
     l_s = Vector{Float64}(5)
     l_s[3] = r_s
@@ -140,7 +140,7 @@ end
 
 function synthetic_body(ce::CatalogEntry)
     ce2 = deepcopy(ce)
-#    ce2.is_star = rand(Distributions.Bernoulli(pp.a[1]))
+#    ce2.is_star = rand(Distributions.Bernoulli(pp.is_star[1]))
     ce2.star_fluxes[:] = sample_fluxes(1, ce.star_fluxes[3])
     ce2.gal_fluxes[:] = sample_fluxes(2, ce.gal_fluxes[3])
     ce2

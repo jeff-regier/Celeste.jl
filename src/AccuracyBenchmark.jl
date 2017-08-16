@@ -303,8 +303,8 @@ end
 
 function get_median_fluxes(variational_params::Vector{Float64}, source_type::Int64)
     fluxes_from_colors(
-        exp(variational_params[Model.ids.r1[source_type]]),
-        variational_params[Model.ids.c1[:, source_type]],
+        exp(variational_params[Model.ids.flux_loc[source_type]]),
+        variational_params[Model.ids.color_mean[:, source_type]],
     )
 end
 
@@ -312,16 +312,16 @@ function variational_parameters_to_data_frame_row(objid::String, variational_par
     ids = Model.ids
     result = DataFrame()
     result[:objid] = objid
-    result[:right_ascension_deg] = variational_params[ids.u[1]]
-    result[:declination_deg] = variational_params[ids.u[2]]
+    result[:right_ascension_deg] = variational_params[ids.pos[1]]
+    result[:declination_deg] = variational_params[ids.pos[2]]
     result[:is_saturated] = false
-    result[:is_star] = variational_params[ids.a[1, 1]]
-    result[:de_vaucouleurs_mixture_weight] = variational_params[ids.e_dev]
-    result[:minor_major_axis_ratio] = variational_params[ids.e_axis]
+    result[:is_star] = variational_params[ids.is_star[1, 1]]
+    result[:de_vaucouleurs_mixture_weight] = variational_params[ids.gal_fracdev]
+    result[:minor_major_axis_ratio] = variational_params[ids.gal_ab]
     result[:half_light_radius_px] = (
-        variational_params[ids.e_scale] * sqrt(variational_params[ids.e_axis])
+        variational_params[ids.gal_scale] * sqrt(variational_params[ids.gal_ab])
     )
-    result[:angle_deg] = canonical_angle(180 / pi * variational_params[ids.e_angle])
+    result[:angle_deg] = canonical_angle(180 / pi * variational_params[ids.gal_angle])
 
     star_galaxy_index = (result[1, :is_star] > 0.5 ? 1 : 2)
     fluxes = get_median_fluxes(variational_params, star_galaxy_index)
@@ -331,11 +331,11 @@ function variational_parameters_to_data_frame_row(objid::String, variational_par
     result[:color_log_ratio_ri] = color_from_fluxes(fluxes[3], fluxes[4])
     result[:color_log_ratio_iz] = color_from_fluxes(fluxes[4], fluxes[5])
 
-    result[:log_reference_band_flux_stderr] = sqrt(variational_params[ids.r2[star_galaxy_index]])
-    result[:color_log_ratio_ug_stderr] = sqrt(variational_params[ids.c2[1, star_galaxy_index]])
-    result[:color_log_ratio_gr_stderr] = sqrt(variational_params[ids.c2[2, star_galaxy_index]])
-    result[:color_log_ratio_ri_stderr] = sqrt(variational_params[ids.c2[3, star_galaxy_index]])
-    result[:color_log_ratio_iz_stderr] = sqrt(variational_params[ids.c2[4, star_galaxy_index]])
+    result[:log_reference_band_flux_stderr] = sqrt(variational_params[ids.flux_scale[star_galaxy_index]])
+    result[:color_log_ratio_ug_stderr] = sqrt(variational_params[ids.color_var[1, star_galaxy_index]])
+    result[:color_log_ratio_gr_stderr] = sqrt(variational_params[ids.color_var[2, star_galaxy_index]])
+    result[:color_log_ratio_ri_stderr] = sqrt(variational_params[ids.color_var[3, star_galaxy_index]])
+    result[:color_log_ratio_iz_stderr] = sqrt(variational_params[ids.color_var[4, star_galaxy_index]])
 
     result
 end
@@ -364,20 +364,20 @@ function draw_source_params(prior, object_id)
     is_star = (rand(Bernoulli(PRIOR_PROBABILITY_OF_STAR)) == 1)
     source_type_index = is_star ? 1 : 2
     reference_band_flux_nmgy = exp(rand(
-        Normal(prior.r_μ[source_type_index], sqrt(prior.r_σ²[source_type_index]))
+        Normal(prior.flux_mean[source_type_index], sqrt(prior.flux_var[source_type_index]))
     ))
 
     color_mixture_weights = prior.k[:, source_type_index]
     num_color_components = length(color_mixture_weights)
     color_components = MvNormal[
-        MvNormal(prior.c_mean[:, k, source_type_index], prior.c_cov[:, :, k, source_type_index])
+        MvNormal(prior.color_mean[:, k, source_type_index], prior.color_cov[:, :, k, source_type_index])
         for k in 1:num_color_components
     ]
     color_log_ratios = rand(MixtureModel(color_components, color_mixture_weights))
 
     if !is_star
         half_light_radius_px = exp(rand(
-            Normal(prior.r_μ[source_type_index], sqrt(prior.r_σ²[source_type_index]))
+            Normal(prior.flux_mean[source_type_index], sqrt(prior.flux_var[source_type_index]))
         ))
         angle_deg = rand(Uniform(0, 180))
         minor_major_axis_ratio = rand(Beta(2, 2))
@@ -517,7 +517,6 @@ function make_image(
         collect(1:width_px),
         ones(height_px),
     )
-    iota_vec = fill(nelec_per_nmgy, height_px)
     Model.Image(
         height_px,
         width_px,
@@ -527,7 +526,7 @@ function make_image(
         psf,
         0, 0, 0, # run, camcol, field
         sky_intensity,
-        iota_vec,
+        fill(nelec_per_nmgy, height_px),
         Model.RawPSF(Matrix{Float64}(0, 0), 0, 0, Array{Float64,3}(0, 0, 0)),
     )
 end
@@ -553,15 +552,15 @@ function typical_band_fluxes(is_star::Bool)
     prior_parameters::Model.PriorParams = Model.load_prior()
     # this is the mode. brightness is log normal.
     reference_band_flux = exp(
-        prior_parameters.r_μ[source_type_index] - prior_parameters.r_σ²[source_type_index]
+        prior_parameters.flux_mean[source_type_index] - prior_parameters.flux_var[source_type_index]
     )
     # Band relative intensities are a mixture of lognormals. Which mixture component has the most
     # weight?
     dominant_component = indmax(prior_parameters.k[:, source_type_index])
     # What are the most typical log relative intensities for that component?
     color_log_ratios = (
-        prior_parameters.c_mean[:, dominant_component, source_type_index]
-        - diag(prior_parameters.c_cov[:, :, dominant_component, source_type_index])
+        prior_parameters.color_mean[:, dominant_component, source_type_index]
+        - diag(prior_parameters.color_cov[:, :, dominant_component, source_type_index])
     )
     fluxes_from_colors(reference_band_flux, color_log_ratios)
 end
@@ -748,7 +747,7 @@ function save_images_to_fits(filename::String, images::Vector{Model.Image})
         serialize_psf_to_header(band_image.psf, header)
         header["CLSKY"] = mean(band_image.sky.sky_small) * mean(band_image.sky.calibration)
         FITSIO.set_comment!(header, "CLSKY", "Mean sky background per pixel, nMgy")
-        header["CLIOTA"] = mean(band_image.iota_vec)
+        header["CLIOTA"] = mean(band_image.nelec_per_nmgy)
         FITSIO.set_comment!(header, "CLIOTA", "Gain, nelec per nMgy")
         write(
             fits_file,

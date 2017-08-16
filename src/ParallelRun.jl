@@ -214,7 +214,7 @@ function detect_sources(images::Vector{SDSSIO.RawImage})
             # threshold. Set other band fluxes to NaN, to indicate which
             # band the flux is measured in. We'll use this information below
             # when merging detections in different bands.
-            gal_fluxes = fill(NaN, B)
+            gal_fluxes = fill(NaN, num_bands)
             gal_fluxes[image.b] = sep_catalog.flux[i]
 
             gal_ab = sep_catalog.a[i] / sep_catalog.b[i]

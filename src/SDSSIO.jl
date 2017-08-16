@@ -286,11 +286,11 @@ function convert(::Type{Image}, r::RawImage)
         r.pixels[i, j] = (r.gain / r.calibration[i]) * (r.pixels[i, j] + sky_ij)
     end
 
-    iota_vec = r.gain ./ r.calibration
+    nelec_per_nmgy = r.gain ./ r.calibration
 
     Image(H, W, r.pixels, r.b, r.wcs, celeste_psf,
           r.rcf.run, r.rcf.camcol, r.rcf.field,
-          r.sky, iota_vec, r.raw_psf_comp)
+          r.sky, nelec_per_nmgy, r.raw_psf_comp)
 end
 
 # -----------------------------------------------------------------------------

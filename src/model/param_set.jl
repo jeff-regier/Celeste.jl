@@ -5,33 +5,32 @@
 # https://github.com/jeff-regier/Celeste.jl/wiki/Glossary-and-guide-to-Celeste-parameters
 #
 # The variable names are:
-# u       = Location in world coordinates (formerly mu). In Celeste, world coordinates are generally
-#           in degrees, but this depends on the WCS embedded in the image.
-# e_dev   = Weight given to a galaxy of type 1 (formerly theta)
-# e_axis  = Galaxy minor/major ratio (formerly rho)
-# e_angle = Galaxy angle (formerly phi), in radians north of east
-# e_scale = Galaxy scale (sigma). e_scale times sqrt(e_axis) gives the half-light radius in pixel
+# pos       = Location in world coordinates. Right ascension and declination
+# gal_fracdev   = Weight given to a galaxy of type 1 (formerly theta)
+# gal_ab  = Galaxy minor/major ratio (formerly rho)
+# gal_angle = Galaxy angle (formerly phi), in radians north of east
+# gal_scale = Galaxy scale (sigma). gal_scale times sqrt(gal_ab) gives the half-light radius in pixel
 #           coords.
-# For r1, r2, c1 and c2, the first row is stars, and the second is galaxies.
-# r1      = Iax1 lognormal mean parameter for r_s, the brightness/total flux of the object, in nMgy.
-#           For example, r1[1] gives the lognormal mean brightness for a star.
-# r2      = Iax1 lognormal variance parameter for r_s.
-# c1      = C_s means (formerly beta), the log ratios of brightness from each color band to the
-#           previous one. For example c1[1,2] gives the mean log brightness ratio of band 3 over
+# For flux_loc, flux_scale, color_mean and color_var, the first row is stars, and the second is galaxies.
+# flux_loc      = num_source_typesx1 lognormal mean parameter for r_s, the brightness/total flux of the object, in nMgy.
+#           For example, flux_loc[1] gives the lognormal mean brightness for a star.
+# flux_scale      = num_source_typesx1 lognormal variance parameter for r_s.
+# color_mean      = C_s means (formerly beta), the log ratios of brightness from each color band to the
+#           previous one. For example color_mean[1,2] gives the mean log brightness ratio of band 3 over
 #           band 2.
-# c2      = C_s variances (formerly lambda)
-# a       = probability of being a star or galaxy.  a[1, 1] is the
-#           probability of being a star and a[2, 1] of being a galaxy.
+# color_var      = C_s variances (formerly lambda)
+# is_star       = probability of being a star or galaxy.  is_star[1, 1] is the
+#           probability of being a star and is_star[2, 1] of being a galaxy.
 #           (formerly chi)
-# k       = {D|D-1}xIa matrix of color prior component indicators.
+# k       = {num_color_components|num_color_components-1}xnum_source_types matrix of color prior component indicators.
 #           (formerly kappa)
 #
-# Note Ia denotes the number of types of astronomical objects (e.g., 2 for stars and galaxies).
+# Note num_source_types denotes the number of types of astronomical objects (e.g., 2 for stars and galaxies).
 
 @compat abstract type ParamSet end
 
 type StarPosParams <: ParamSet
-    u::Vector{Int}
+    pos::Vector{Int}
     StarPosParams() = new([1, 2])
 end
 const star_ids = StarPosParams()
@@ -39,9 +38,9 @@ getids(::Type{StarPosParams}) = star_ids
 length(::Type{StarPosParams}) = 2
 
 type GalaxyShapeParams <: ParamSet
-    e_axis::Int
-    e_angle::Int
-    e_scale::Int
+    gal_ab::Int
+    gal_angle::Int
+    gal_scale::Int
     GalaxyShapeParams() = new(1, 2, 3)
 end
 const gal_shape_ids = GalaxyShapeParams()
@@ -49,11 +48,11 @@ getids(::Type{GalaxyShapeParams}) = gal_shape_ids
 length(::Type{GalaxyShapeParams}) = 3
 
 type GalaxyPosParams <: ParamSet
-    u::Vector{Int}
-    e_dev::Int
-    e_axis::Int
-    e_angle::Int
-    e_scale::Int
+    pos::Vector{Int}
+    gal_fracdev::Int
+    gal_ab::Int
+    gal_angle::Int
+    gal_scale::Int
     GalaxyPosParams() = new([1, 2], 3, 4, 5, 6)
 end
 const gal_ids = GalaxyPosParams()
@@ -62,42 +61,42 @@ length(::Type{GalaxyPosParams}) = 6
 
 
 type BrightnessParams <: ParamSet
-    r1::Int
-    r2::Int
-    c1::Vector{Int}
-    c2::Vector{Int}
+    flux_loc::Int
+    flux_scale::Int
+    color_mean::Vector{Int}
+    color_var::Vector{Int}
     BrightnessParams() = new(1, 2,
-                             collect(3:(3+(B-1)-1)),
-                             collect((3+B-1):(3+2*(B-1)-1)))
+                             collect(3:(3+(num_bands-1)-1)),
+                             collect((3+num_bands-1):(3+2*(num_bands-1)-1)))
 end
 const bids = BrightnessParams()
 getids(::Type{BrightnessParams}) = bids
-length(::Type{BrightnessParams}) = 2 + 2 * (B-1)
+length(::Type{BrightnessParams}) = 2 + 2 * (num_bands-1)
 
 immutable CanonicalParams <: ParamSet
-    u::Vector{Int}
-    e_dev::Int
-    e_axis::Int
-    e_angle::Int
-    e_scale::Int
-    r1::Vector{Int}
-    r2::Vector{Int}
-    c1::Matrix{Int}
-    c2::Matrix{Int}
-    a::Vector{Int}
+    pos::Vector{Int}
+    gal_fracdev::Int
+    gal_ab::Int
+    gal_angle::Int
+    gal_scale::Int
+    flux_loc::Vector{Int}
+    flux_scale::Vector{Int}
+    color_mean::Matrix{Int}
+    color_var::Matrix{Int}
+    is_star::Vector{Int}
     k::Matrix{Int}
     function CanonicalParams()
-        new([1, 2], # u
-            3, # e_dev
-            4, # e_axis
-            5, # e_angle
-            6, # e_scale
-            collect(7:(7+Ia-1)),  # r1
-            collect((7+Ia):(7+2Ia-1)), # r2
-            reshape((7+2Ia):(7+2Ia+(B-1)*Ia-1), (B-1, Ia)),  # c1
-            reshape((7+2Ia+(B-1)*Ia):(7+2Ia+2*(B-1)*Ia-1), (B-1, Ia)),  # c2
-            collect((7+2Ia+2*(B-1)*Ia):(7+3Ia+2*(B-1)*Ia-1)),  # a
-            reshape((7+3Ia+2*(B-1)*Ia):(7+3Ia+2*(B-1)*Ia+D*Ia-1), (D, Ia))) # k
+        new([1, 2], # pos
+            3, # gal_fracdev
+            4, # gal_ab
+            5, # gal_angle
+            6, # gal_scale
+            collect(7:(7+num_source_types-1)),  # flux_loc
+            collect((7+num_source_types):(7+2num_source_types-1)), # flux_scale
+            reshape((7+2num_source_types):(7+2num_source_types+(num_bands-1)*num_source_types-1), (num_bands-1, num_source_types)),  # color_mean
+            reshape((7+2num_source_types+(num_bands-1)*num_source_types):(7+2num_source_types+2*(num_bands-1)*num_source_types-1), (num_bands-1, num_source_types)),  # color_var
+            collect((7+2num_source_types+2*(num_bands-1)*num_source_types):(7+3num_source_types+2*(num_bands-1)*num_source_types-1)),  # is_star
+            reshape((7+3num_source_types+2*(num_bands-1)*num_source_types):(7+3num_source_types+2*(num_bands-1)*num_source_types+num_color_components*num_source_types-1), (num_color_components, num_source_types))) # k
     end
 end
 
@@ -105,38 +104,38 @@ const ids = CanonicalParams()
 
 getids(::Type{CanonicalParams}) = ids
 
-length(::Type{CanonicalParams}) = 6 + 3*Ia + 2*(B-1)*Ia + D*Ia
+length(::Type{CanonicalParams}) = 6 + 3*num_source_types + 2*(num_bands-1)*num_source_types + num_color_components*num_source_types
 
 
 type LatentStateIndexes <: ParamSet
-    u::Vector{Int}
-    e_dev::Int
-    e_axis::Int
-    e_angle::Int
-    e_scale::Int
-    r::Vector{Int}
-    c::Matrix{Int}
-    a::Matrix{Int}
+    pos::Vector{Int}
+    gal_fracdev::Int
+    gal_ab::Int
+    gal_angle::Int
+    gal_scale::Int
+    flux::Vector{Int}
+    color::Matrix{Int}
+    is_star::Matrix{Int}
     k::Matrix{Int}        # (not needed, i think)
 
     LatentStateIndexes() =
         new([1, 2], 3, 4, 5, 6,
-            collect(7:(7+Ia-1)),  # r
-            reshape((7+Ia):(7+Ia+(B-1)*Ia-1), (B-1, Ia)),  # c
-            reshape((7+Ia+(B-1)*Ia):(7+2Ia+(B-1)*Ia-1), (Ia, 1)),  # a
-            reshape((7+2Ia+(B-1)*Ia):(7+2Ia+(B-1)*Ia+D*Ia-1), (D, Ia))) # k
+            collect(7:(7+num_source_types-1)),  # r
+            reshape((7+num_source_types):(7+num_source_types+(num_bands-1)*num_source_types-1), (num_bands-1, num_source_types)),  # c
+            reshape((7+num_source_types+(num_bands-1)*num_source_types):(7+2num_source_types+(num_bands-1)*num_source_types-1), (num_source_types, 1)),  # is_star
+            reshape((7+2num_source_types+(num_bands-1)*num_source_types):(7+2num_source_types+(num_bands-1)*num_source_types+num_color_components*num_source_types-1), (num_color_components, num_source_types))) # k
 end
 
 const lidx = LatentStateIndexes()
 getlidx(::Type{LatentStateIndexes}) = lidx
-length(::Type{LatentStateIndexes}) = 22 #6 + 3*Ia + 2*(B-1)*Ia + D*Ia
+length(::Type{LatentStateIndexes}) = 22 #6 + 3*num_source_types + 2*(num_bands-1)*num_source_types + num_color_components*num_source_types
 
 # Parameters for a representation of the PSF
 immutable PsfParams <: ParamSet
     mu::UnitRange{Int}
-    e_axis::Int
-    e_angle::Int
-    e_scale::Int
+    gal_ab::Int
+    gal_angle::Int
+    gal_scale::Int
     weight::Int
 
     function PsfParams()
@@ -151,17 +150,17 @@ length(::Type{PsfParams}) = 6
 length{T<:ParamSet}(::T) = length(T)
 
 #TODO: build these from ue_align, etc., here.
-align(::StarPosParams, ids) = ids.u
+align(::StarPosParams, ids) = ids.pos
 align(::GalaxyPosParams, ids) =
-   [ids.u; ids.e_dev; ids.e_axis; ids.e_angle; ids.e_scale]
+   [ids.pos; ids.gal_fracdev; ids.gal_ab; ids.gal_angle; ids.gal_scale]
 align(::CanonicalParams, _ids) = collect(1:length(CanonicalParams))
 align(::GalaxyShapeParams, gal_ids) =
-  [gal_ids.e_axis; gal_ids.e_angle; gal_ids.e_scale]
+  [gal_ids.gal_ab; gal_ids.gal_angle; gal_ids.gal_scale]
 
 # The shape and brightness parameters for stars and galaxies respectively.
-const shape_standard_alignment = (ids.u,
-   [ids.u; ids.e_dev; ids.e_axis; ids.e_angle; ids.e_scale])
-bright_ids(i) = [ids.r1[i]; ids.r2[i]; ids.c1[:, i]; ids.c2[:, i]]
+const shape_standard_alignment = (ids.pos,
+   [ids.pos; ids.gal_fracdev; ids.gal_ab; ids.gal_angle; ids.gal_scale])
+bright_ids(i) = [ids.flux_loc[i]; ids.flux_scale[i]; ids.color_mean[:, i]; ids.color_var[:, i]]
 const brightness_standard_alignment = (bright_ids(1), bright_ids(2))
 
 # Note that gal_shape_alignment aligns the shape ids with the GalaxyPosParams,

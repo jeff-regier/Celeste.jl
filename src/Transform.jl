@@ -9,7 +9,7 @@ using Compat
 using ..SensitiveFloats
 import ..Log
 
-import ..Model: Ia, ParamSet, B, D
+import ..Model: num_source_types, ParamSet, num_bands, num_color_components
 
 export DataTransform, ParamBounds, ParamBox, SimplexBox,
        get_mp_transform, enforce_bounds!,
@@ -28,54 +28,54 @@ export DataTransform, ParamBounds, ParamBox, SimplexBox,
 # the way of the dinosaur
 
 type CanonicalParams <: ParamSet
-    u::Vector{Int}
-    e_dev::Int
-    e_axis::Int
-    e_angle::Int
-    e_scale::Int
-    r1::Vector{Int}
-    r2::Vector{Int}
-    c1::Matrix{Int}
-    c2::Matrix{Int}
+    pos::Vector{Int}
+    gal_fracdev::Int
+    gal_ab::Int
+    gal_angle::Int
+    gal_scale::Int
+    flux_loc::Vector{Int}
+    flux_scale::Vector{Int}
+    color_mean::Matrix{Int}
+    color_var::Matrix{Int}
     a::Matrix{Int}
     k::Matrix{Int}
     CanonicalParams() =
         new([1, 2], 3, 4, 5, 6,
-            collect(7:(7+Ia-1)),  # r1
-            collect((7+Ia):(7+2Ia-1)), # r2
-            reshape((7+2Ia):(7+2Ia+(B-1)*Ia-1), (B-1, Ia)),  # c1
-            reshape((7+2Ia+(B-1)*Ia):(7+2Ia+2*(B-1)*Ia-1), (B-1, Ia)),  # c2
-            reshape((7+2Ia+2*(B-1)*Ia):(7+3Ia+2*(B-1)*Ia-1), (Ia, 1)),  # a
-            reshape((7+3Ia+2*(B-1)*Ia):(7+3Ia+2*(B-1)*Ia+D*Ia-1), (D, Ia))) # k
+            collect(7:(7+num_source_types-1)),  # flux_loc
+            collect((7+num_source_types):(7+2num_source_types-1)), # flux_scale
+            reshape((7+2num_source_types):(7+2num_source_types+(num_bands-1)*num_source_types-1), (num_bands-1, num_source_types)),  # color_mean
+            reshape((7+2num_source_types+(num_bands-1)*num_source_types):(7+2num_source_types+2*(num_bands-1)*num_source_types-1), (num_bands-1, num_source_types)),  # color_var
+            reshape((7+2num_source_types+2*(num_bands-1)*num_source_types):(7+3num_source_types+2*(num_bands-1)*num_source_types-1), (num_source_types, 1)),  # a
+            reshape((7+3num_source_types+2*(num_bands-1)*num_source_types):(7+3num_source_types+2*(num_bands-1)*num_source_types+num_color_components*num_source_types-1), (num_color_components, num_source_types))) # k
 end
 const ids = CanonicalParams()
-Base.length(::Type{CanonicalParams}) = 6 + 3*Ia + 2*(B-1)*Ia + D*Ia
+Base.length(::Type{CanonicalParams}) = 6 + 3*num_source_types + 2*(num_bands-1)*num_source_types + num_color_components*num_source_types
 
 type UnconstrainedParams <: ParamSet
-    u::Vector{Int}
-    e_dev::Int
-    e_axis::Int
-    e_angle::Int
-    e_scale::Int
-    r1::Vector{Int}
-    r2::Vector{Int}
-    c1::Matrix{Int}
-    c2::Matrix{Int}
+    pos::Vector{Int}
+    gal_fracdev::Int
+    gal_ab::Int
+    gal_angle::Int
+    gal_scale::Int
+    flux_loc::Vector{Int}
+    flux_scale::Vector{Int}
+    color_mean::Matrix{Int}
+    color_var::Matrix{Int}
     a::Matrix{Int}
     k::Matrix{Int}
     UnconstrainedParams() =
         new([1, 2], 3, 4, 5, 6,
-            collect(7:(7+Ia-1)),  # r1
-            collect((7+Ia):(7+2Ia-1)), # r2
-            reshape((7+2Ia):(7+2Ia+(B-1)*Ia-1), (B-1, Ia)),  # c1
-            reshape((7+2Ia+(B-1)*Ia):(7+2Ia+2*(B-1)*Ia-1), (B-1, Ia)),  # c2
-            reshape((7+2Ia+2*(B-1)*Ia):
-                    (7+2Ia+2*(B-1)*Ia+(Ia-1)-1), (Ia - 1, 1)),  # a
-            reshape((7+2Ia+2*(B-1)*Ia+(Ia-1)):
-                    (7+2Ia+2*(B-1)*Ia+(Ia-1)+(D-1)*Ia-1), (D-1, Ia))) # k
+            collect(7:(7+num_source_types-1)),  # flux_loc
+            collect((7+num_source_types):(7+2num_source_types-1)), # flux_scale
+            reshape((7+2num_source_types):(7+2num_source_types+(num_bands-1)*num_source_types-1), (num_bands-1, num_source_types)),  # color_mean
+            reshape((7+2num_source_types+(num_bands-1)*num_source_types):(7+2num_source_types+2*(num_bands-1)*num_source_types-1), (num_bands-1, num_source_types)),  # color_var
+            reshape((7+2num_source_types+2*(num_bands-1)*num_source_types):
+                    (7+2num_source_types+2*(num_bands-1)*num_source_types+(num_source_types-1)-1), (num_source_types - 1, 1)),  # a
+            reshape((7+2num_source_types+2*(num_bands-1)*num_source_types+(num_source_types-1)):
+                    (7+2num_source_types+2*(num_bands-1)*num_source_types+(num_source_types-1)+(num_color_components-1)*num_source_types-1), (num_color_components-1, num_source_types))) # k
 end
 const ids_free = UnconstrainedParams()
-Base.length(::Type{UnconstrainedParams}) =  6 + 2*Ia + 2*(B-1)*Ia + (D-1)*Ia + Ia-1
+Base.length(::Type{UnconstrainedParams}) =  6 + 2*num_source_types + 2*(num_bands-1)*num_source_types + (num_color_components-1)*num_source_types + num_source_types-1
 
 ################################
 # Elementary functions.
@@ -738,35 +738,35 @@ function get_mp_transform{NumType <: Number}(
     for si in 1:length(active_sources)
         s = active_sources[si]
         bounds[si] = ParamBounds()
-        bounds[si][:u] = Vector{ParamBox}(2)
-        u = vp[s][ids.u]
+        bounds[si][:pos] = Vector{ParamBox}(2)
+        pos = vp[s][ids.pos]
         for axis in 1:2
-            bounds[si][:u][axis] =
-                ParamBox(u[axis] - loc_width, u[axis] + loc_width, loc_scale)
+            bounds[si][:pos][axis] =
+                ParamBox(pos[axis] - loc_width, pos[axis] + loc_width, loc_scale)
         end
-        bounds[si][:r1] = Vector{ParamBox}(Ia)
-        bounds[si][:r2] = Vector{ParamBox}(Ia)
-        for i in 1:Ia
-            bounds[si][:r1][i] = ParamBox(-1.0, 10., 1.0)
-            bounds[si][:r2][i] = ParamBox(1e-4, 0.1, 1.0)
+        bounds[si][:flux_loc] = Vector{ParamBox}(num_source_types)
+        bounds[si][:flux_scale] = Vector{ParamBox}(num_source_types)
+        for i in 1:num_source_types
+            bounds[si][:flux_loc][i] = ParamBox(-1.0, 10., 1.0)
+            bounds[si][:flux_scale][i] = ParamBox(1e-4, 0.1, 1.0)
         end
-        bounds[si][:c1] = Vector{ParamBox}(4 * Ia)
-        bounds[si][:c2] = Vector{ParamBox}(4 * Ia)
-        for ind in 1:length(ids.c1)
-            bounds[si][:c1][ind] = ParamBox(-10., 10., 1.0)
-            bounds[si][:c2][ind] = ParamBox(1e-4, 1., 1.0)
+        bounds[si][:color_mean] = Vector{ParamBox}(4 * num_source_types)
+        bounds[si][:color_var] = Vector{ParamBox}(4 * num_source_types)
+        for ind in 1:length(ids.color_mean)
+            bounds[si][:color_mean][ind] = ParamBox(-10., 10., 1.0)
+            bounds[si][:color_var][ind] = ParamBox(1e-4, 1., 1.0)
         end
-        bounds[si][:e_dev] = ParamBox[ ParamBox(1e-2, 1 - 1e-2, 1.0) ]
-        bounds[si][:e_axis] = ParamBox[ ParamBox(1e-2, 1 - 1e-2, 1.0) ]
-        bounds[si][:e_angle] = ParamBox[ ParamBox(-10.0, 10.0, 1.0) ]
-        bounds[si][:e_scale] = ParamBox[ ParamBox(0.1, 70., 1.0) ]
+        bounds[si][:gal_fracdev] = ParamBox[ ParamBox(1e-2, 1 - 1e-2, 1.0) ]
+        bounds[si][:gal_ab] = ParamBox[ ParamBox(1e-2, 1 - 1e-2, 1.0) ]
+        bounds[si][:gal_angle] = ParamBox[ ParamBox(-10.0, 10.0, 1.0) ]
+        bounds[si][:gal_scale] = ParamBox[ ParamBox(0.1, 70., 1.0) ]
 
         bounds[si][:a] = Vector{SimplexBox}(1)
         bounds[si][:a][1] = SimplexBox(0.005, 1.0, 2)
 
-        bounds[si][:k] = Vector{SimplexBox}(Ia)
-        for i in 1:Ia
-            bounds[si][:k][i] = SimplexBox(0.01 / D, 1.0, D)
+        bounds[si][:k] = Vector{SimplexBox}(num_source_types)
+        for i in 1:num_source_types
+            bounds[si][:k][i] = SimplexBox(0.01 / num_color_components, 1.0, num_color_components)
         end
     end
 

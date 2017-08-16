@@ -99,7 +99,7 @@ function sep_image(data::Array{T, 2};
                           (noise_type == :var) ? SEP_NOISE_VAR :
                           error("noise_type must be :stddev or :var"))
     end
-            
+
     return sep_image(data_ptr, noise_ptr, mask_ptr,
                      dtype, ndtype, mdtype,
                      sz[1], sz[2],
@@ -118,12 +118,12 @@ Spline representation of the variable background and noise of an image.
 
 # Arguments
 
-- `data::Matrix`: 
+- `data::Matrix`:
 - `mask=nothing`:
 - `boxsize=(64, 64)`:
 - `filtersize=(3, 3)`:
 - `filterthresh=0.0`:
-- `mask_thresh=0`: 
+- `mask_thresh=0`:
 """
 mutable struct Background
     ptr::Ptr{Void}
@@ -207,7 +207,7 @@ function broadcast(-, A::Array{T, 2} where T<:PixType, bkg::Background)
     B .-= bkg
     return B
 end
-    
+
 function (-)(A::Array{T, 2}, bkg::Background) where {T<:PixType}
     B = copy(A)
     B .-= bkg
@@ -301,10 +301,10 @@ Perform image segmentation on the data and return a catalog of sources.
 - `data::Matrix`: Image data.
 - `thresh::Real`: Threshold for detection in absolute units, or in standard
   deviations if noise is given.
-- `noise=nothing`: 
+- `noise=nothing`:
 - `noise_type=:stddev`:
 - `mask=nothing`:
-- `mask_thresh=0`: 
+- `mask_thresh=0`:
 - `minarea=5`:
 - `filter_kernel`:
 - `filter_type=:conv`:
@@ -336,12 +336,12 @@ function extract(data::Array{T, 2} where T, thresh::Real;
     # convert filter kernel to Cfloat array
     filter_kernel_cfloat = convert(Array{Cfloat, 2}, filter_kernel)
     filter_size = size(filter_kernel_cfloat)
-    
+
     ccatalog_ptr_ref = Ref{Ptr{sep_catalog}}(C_NULL)
     status = ccall((:sep_extract, libsep), Cint,
                    (Ptr{sep_image},
                     Cfloat, Cint, # thresh, thresh_type
-                    Cint,  # minarea  
+                    Cint,  # minarea
                     Ptr{Cfloat}, Cint, Cint,  # conv, convw, convh
                     Cint, # filter_type
                     Cint, Cdouble,  # deblend_nthresh, deblend_cont
@@ -371,7 +371,7 @@ function extract(data::Array{T, 2} where T, thresh::Real;
         pix[i] = unsafe_copy(ptr, npix[i])
         pix[i] .+= Cint(1) # change to 1-indexing
     end
-        
+
     result = Catalog(npix,
                      unsafe_copy(ccatalog.xmin, nobj),
                      unsafe_copy(ccatalog.xmax, nobj),
@@ -391,7 +391,7 @@ function extract(data::Array{T, 2} where T, thresh::Real;
     # switch to 1 indexing
     result.x .+= 1.0
     result.y .+= 1.0
-    
+
     # free result allocated in sep_extract
     ccall((:sep_catalog_free, libsep), Void, (Ptr{sep_catalog},), ccatalog_ptr)
 

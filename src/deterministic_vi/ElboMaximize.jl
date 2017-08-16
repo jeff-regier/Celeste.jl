@@ -64,26 +64,26 @@ function elbo_constraints{T}(bound::VariationalParams{T},
     boxes = Vector{Vector{ParameterConstraint{BoxConstraint}}}(n_sources)
     simplexes = Vector{Vector{ParameterConstraint{SimplexConstraint}}}(n_sources)
     for src in 1:n_sources
-        i1, i2 = ids.u[1], ids.u[2]
+        i1, i2 = ids.pos[1], ids.pos[2]
         u1, u2 = bound[src][i1], bound[src][i2]
         boxes[src] = [
             ParameterConstraint(BoxConstraint(u1 - loc_width, u1 + loc_width, loc_scale), i1),
             ParameterConstraint(BoxConstraint(u2 - loc_width, u2 + loc_width, loc_scale), i2),
-            ParameterConstraint(BoxConstraint(1e-2, 0.99, 1.0), ids.e_dev),
-            ParameterConstraint(BoxConstraint(1e-2, 0.99, 1.0), ids.e_axis),
-            ParameterConstraint(BoxConstraint(-10.0, 10.0, 1.0), ids.e_angle),
-            ParameterConstraint(BoxConstraint(0.10, 70.0, 1.0), ids.e_scale),
-            ParameterConstraint(BoxConstraint(-1.0, 10.0, 1.0), ids.r1),
-            ParameterConstraint(BoxConstraint(1e-4, 0.10, 1.0), ids.r2),
-            ParameterConstraint(BoxConstraint(-10.0, 10.0, 1.0), ids.c1[:, 1]),
-            ParameterConstraint(BoxConstraint(-10.0, 10.0, 1.0), ids.c1[:, 2]),
-            ParameterConstraint(BoxConstraint(1e-4, 1.0, 1.0), ids.c2[:, 1]),
-            ParameterConstraint(BoxConstraint(1e-4, 1.0, 1.0), ids.c2[:, 2])
+            ParameterConstraint(BoxConstraint(1e-2, 0.99, 1.0), ids.gal_fracdev),
+            ParameterConstraint(BoxConstraint(1e-2, 0.99, 1.0), ids.gal_ab),
+            ParameterConstraint(BoxConstraint(-10.0, 10.0, 1.0), ids.gal_angle),
+            ParameterConstraint(BoxConstraint(0.10, 70.0, 1.0), ids.gal_scale),
+            ParameterConstraint(BoxConstraint(-1.0, 10.0, 1.0), ids.flux_loc),
+            ParameterConstraint(BoxConstraint(1e-4, 0.10, 1.0), ids.flux_scale),
+            ParameterConstraint(BoxConstraint(-10.0, 10.0, 1.0), ids.color_mean[:, 1]),
+            ParameterConstraint(BoxConstraint(-10.0, 10.0, 1.0), ids.color_mean[:, 2]),
+            ParameterConstraint(BoxConstraint(1e-4, 1.0, 1.0), ids.color_var[:, 1]),
+            ParameterConstraint(BoxConstraint(1e-4, 1.0, 1.0), ids.color_var[:, 2])
         ]
         simplexes[src] = [
-            ParameterConstraint(SimplexConstraint(0.005, 1.0, 2), ids.a),
-            ParameterConstraint(SimplexConstraint(0.01/D, 1.0, D), ids.k[:, 1]),
-            ParameterConstraint(SimplexConstraint(0.01/D, 1.0, D), ids.k[:, 2])
+            ParameterConstraint(SimplexConstraint(0.005, 1.0, 2), ids.is_star),
+            ParameterConstraint(SimplexConstraint(0.01/num_color_components, 1.0, num_color_components), ids.k[:, 1]),
+            ParameterConstraint(SimplexConstraint(0.01/num_color_components, 1.0, num_color_components), ids.k[:, 2])
         ]
     end
     return ConstraintBatch(boxes, simplexes)

@@ -87,7 +87,7 @@ function test_that_gal_truth_is_most_likely_log_prob()
     println("Best ll ", best_ll)
 
     # unpack true gal parameters
-    lnr, col, u, shape = gal_state[1], gal_state[2:5],
+    lnr, col, pos, shape = gal_state[1], gal_state[2:5],
                          gal_state[6:7], gal_state[8:11]
 
     # perterb lnr
@@ -98,7 +98,7 @@ function test_that_gal_truth_is_most_likely_log_prob()
     end
 
     # perturb location
-    ra, dec = u[1], u[2]
+    ra, dec = pos[1], pos[2]
     for bad_ra in [.5*ra, .8*ra, 1.1*ra, 1.5*ra]
         bad_state = deepcopy(gal_state)
         bad_state[6] = bad_ra
@@ -117,11 +117,11 @@ function test_that_gal_truth_is_most_likely_log_prob()
 
     # perturb galaxy shape parameters
     gdev, gab, gangle, gscale = shape
-    for bad_shape_scale in [.5, .8, 1.2, 1.3]
+    for bad_shapgal_scale in [.5, .8, 1.2, 1.3]
         # generate a random direction in param space
         r = randn(length(shape))
         r = r / sqrt(sum(r.*r))
-        bad_shape = shape + bad_shape_scale * r
+        bad_shape = shape + bad_shapgal_scale * r
 
         bad_state = deepcopy(gal_state)
         bad_state[8:11] = bad_shape

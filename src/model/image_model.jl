@@ -91,7 +91,7 @@ type Image
 
     # The expected number of photons contributed to this image
     # by a source 1 nanomaggie in brightness. (varies by row)
-    iota_vec::Array{Float32, 1}
+    nelec_per_nmgy::Array{Float32, 1}
 
     # storing a RawPSF here isn't ideal, because it's an SDSS type
     # not a Celeste type

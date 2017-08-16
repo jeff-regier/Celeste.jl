@@ -177,8 +177,8 @@ end
 Helper that draws N samples using slice sampling
 """
 function slicesample_chain(lnpdf, th, N; print_skip=50)
-    D = length(th)
-    samps = zeros(N, D)
+    num_color_components = length(th)
+    samps = zeros(N, num_color_components)
     lls   = zeros(N)
     tic()
     @printf "  iter : \t loglike \n"

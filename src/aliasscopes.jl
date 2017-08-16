@@ -5,13 +5,13 @@ immutable Const{T}
     a::T
 end
 
-Base.getindex(A::Const{<:Array}, i1::Int) = Core.const_arrayref(A.a, i1)
-@inline Base.getindex(A::Const{<:Array}, i1::Int, i2::Int, I::Int...) =  Core.const_arrayref(A.a, i1, i2, I...)
+Base.getindex(A::Const{<:Array}, i1::Int) = Core.const_arrayref(A.is_star, i1)
+@inline Base.getindex(A::Const{<:Array}, i1::Int, i2::Int, I::Int...) =  Core.const_arrayref(A.is_star, i1, i2, I...)
 
 @generated function Base.getindex{SM<:SizedMatrix}(m::Const{SM}, i1::Integer, i2::Integer)
     quote
       $(Expr(:meta, :inline, :propagate_inbounds))
-      data = m.a.data
+      data = m.is_star.data
       @boundscheck if (i1 < 1 || i1 > $(size(SM,1)) || i2 < 1 || i2 > $(size(SM, 2)))
           throw(BoundsError(data, (i1,i2)))
       end
