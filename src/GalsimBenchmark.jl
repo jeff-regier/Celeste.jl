@@ -5,9 +5,9 @@ module GalsimBenchmark
 using DataFrames
 import FITSIO
 
-import Celeste.AccuracyBenchmark
-import Celeste.Configs
-import Celeste.Infer
+import ..AccuracyBenchmark
+import ..Config
+import ..Infer
 
 const GALSIM_BENCHMARK_DIR = joinpath(Pkg.dir("Celeste"), "benchmark", "galsim")
 const LATEST_FITS_FILENAME_DIR = joinpath(GALSIM_BENCHMARK_DIR, "latest_filenames")
@@ -86,7 +86,7 @@ function run_benchmarks(; test_case_names=String[], joint_inference=false)
         truth_catalog_df = extract_catalog_from_header(header)
         catalog_entries = AccuracyBenchmark.make_initialization_catalog(truth_catalog_df, false)
         target_sources = collect(1:num_sources)
-        config = Configs.Config()
+        config = Config()
         config.min_radius_pix = ACTIVE_PIXELS_MIN_RADIUS_PX
         results = AccuracyBenchmark.run_celeste(
             config,

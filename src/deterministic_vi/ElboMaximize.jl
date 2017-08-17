@@ -22,7 +22,7 @@ using ..DeterministicVI.ConstraintTransforms: TransformDerivatives,
 # defaults for optional arguments to `maximize!` #
 ##################################################
 
-struct Config{N,T}
+struct ElboConfig{N,T}
     bound_params::VariationalParams{T}
     free_params::VariationalParams{T}
     free_initial_input::Vector{T}
@@ -35,7 +35,7 @@ struct Config{N,T}
     trust_region::NewtonTrustRegion{T}
 end
 
-function Config{T}(ea::ElboArgs,
+function ElboConfig{T}(ea::ElboArgs,
                    vp::VariationalParams{T},
                    bound_params::VariationalParams{T} = vp[ea.active_sources];
                    termination_callback = nothing,
@@ -52,7 +52,7 @@ function Config{T}(ea::ElboArgs,
     free_result = SensitiveFloat{Float64}(length(free_params[1]), length(bound_params), true, true)
     bvn_bundle = Model.BvnBundle{T}(ea.psf_K, ea.S)
     derivs = TransformDerivatives(bound_params, free_params)
-    return Config(bound_params, free_params, free_initial_input,
+    return ElboConfig(bound_params, free_params, free_initial_input,
                   free_previous_input, free_result, bvn_bundle,
                   constraints, derivs, optim_options, trust_region)
 end
@@ -104,7 +104,7 @@ function elbo_trust_region(; initial_delta = 1.0, delta_hat = 1e9)
                                    delta_hat = delta_hat)
 end
 
-function enforce_references!{T}(ea::ElboArgs, vp::VariationalParams{T}, cfg::Config)
+function enforce_references!{T}(ea::ElboArgs, vp::VariationalParams{T}, cfg::ElboConfig)
     @assert length(cfg.bound_params) == length(ea.active_sources)
     for i in 1:length(ea.active_sources)
         cfg.bound_params[i] = vp[ea.active_sources[i]]
@@ -155,7 +155,7 @@ __init__()
 # Callable Types Passed to Optim #
 ##################################
 
-function evaluate!{T}(ea::ElboArgs, vp::VariationalParams{T}, cfg::Config, x::Vector)
+function evaluate!{T}(ea::ElboArgs, vp::VariationalParams{T}, cfg::ElboConfig, x::Vector)
     if x != cfg.free_previous_input
         copy!(cfg.free_previous_input, x)
         to_variational_params!(cfg.free_params, x)
@@ -174,7 +174,7 @@ end
 struct Objective{N,T} <: Function
     ea::ElboArgs
     vp::VariationalParams{T}
-    cfg::Config{N,T}
+    cfg::ElboConfig{N,T}
 end
 
 function (f::Objective)(x::Vector)
@@ -188,7 +188,7 @@ end
 struct Gradient{N,T} <: Function
     ea::ElboArgs
     vp::VariationalParams{T}
-    cfg::Config{N,T}
+    cfg::ElboConfig{N,T}
 end
 
 function (f::Gradient)(x::Vector, result::Vector)
@@ -206,7 +206,7 @@ end
 struct Hessian{N,T} <: Function
     ea::ElboArgs
     vp::VariationalParams{T}
-    cfg::Config{N,T}
+    cfg::ElboConfig{N,T}
 end
 
 function (f::Hessian)(x::Vector, result::Matrix)
@@ -222,7 +222,7 @@ end
 # maximize! #
 #############
 
-function maximize!(ea::ElboArgs, vp::VariationalParams{Float64}, cfg::Config = Config(ea, vp))
+function maximize!(ea::ElboArgs, vp::VariationalParams{Float64}, cfg::ElboConfig = ElboConfig(ea, vp))
     enforce_references!(ea, vp, cfg)
     enforce!(cfg.bound_params, cfg.constraints)
     to_free!(cfg.free_params, cfg.bound_params, cfg.constraints)

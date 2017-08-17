@@ -5,7 +5,7 @@ module DeterministicVI
 
 using Base.Threads: threadid, nthreads
 
-import ..Configs
+import ..Config
 using ..Model
 import ..Model: BivariateNormalDerivatives, BvnComponent, GalaxyCacheComponent,
                 BvnBundle, GalaxySigmaDerivs, SkyPatch,
@@ -122,7 +122,7 @@ Arguments:
     neighbors: the other light sources near `entry`
     entry: the source to infer
 """
-function infer_source(config::Configs.Config,
+function infer_source(config::Config,
                       images::Vector{Image},
                       neighbors::Vector{CatalogEntry},
                       entry::CatalogEntry)
@@ -149,7 +149,7 @@ end
 function infer_source(images::Vector{Image},
                       neighbors::Vector{CatalogEntry},
                       entry::CatalogEntry)
-    infer_source(Configs.Config(), images, neighbors, entry)
+    infer_source(Config(), images, neighbors, entry)
 end
 
 end

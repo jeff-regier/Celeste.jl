@@ -7,7 +7,7 @@ import FITSIO
 import JLD
 import WCS
 
-import ..Configs
+import ..Config
 import ..Log
 using ..Model
 import ..SDSSIO
@@ -525,7 +525,7 @@ end
 """
 Optimize the `ts`th element of `target_sources`.
 """
-function process_source(config::Configs.Config,
+function process_source(config::Config,
                         ts::Int,
                         catalog::Vector{CatalogEntry},
                         target_sources::Vector{Int},
@@ -550,7 +550,7 @@ end
 Use multiple threads to process each target source with the specified
 callback and write the results to a file.
 """
-function one_node_single_infer(config::Configs.Config,
+function one_node_single_infer(config::Config,
                                catalog::Vector{CatalogEntry},
                                target_sources::Vector{Int},
                                neighbor_map::Vector{Vector{Int}},
@@ -614,7 +614,7 @@ function one_node_single_infer(catalog::Vector{CatalogEntry},
                                infer_source_callback=infer_source,
                                timing=InferTiming())
     one_node_single_infer(
-        Configs.Config(),
+        Config(),
         catalog,
         target_sources,
         neighbor_map,
