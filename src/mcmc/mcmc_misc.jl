@@ -138,7 +138,6 @@ function samples_to_data_frame_row(sampdf; objid="mcmc")
     df[:color_log_ratio_gr_stderr]      = [std(sampdf[:color_log_ratio_gr])]
     df[:color_log_ratio_ri_stderr]      = [std(sampdf[:color_log_ratio_ri])]
     df[:color_log_ratio_iz_stderr]      = [std(sampdf[:color_log_ratio_iz])]
- 
     return df
 end
 
@@ -176,44 +175,95 @@ end
 # Very similar to Synthetic.jl functions                             #
 ######################################################################
 
-function write_star_unit_flux(img0::Image,
-                              pos::Array{Float64, 1},
-                              pixels::Matrix{Float64})
-    iota = median(img0.iota_vec)
-    for k in 1:length(img0.psf)
-        the_mean = SVector{2}(WCS.world_to_pix(img0.wcs, pos)) + img0.psf[k].xiBar
-        the_cov = img0.psf[k].tauBar
-        intensity = iota * img0.psf[k].alphaBar
+"""
+Add a star to a matrix of pixels.  Defaults to unit flux.
+"""
+function write_star_unit_flux(pos::Array{Float64, 1},
+                              psf::Array{Model.PsfComponent,1},
+                              wcs::WCS.WCSTransform,
+                              iota::Float64,
+                              pixels::Matrix{Float64};
+                              offset::Array{Float64, 1}=[0., 0.],
+                              flux::Float64=1.)
+    # write the unit-flux scaled, correctly offset psf
+    for k in 1:length(psf)
+        # mean in pixels space
+        the_mean = SVector{2}(WCS.world_to_pix(wcs, pos) - offset) + psf[k].xiBar
+        the_cov  = psf[k].tauBar
+        intensity = flux * iota * psf[k].alphaBar
         write_gaussian(the_mean, the_cov, intensity, pixels)
     end
 end
 
-function write_galaxy_unit_flux(img0::Image,
-                                pos::Array{Float64,1},
+
+"""
+Add a galaxy model image to a matrix of pixels.  Defaults to unit flux.
+"""
+function write_galaxy_unit_flux(pos::Array{Float64, 1},
+                                psf::Array{Model.PsfComponent,1},
+                                wcs::WCS.WCSTransform,
+                                iota::Float64,
                                 gal_frac_dev::Float64,
                                 gal_ab::Float64,
                                 gal_angle::Float64,
                                 gal_scale::Float64,
-                                pixels::Matrix{Float64})
-    iota = median(img0.iota_vec)
+                                pixels::Matrix{Float64};
+                                offset::Array{Float64, 1}=[0., 0.],
+                                flux::Float64=1.)
+    # write the unit-flux scaled, correctly offset galaxy shape + 
+    # psf convolution
     e_devs = [gal_frac_dev, 1 - gal_frac_dev]
-    #XiXi = DeterministicVI.get_bvn_cov(ce.gal_ab, ce.gal_angle, ce.gal_scale)
     XiXi = Model.get_bvn_cov(gal_ab, gal_angle, gal_scale)
-
     for i in 1:2
         for gproto in galaxy_prototypes[i]
-            for k in 1:length(img0.psf)
-                the_mean = SVector{2}(WCS.world_to_pix(img0.wcs, pos)) +
-                           img0.psf[k].xiBar
-                the_cov = img0.psf[k].tauBar + gproto.nuBar * XiXi
-                intensity = iota * img0.psf[k].alphaBar * e_devs[i] *
-                    gproto.etaBar
+            for k in 1:length(psf)
+                the_mean = SVector{2}(WCS.world_to_pix(wcs, pos) - offset) +
+                           psf[k].xiBar
+                the_cov = psf[k].tauBar + gproto.nuBar * XiXi
+                intensity = flux * iota * psf[k].alphaBar * e_devs[i] * gproto.etaBar
                 write_gaussian(the_mean, the_cov, intensity, pixels)
             end
         end
     end
 end
 
+
+"""
+Generate a model image on a patch, according to that image/patch psf
+"""
+function render_patch(img::Image, patch::SkyPatch, n_bodies::Vector{CatalogEntry})
+    # sky noise an gain
+    epsilon = img.sky[1, 1]
+    iota    = Float64(median(img.iota_vec))
+    offset  = convert(Array{Float64, 1}, patch.bitmap_offset)
+
+    # create sky noise background image
+    H, W = size(patch.active_pixel_bitmap)
+    patch_pixels = [epsilon*iota for h=1:H, w=1:W]
+
+    # write star/gal model images onto patch_pixels
+    for body in n_bodies
+        if body.is_star
+            write_star_unit_flux(body.pos, img.psf, img.wcs, iota, patch_pixels;
+                offset = offset,
+                flux   = body.star_fluxes[img.b]
+              )
+        else
+            write_galaxy_unit_flux(body.pos, img.psf, img.wcs, iota,
+                entry.gal_frac_dev, entry.gal_ab, entry.gal_angle,
+                entry.gal_scale, patch_pixels;
+                offset = offset,
+                flux   = body.gal_fluxes[img.b]
+              )
+        end
+    end
+    return patch_pixels
+end
+
+
+"""
+Write a gaussian bump on a pixel array
+"""
 function write_gaussian(the_mean, the_cov, intensity, pixels)
     the_precision = inv(the_cov)
     c = sqrt(det(the_precision)) / 2pi
@@ -238,6 +288,29 @@ function get_patch(the_mean::SVector{2,Float64}, H::Int, W::Int)
     w11 = max(1, wm - radius):min(W, wm + radius)
     h11 = max(1, hm - radius):min(H, hm + radius)
     return (w11, h11)
+end
+
+
+#########################################
+# older interface 
+#########################################
+function write_star_unit_flux(img0::Image,
+                              pos::Array{Float64, 1},
+                              pixels::Matrix{Float64})
+    iota = Float64(median(img0.iota_vec))
+    write_star_unit_flux(pos, img0.psf, img0.wcs, iota, pixels)
+end
+
+function write_galaxy_unit_flux(img0::Image,
+                                pos::Array{Float64,1},
+                                gal_frac_dev::Float64,
+                                gal_ab::Float64,
+                                gal_angle::Float64,
+                                gal_scale::Float64,
+                                pixels::Matrix{Float64})
+    iota = Float64(median(img0.iota_vec))
+    write_galaxy_unit_flux(pos, img0.psf, img0.wcs, iota,
+        gal_frac_dev, gal_ab, gal_angle, gal_scale, pixels)
 end
 
 

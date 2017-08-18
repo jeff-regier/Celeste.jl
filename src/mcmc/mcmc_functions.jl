@@ -12,39 +12,59 @@ Args:
 """
 function make_star_loglike(imgs::Array{Image},
                            pos0::Array{Float64, 1};
-                           pos_delta::Array{Float64, 1}=[1., 1.])
+                           pos_delta::Array{Float64, 1}=[1., 1.],
+                           patches::Array{SkyPatch, 1}=nothing,
+                           background_images::Array{Array{Float64, 2}, 1}=nothing)
 
-    # create a function that constrains the pixel location to be within
-    # pos0 +- [pos_delta]
-    constrain_pos, unconstrain_pos = 
+    # create a function that constrains the pixel location to
+    # be within pos0 +- [pos_delta]
+    constrain_pos, unconstrain_pos =
         make_position_transformations(pos0, pos_delta)
 
+    # create background images --- sky noise and neighbors if there
+    if background_images == nothing
+        background_images = make_empty_background_images(imgs)
+    end
+
+    # patch offset (0 if no patches passed in)
+    if patches == nothing
+        offsets = zeros(2, length(imgs))
+    else
+        offsets = hcat([convert(Array{Float64, 1}, p.bitmap_offset)
+                        for p in patches]...)
+    end
+
+    # create function to return
     function star_loglike(th::Array{Float64, 1})
 
-      # unpack location and log fluxes (smushed)
+      # unpack location and 
       lnfluxes, unc_pos = th[1:5], th[6:end]
       pos = constrain_pos(unc_pos)
 
       ll = 0.
-      for img in imgs
+      for ii in 1:length(imgs)
+          img  = imgs[ii]
 
           # sky pixel intensity (sky image)
-          epsilon    = img.sky[1, 1]
-          iota       = img.iota_vec[1]
-          sky_pixels = [epsilon * iota for h=1:img.H, w=1:img.W]
+          background = background_images[ii]
 
           # create and cache unit flux src image
-          #src_pixels = [0. for h=1:img.H, w=1:img.W]
           src_pixels = zeros(img.H, img.W)
-          write_star_unit_flux(img, pos, src_pixels)
+          write_star_unit_flux(pos, img.psf, img.wcs,
+                               Float64(median(img.iota_vec)), src_pixels,
+                               offset=offsets[:,ii])
 
           # compute model image
-          rates = sky_pixels .+ (exp(lnfluxes[img.b])*src_pixels)
+          rates = background .+ (exp(lnfluxes[img.b])*src_pixels)
 
           # sum per-pixel likelihood contribution
           H, W = size(rates)
           for h in 1:H, w in 1:W
-              ll += poisson_lnpdf(img.pixels[h,w], rates[h,w])
+              # TODO ---incorporate patches[ii].active_pixel_bitmap
+              # into likelihood calculation
+              if !isnan(img.pixels[h,w]) 
+                  ll += poisson_lnpdf(img.pixels[h,w], rates[h,w])
+              end
           end
 
       end
@@ -69,37 +89,54 @@ Args:
 """
 function make_gal_loglike(imgs::Array{Image},
                           pos0::Array{Float64, 1};
-                          pos_delta::Array{Float64, 1}=[1., 1.])
-
+                          pos_delta::Array{Float64, 1}=[1., 1.],
+                          patches::Array{SkyPatch, 1}=nothing,
+                          background_images::Array{Array{Float64, 2}, 1}=nothing)
     # create a function that constrains the pixel location to be within
     # pos0 +- [pos_delta]
     constrain_pos, unconstrain_pos =
         make_position_transformations(pos0, pos_delta)
 
+    # create background images --- sky noise and neighbors if there
+    if background_images == nothing
+        background_images = make_empty_background_images(imgs)
+    end
+
+    # patch offset (0 if no patches passed in)
+    if patches == nothing
+        offsets = zeros(2, length(imgs))
+    else
+        offsets = hcat([convert(Array{Float64, 1}, p.bitmap_offset)
+                        for p in patches]...)
+    end
+
+    # make galaxy log like function
     function gal_loglike(th::Array{Float64, 1})
 
         # unpack location and log fluxes (smushed)
         lnfluxes, unc_pos, ushape = th[1:5], th[6:7], th[8:end]
         pos   = constrain_pos(unc_pos)
-        shape = Model.constrain_gal_shape(ushape)
-
+        #shape = Model.constrain_gal_shape(ushape)
         gal_frac_dev, gal_ab, gal_angle, gal_scale = 
             Model.constrain_gal_shape(ushape)
 
         ll = 0.
-        for img in imgs
+        for ii in 1:length(imgs)
+            img = imgs[ii]
+
             # sky pixel intensity (sky image)
-            epsilon    = img.sky[1, 1]
-            iota       = img.iota_vec[1]
-            sky_pixels = [epsilon * iota for h=1:img.H, w=1:img.W]
+            background = background_images[ii]
 
             # create and cache unit flux src image
-            src_pixels = [0. for h=1:img.H, w=1:img.W]
-            write_galaxy_unit_flux(img, pos, gal_frac_dev,
-                               gal_ab, gal_angle, gal_scale, src_pixels)
+            src_pixels = zeros(img.H, img.W)
+            write_galaxy_unit_flux(pos, img.psf, img.wcs,
+                Float64(median(img.iota_vec)),
+                gal_frac_dev, gal_ab, gal_angle, gal_scale,
+                src_pixels;
+                offset=offsets[:,ii])
 
             # compute model image
-            rates = sky_pixels .+ exp(lnfluxes[img.b])*src_pixels
+            rates = background .+ exp(lnfluxes[img.b])*src_pixels
 
             # sum per-pixel likelihood contribution
             H, W = size(rates)
@@ -115,6 +152,17 @@ function make_gal_loglike(imgs::Array{Image},
 end
 
 
+function make_empty_background_images(imgs::Array{Image})
+    background_images = []
+    for img in imgs
+        # sky pixel intensity (sky image)
+        epsilon    = img.sky[1, 1]
+        iota       = img.iota_vec[1]
+        sky_pixels = [epsilon * iota for h=1:img.H, w=1:img.W]
+        push!(background_images, sky_pixels)
+    end
+    return background_images
+end
 
 
 function make_position_transformations(pos0::Array{Float64, 1},
@@ -140,7 +188,6 @@ function make_position_transformations(pos0::Array{Float64, 1},
 
     return constrain_pos, unconstrain_pos
 end
-
 
 
 #####################################
@@ -330,4 +377,16 @@ function sample_fluxes(i::Int, r_s)
     l_s
 end
 
-
+"""
+Convert catalog entry into unconstrained parameters for star or gal loglikes
+"""
+function parameters_from_catalog(entry::CatalogEntry, unconstrain_pos::Function;
+                                 is_star=true)
+    if is_star
+        return vcat([log.(entry.star_fluxes), unconstrain_pos(entry.pos)]...)
+    else
+        ushape = Model.unconstrain_gal_shape([
+          entry.gal_frac_dev, entry.gal_ab, entry.gal_angle, entry.gal_scale])
+        return vcat([log.(entry.gal_fluxes), unconstrain_pos(entry.pos), ushape]...)
+    end
+end
