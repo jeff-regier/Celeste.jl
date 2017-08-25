@@ -193,7 +193,7 @@ function slicesample_chain(lnpdf, th, N; print_skip=50)
         end
     end
     elapsed = toc()
-    @printf "%2.3f ms per sample (20k samples in %2.3f seconds) \n" 1000*(elapsed/N) elapsed
+    @printf "%2.3f ms per sample (%d samples in %2.3f seconds) \n" 1000*(elapsed/N) N elapsed
     return samps, lls
 end
 
