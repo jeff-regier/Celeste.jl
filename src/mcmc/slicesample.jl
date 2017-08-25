@@ -155,7 +155,13 @@ function slicesample(init_x::Vector{Float64},
     if compwise
         ordering = shuffle(1:dims)
         new_x = copy(init_x)
+        if verbose
+            println("compwise call: ")
+        end
         for d in ordering
+            if verbose
+                println("  ... slice sampling component ", d)
+            end
             direction    = zeros(dims)
             direction[d] = 1.0
             new_x, new_llh = direction_slice(direction, new_x)
