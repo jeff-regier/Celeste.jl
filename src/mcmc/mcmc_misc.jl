@@ -250,8 +250,8 @@ function render_patch(img::Image, patch::SkyPatch, n_bodies::Vector{CatalogEntry
               )
         else
             write_galaxy_unit_flux(body.pos, img.psf, img.wcs, iota,
-                entry.gal_frac_dev, entry.gal_ab, entry.gal_angle,
-                entry.gal_scale, patch_pixels;
+                body.gal_frac_dev, body.gal_ab, body.gal_angle,
+                body.gal_scale, patch_pixels;
                 offset = offset,
                 flux   = body.gal_fluxes[img.b]
               )

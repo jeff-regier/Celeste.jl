@@ -25,7 +25,7 @@ function slicesample(init_x::Vector{Float64},
                      compwise=true,
                      numdir=2,
                      doubling_step = true,
-                     verbose = true,
+                     verbose = false,
                      upper_bound = Inf,
                      lower_bound = -Inf)
 

@@ -113,7 +113,6 @@ function make_gal_loglike(imgs::Array{Image},
         lnfluxes, unc_pos, ushape = th[1:5], th[6:7], th[8:end]
         pos   = constrain_pos(unc_pos)
         gal_frac_dev, gal_ab, gal_angle, gal_scale = ushape
-        #    Model.constrain_gal_shape(ushape)
         @printf "lnfluxes     = %s \n" string(lnfluxes)
         @printf "pos (ra,dec) = %2.4f, %2.4f \n" pos[1] pos[2]
         @printf "gal shape:\n"
@@ -130,7 +129,6 @@ function make_gal_loglike(imgs::Array{Image},
         lnfluxes, unc_pos, ushape = th[1:5], th[6:7], th[8:end]
         pos   = constrain_pos(unc_pos)
         gal_frac_dev, gal_ab, gal_angle, gal_scale = ushape
-        #    Model.constrain_gal_shape(ushape)
 
         if print_params
           pretty_print_galaxy_params(th)
@@ -166,6 +164,44 @@ function make_gal_loglike(imgs::Array{Image},
     end
 
     return gal_loglike, constrain_pos, unconstrain_pos
+end
+
+
+function make_gal_logprior()
+
+    # distributions over galaxy parameters
+    prior = Model.construct_prior()
+
+    # constrain checking
+    function inrange(val, a, b)
+        if (val <= a) || (val >= b)
+            return false
+        end
+        return true
+    end
+
+    function gal_logprior(th)
+        lnfluxes, u, ushape = th[1:5], th[6:7], th[8:end]
+
+        # first compute prior --- make sure all in bounds
+        gal_frac_dev, gal_ab, gal_angle, gal_scale = ushape
+        if !inrange(gal_frac_dev, 0., 1.)
+            return -Inf
+        end
+        if !inrange(gal_ab, 0., 1.)
+            return -Inf
+        end
+        if !inrange(gal_angle, 0., 2*pi)
+            return -Inf
+        end
+        if !inrange(gal_scale, 0., Inf)
+            return -Inf
+        end
+
+        ll = MCMC.logflux_logprior(lnfluxes; is_star=false)
+        return ll
+    end
+    return gal_logprior
 end
 
 
