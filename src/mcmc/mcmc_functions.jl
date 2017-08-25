@@ -54,16 +54,15 @@ function make_star_loglike(imgs::Array{Image},
                                Float64(median(img.iota_vec)), src_pixels,
                                offset=offsets[:,ii])
 
-          # compute model image
-          rates = background .+ (exp(lnfluxes[img.b])*src_pixels)
-
           # sum per-pixel likelihood contribution
-          H, W = size(rates)
-          for h in 1:H, w in 1:W
+          bflux = exp(lnfluxes[img.b])
+          for h in 1:img.H, w in 1:img.W
               # TODO ---incorporate patches[ii].active_pixel_bitmap
               # into likelihood calculation
-              if !isnan(img.pixels[h,w]) 
-                  ll += poisson_lnpdf(img.pixels[h,w], rates[h,w])
+              pixel_data = img.pixels[h,w]
+              if !isnan(pixel_data)
+                  rate_hw = background[h,w] + bflux*src_pixels[h,w]
+                  ll += poisson_lnpdf(pixel_data, rate_hw)
               end
           end
 
@@ -116,7 +115,6 @@ function make_gal_loglike(imgs::Array{Image},
         # unpack location and log fluxes (smushed)
         lnfluxes, unc_pos, ushape = th[1:5], th[6:7], th[8:end]
         pos   = constrain_pos(unc_pos)
-        #shape = Model.constrain_gal_shape(ushape)
         gal_frac_dev, gal_ab, gal_angle, gal_scale = 
             Model.constrain_gal_shape(ushape)
 
@@ -135,13 +133,14 @@ function make_gal_loglike(imgs::Array{Image},
                 src_pixels;
                 offset=offsets[:,ii])
 
-            # compute model image
-            rates = background .+ exp(lnfluxes[img.b])*src_pixels
-
             # sum per-pixel likelihood contribution
-            H, W = size(rates)
-            for h in 1:H, w in 1:W
-                ll += poisson_lnpdf(img.pixels[h,w], rates[h,w])
+            bflux = exp(lnfluxes[img.b])
+            for h in 1:img.H, w in 1:img.W
+                pixel_data = img.pixels[h,w]
+                if !isnan(pixel_data)
+                    rate_hw = background[h,w] + bflux*src_pixels[h,w]
+                    ll += poisson_lnpdf(pixel_data, rate_hw)
+                end
             end
         end
 
