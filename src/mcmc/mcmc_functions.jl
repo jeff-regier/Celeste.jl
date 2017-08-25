@@ -109,14 +109,32 @@ function make_gal_loglike(imgs::Array{Image},
                         for p in patches]...)
     end
 
+    function pretty_print_galaxy_params(th)
+        lnfluxes, unc_pos, ushape = th[1:5], th[6:7], th[8:end]
+        pos   = constrain_pos(unc_pos)
+        gal_frac_dev, gal_ab, gal_angle, gal_scale = ushape
+        #    Model.constrain_gal_shape(ushape)
+        @printf "lnfluxes     = %s \n" string(lnfluxes)
+        @printf "pos (ra,dec) = %2.4f, %2.4f \n" pos[1] pos[2]
+        @printf "gal shape:\n"
+        @printf "  frac_dev   = %2.4f \n" gal_frac_dev
+        @printf "  ab ratio   = %2.4f \n" gal_ab
+        @printf "  angle      = %2.4f \n" gal_angle
+        @printf "  scale      = %2.4f \n" gal_scale
+    end
+
     # make galaxy log like function
-    function gal_loglike(th::Array{Float64, 1})
+    function gal_loglike(th::Array{Float64, 1}; print_params=false)
 
         # unpack location and log fluxes (smushed)
         lnfluxes, unc_pos, ushape = th[1:5], th[6:7], th[8:end]
         pos   = constrain_pos(unc_pos)
-        gal_frac_dev, gal_ab, gal_angle, gal_scale = 
-            Model.constrain_gal_shape(ushape)
+        gal_frac_dev, gal_ab, gal_angle, gal_scale = ushape
+        #    Model.constrain_gal_shape(ushape)
+
+        if print_params
+          pretty_print_galaxy_params(th)
+        end
 
         ll = 0.
         for ii in 1:length(imgs)
@@ -384,8 +402,10 @@ function parameters_from_catalog(entry::CatalogEntry, unconstrain_pos::Function;
     if is_star
         return vcat([log.(entry.star_fluxes), unconstrain_pos(entry.pos)]...)
     else
-        ushape = Model.unconstrain_gal_shape([
-          entry.gal_frac_dev, entry.gal_ab, entry.gal_angle, entry.gal_scale])
+        #ushape = Model.unconstrain_gal_shape([
+        #  entry.gal_frac_dev, entry.gal_ab, entry.gal_angle, entry.gal_scale])
+        ushape = [entry.gal_frac_dev, entry.gal_ab,
+                  entry.gal_angle, entry.gal_scale]
         return vcat([log.(entry.gal_fluxes), unconstrain_pos(entry.pos), ushape]...)
     end
 end
