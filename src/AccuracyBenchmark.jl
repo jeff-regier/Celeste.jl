@@ -238,10 +238,8 @@ Load the SDSS photoObj catalog used to initialize celeste, and reformat column
 names to match what the rest of the scoring code expects.
 """
 function load_primary(rcf::SDSSIO.RunCamcolField, stagedir::String)
-    dir = @sprintf "%s/%d/%d/%d" stagedir rcf.run rcf.camcol rcf.field
-    filename = @sprintf "%s/photoObj-%06d-%d-%04d.fits" dir rcf.run rcf.camcol rcf.field
-    @printf("Loading primary catalog from %s\n", filename)
-    raw_df = object_dict_to_data_frame(SDSSIO.read_photoobj(filename))
+    strategy = SDSSIO.PlainFITSStrategy(stagedir)
+    raw_df = object_dict_to_data_frame(SDSSIO.read_photoobj(strategy, rcf))
 
     usedev = raw_df[:frac_dev] .> 0.5  # true=> use dev, false=> use exp
     dev_or_exp(dev_column, exp_column) = ifelse(usedev, raw_df[dev_column], raw_df[exp_column])
@@ -409,6 +407,7 @@ function draw_source_params(prior, object_id)
         minor_major_axis_ratio=minor_major_axis_ratio,
         half_light_radius_px=half_light_radius_px,
         angle_deg=angle_deg,
+        is_saturated=false,
     )
 end
 

@@ -1,127 +1,111 @@
 using Base.Test
 
-using Celeste: Model, Transform, SensitiveFloats, MCMC
+using Celeste: Model, Transform, SensitiveFloats, MCMC, Synthetic
 using StatsBase
 
 include(joinpath(Pkg.dir("Celeste"), "test", "SampleData.jl"))
-import SampleData: gen_sample_star_dataset
 
 
-function verify_sample_star(vs, pos)
-    @test vs[ids.a[2, 1]] <= 0.01
+# helper to create synthetic data
+function generate_single_star_data(; lnr=7.7251)
+    # generate images (data)
+    ea, vp, catalog = SampleData.gen_sample_star_dataset()
 
-    @test_approx_eq_eps vs[ids.u[1]] pos[1] 0.1
-    @test_approx_eq_eps vs[ids.u[2]] pos[2] 0.1
+    # adjust fluxes to match input lnr
+    old_fluxes = catalog[1].star_fluxes
+    _, colors = Model.fluxes_to_colors(old_fluxes)
+    new_fluxes = Model.colors_to_fluxes(lnr, colors)
+    catalog[1].star_fluxes = new_fluxes
 
-    brightness_hat = exp(vs[ids.r1[1]] + 0.5 * vs[ids.r2[1]])
-    @test_approx_eq_eps brightness_hat / sample_star_fluxes[3] 1. 0.01
+    # cache fluxes location, etc
+    ce0    = deepcopy(catalog[1])
+    images = deepcopy(ea.images)
 
-    true_colors = log(sample_star_fluxes[2:5] ./ sample_star_fluxes[1:4])
-    for b in 1:4
-        @test_approx_eq_eps vs[ids.c1[b, 1]] true_colors[b] 0.2
+    # make mod/dat images
+    dat_images = Synthetic.gen_blob(images, catalog; expectation=false);
+
+    # make sure ea images data reflects dat images for vb fitting
+    for b in 1:5
+      ea.images[b].pixels[:] = dat_images[b].pixels[:]
     end
+
+    # save truedf for python plot comparison
+    truedf = MCMC.catalog_to_data_frame_row(ce0)
+    return truedf, ce0, dat_images, ea, vp
 end
 
-function verify_sample_galaxy(vs, pos)
-    @test vs[ids.a[2, 1]] >= 0.99
-
-    @test_approx_eq_eps vs[ids.u[1]] pos[1] 0.1
-    @test_approx_eq_eps vs[ids.u[2]] pos[2] 0.1
-
-    @test_approx_eq_eps vs[ids.e_axis] .7 0.05
-    @test_approx_eq_eps vs[ids.e_dev] 0.1 0.08
-    @test_approx_eq_eps vs[ids.e_scale] 4. 0.2
-
-    phi_hat = vs[ids.e_angle]
-    phi_hat -= floor(phi_hat / pi) * pi
-    five_deg = 5 * pi/180
-    @test_approx_eq_eps phi_hat pi/4 five_deg
-
-    brightness_hat = exp(vs[ids.r1[2]] + 0.5 * vs[ids.r2[2]])
-    @test_approx_eq_eps brightness_hat / sample_galaxy_fluxes[3] 1. 0.01
-
-    true_colors = log(sample_galaxy_fluxes[2:5] ./ sample_galaxy_fluxes[1:4])
-    for b in 1:4
-        @test_approx_eq_eps vs[ids.c1[b, 2]] true_colors[b] 0.2
-    end
+function generate_params()
+    lnfluxes = MCMC.sample_logfluxes(; is_star=true, lnr=nothing)
+    lu       = .01 * randn(2)
+    return vcat([lnfluxes, lu]...)
 end
 
 
-#########################################################
+###############
+#### tests ####
+###############
 
-function test_star_mcmc()
 
-    ##########################
-    # load up star lnpdf     #
-    ##########################
-    # init ground truth star
-    ea, vp, catalog = SampleData.true_star_init()
+function test_mcmc_catalog_to_data_frame_row()
+    # create slightly less bright log re
+    truedf, ce0, dat_images, ea, vp = generate_single_star_data(; lnr=6.)
+    @test true
+end
 
-    # run chains
-    chains, logprobs =
-        MCMC.run_single_star_mcmc(catalog, ea.images, ea.patches,
-                                  ea.active_sources, ea.psf_K;
-                                  num_samples = 5000,
-                                  num_chains  = 6,
-                                  prop_scale  = .0005,
-                                  print_skip  = 250)
 
-    # make sure chains contain true params in middle 95%
-    source_states = [Model.catalog_entry_to_latent_state_params(s)
-                     for s in catalog]
-    true_star_state = Model.extract_star_state(source_states[1])
+function test_star_loglike()
+    # gen data and initial params
+    truedf, ce0, dat_images, ea, vp = generate_single_star_data(; lnr=6.)
 
-    samples = vcat(chains...)
-    for i in 1:length(true_star_state)
-        ths = samples[:,i] #star_chain.value[:,i,1]
-        lo, hi = percentile(ths, 1), percentile(ths, 99)
-        @printf "   %s (true_val %2.4f)  = %2.4f  [%2.4f,  %2.4f] \n" MCMC.star_param_names[i] true_star_state[i] mean(ths) lo hi
-        @test (true_star_state[i] < hi) & (true_star_state[i] > lo)
-    end
+    # generate star params
+    lnfluxes = MCMC.sample_logfluxes(; is_star=true, lnr=nothing)
+    lu       = .01 * randn(2)
+    th = vcat([lnfluxes, lu]...)
+
+    # create loglike
+    init_pos = deepcopy(vp[1][ids.u])
+    star_loglike, constrain_pos, unconstrain_pos =
+        MCMC.make_star_loglike(dat_images, init_pos)
+
+    ll = star_loglike(th)
+    @test !isnan(ll)
+
+    # make sure constriain/unconstrain work
+    uu = constrain_pos(lu)
+    lu2 = unconstrain_pos(uu)
+    @test isapprox(lu, lu2)
 
 end
 
 
+function test_logflux_logprior()
+    # test sample (with all args)
+    lnfluxes = MCMC.sample_logfluxes(; is_star=true, lnr=nothing)
+    lnfluxes = MCMC.sample_logfluxes(; is_star=false, lnr=nothing)
+    lnfluxes = MCMC.sample_logfluxes(; is_star=true, lnr=5.)
+    lnfluxes = MCMC.sample_logfluxes(; is_star=false, lnr=5.)
 
-#function test_galaxy_mcmc()
-#    blob, ea, body = SampleData.gen_sample_galaxy_dataset();
-#
-#    # run single source slice sampler on synthetic dataset
-#    gal_chain = MCMC.run_single_galaxy_mcmc(500,  # num_samples,
-#                                            body, # sources
-#                                            ea.images,
-#                                            ea.active_pixels, ea.S, ea.N,
-#                                            ea.tile_source_map,
-#                                            ea.patches, ea.active_sources,
-#                                            ea.psf_K, ea.num_allowed_sd)
-#
-#    # chain stuff
-#    Mamba.describe(gal_chain)
-#
-#    # make sure chains contain true params in middle 95%
-#    source_states = [Model.catalog_entry_to_latent_state_params(s)
-#                     for s in body]
-#    true_gal_state = Model.extract_galaxy_state(source_states[1])
-#
-#    # check to make sure posterior percentiles cover truth
-#    gal_param_names = MCMC.galaxy_param_names
-#    los = Array(Float64, length(true_gal_state))
-#    his = Array(Float64, length(true_gal_state))
-#    for i in 1:length(true_gal_state)
-#        ths = gal_chain.value[:,i,1]
-#        los[i], his[i] = percentile(ths, .01), percentile(ths, 99.9)
-#        @printf "   %s (true_val %2.4f) = %2.4f  [%2.4f,  %2.4f] \n" gal_param_names[i] true_gal_state[i] mean(ths) lo hi
-#    end
-#
-#    for i in 1:length(true_gal_state)
-#        @test (true_gal_state[i] < his[i]) & (true_gal_state[i] > los[i])
-#    end
-#
-#end
+    ll = MCMC.logflux_logprior(lnfluxes; is_star=true)
+    @test !isnan(ll)
+
+    ll = MCMC.logflux_logprior(lnfluxes; is_star=false)
+    @test !isnan(ll)
+end
 
 
-#################################################
+function test_slicesample()
+    function lnpdf(th)
+        return -1*sum(th.*th)
+    end
+
+    th = randn(5)
+    chain, lls = MCMC.slicesample_chain(lnpdf, th, 10; print_skip=20)
+    @test true
+end
 
 
-test_star_mcmc()
-#test_galaxy_mcmc()
+println("Running mcmc tests")
+test_mcmc_catalog_to_data_frame_row()
+test_star_loglike()
+test_logflux_logprior()
+test_slicesample()

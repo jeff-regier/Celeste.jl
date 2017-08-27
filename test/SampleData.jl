@@ -3,7 +3,7 @@ module SampleData
 using Celeste: Model, DeterministicVI
 import Celeste: Infer
 import Celeste: Synthetic
-import Celeste.SDSSIO: RunCamcolField, load_field_images
+import Celeste.SDSSIO: RunCamcolField, load_field_images, PlainFITSStrategy
 
 using Distributions
 using StaticArrays
@@ -39,7 +39,7 @@ cd(wd)
 
 
 const sample_rcf = RunCamcolField(3900, 6, 269)
-const sample_images = load_field_images(sample_rcf, datadir)
+const sample_images = load_field_images(PlainFITSStrategy(datadir),sample_rcf)
 
 
 """
