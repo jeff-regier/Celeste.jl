@@ -234,7 +234,7 @@ Generate a model image on a patch, according to that image/patch psf
 function render_patch(img::Image, patch::SkyPatch, n_bodies::Vector{CatalogEntry})
     # sky noise an gain
     epsilon = img.sky[1, 1]
-    iota    = Float64(median(img.iota_vec))
+    iota    = Float64(median(img.nelec_per_nmgy))
     offset  = convert(Array{Float64, 1}, patch.bitmap_offset)
 
     # create sky noise background image
@@ -297,7 +297,7 @@ end
 function write_star_unit_flux(img0::Image,
                               pos::Array{Float64, 1},
                               pixels::Matrix{Float64})
-    iota = Float64(median(img0.iota_vec))
+    iota = Float64(median(img0.nelec_per_nmgy))
     write_star_unit_flux(pos, img0.psf, img0.wcs, iota, pixels)
 end
 
@@ -308,7 +308,7 @@ function write_galaxy_unit_flux(img0::Image,
                                 gal_angle::Float64,
                                 gal_scale::Float64,
                                 pixels::Matrix{Float64})
-    iota = Float64(median(img0.iota_vec))
+    iota = Float64(median(img0.nelec_per_nmgy))
     write_galaxy_unit_flux(pos, img0.psf, img0.wcs, iota,
         gal_frac_dev, gal_ab, gal_angle, gal_scale, pixels)
 end
