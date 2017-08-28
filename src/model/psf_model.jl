@@ -14,7 +14,7 @@ Attributes:
   tauBarInv: The 2x2 precision
   tauBarLd: The log determinant of the covariance
 """
-immutable PsfComponent
+struct PsfComponent
     alphaBar::Float64  # TODO: use underscore
     xiBar::SVector{2,Float64}
     tauBar::SMatrix{2,2,Float64,4}
@@ -40,7 +40,7 @@ weight[k](x, y) = sum_{i,j} cmat[i, j, k] * (rcs * x)^i (rcs * y)^j
 
 where `rcs` is a coordinate transformation and `x` and `y` are zero-indexed.
 """
-immutable RawPSF
+struct RawPSF
     rrows::Array{Float64,2}  # A matrix of flattened eigenimages.
     rnrow::Int  # The number of rows in an eigenimage.
     rncol::Int  # The number of columns in an eigenimage.

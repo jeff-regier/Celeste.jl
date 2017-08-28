@@ -64,7 +64,7 @@ function test_images()
         PSF.fit_raw_psf_for_celeste(original_psf_val, ea.psf_K)[1]
     fit_original_psf_val = PSF.get_psf_at_point(original_psf_celeste)
 
-    obj_psf = get_source_psf(vs_obj[ids.u], img, ea.psf_K)[1]
+    obj_psf = get_source_psf(vs_obj[ids.pos], img, ea.psf_K)[1]
     obj_psf_val = PSF.get_psf_at_point(obj_psf)
 
     # The fits should match exactly.

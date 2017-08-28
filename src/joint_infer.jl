@@ -11,7 +11,7 @@ import ..PSF
 
 using ..DeterministicVI
 using ..DeterministicVI.ConstraintTransforms: ConstraintBatch, DEFAULT_CHUNK
-using ..DeterministicVI.ElboMaximize: Config, maximize!
+using ..DeterministicVI.ElboMaximize: ElboConfig, maximize!
 
 const PeakFlops = false
 gdlog = nothing
@@ -20,7 +20,7 @@ gdlog = nothing
 const BoxMaxThreshold = convert(UInt64, 20*60*1e9)::UInt64
 const OneMinute = 0x0000000df8475800 # in nanoseconds
 
-type BoxKillSwitch <: Function
+mutable struct BoxKillSwitch <: Function
     started::UInt64
     numfin_threshold::Int64
     numfin::Atomic{Int64}
@@ -417,7 +417,7 @@ Partitions sources via the cyclades algorithm. Finds the batch size which return
 """
 function partition_cyclades_dynamic_auto_batchsize(target_sources, neighbor_map, ea_vec)
     n_threads = nthreads()
-    
+
     # Sample batch sizes at intervals
     n_to_sample = 100
     stepsize = max(1, trunc(Int, length(target_sources) / n_to_sample))
@@ -434,7 +434,7 @@ function partition_cyclades_dynamic_auto_batchsize(target_sources, neighbor_map,
             # Find average load imbalance within the batch as a percentage
 	    times = [sum([estimate_time(ea_vec[source_index].patches) for source_index in component]) for component in batch]
             times = load_balance_across_threads(n_threads, times)
-            estimated_imbalance = mean(maximum(times) - times) 
+            estimated_imbalance = mean(maximum(times) - times)
 	    score += estimated_imbalance
         end
         if score <= best_score
@@ -464,7 +464,7 @@ function setup_vecs(n_sources::Int, target_sources::Vector{Int},
 
     ea_vec = Vector{ElboArgs}(n_sources)
     vp_vec = Vector{VariationalParams{Float64}}(n_sources)
-    cfg_vec = Vector{Config{DEFAULT_CHUNK,Float64}}(n_sources)
+    cfg_vec = Vector{ElboConfig{DEFAULT_CHUNK,Float64}}(n_sources)
 
     return ea_vec, vp_vec, cfg_vec, ts_vp
 end
@@ -489,7 +489,7 @@ Returns:
 
 - Vector of OptimizedSource results
 """
-function one_node_joint_infer(config::Configs.Config, catalog, target_sources, neighbor_map, images;
+function one_node_joint_infer(config::Config, catalog, target_sources, neighbor_map, images;
                               cyclades_partition::Bool=true,
                               batch_size::Int=7000,
                               within_batch_shuffling::Bool=true,
@@ -576,7 +576,7 @@ function one_node_joint_infer(catalog, target_sources, neighbor_map, images;
                               n_iters::Int=3,
                               timing=InferTiming())
     one_node_joint_infer(
-        Configs.Config(),
+        Config(),
         catalog,
         target_sources,
         neighbor_map,
@@ -589,7 +589,7 @@ function one_node_joint_infer(catalog, target_sources, neighbor_map, images;
     )
 end
 
-function initialize_elboargs_sources!(config::Configs.Config, ea_vec, vp_vec, cfg_vec,
+function initialize_elboargs_sources!(config::Config, ea_vec, vp_vec, cfg_vec,
                                       thread_initialize_sources_assignment,
                                       catalog, target_sources, neighbor_map, images,
                                       target_source_variational_params;
@@ -615,7 +615,7 @@ end
 """
 Initialize elbo args for the specified target source.
 """
-function init_elboargs(config::Configs.Config,
+function init_elboargs(config::Config,
                        ts::Int,
                        catalog::Vector{CatalogEntry},
                        target_sources::Vector{Int},
@@ -623,7 +623,7 @@ function init_elboargs(config::Configs.Config,
                        images::Vector{Image},
                        ea_vec::Vector{ElboArgs},
                        vp_vec::Vector{VariationalParams{Float64}},
-                       cfg_vec::Vector{Config{DEFAULT_CHUNK,Float64}},
+                       cfg_vec::Vector{ElboConfig{DEFAULT_CHUNK,Float64}},
                        ts_vp::Dict{Int64,Array{Float64}};
                        termination_callback=nothing)
     try
@@ -646,7 +646,7 @@ function init_elboargs(config::Configs.Config,
 
         ea_vec[ts] = ea
         vp_vec[ts] = vp
-        cfg_vec[ts] = Config(ea, vp;
+        cfg_vec[ts] = ElboConfig(ea, vp;
                 termination_callback=termination_callback)
     catch exc
         if is_production_run || nthreads() > 1
@@ -661,7 +661,7 @@ end
 function process_sources!(images::Vector{Model.Image},
                           ea_vec::Vector{ElboArgs},
                           vp_vec::Vector{VariationalParams{Float64}},
-                          cfg_vec::Vector{Config{DEFAULT_CHUNK,Float64}},
+                          cfg_vec::Vector{ElboConfig{DEFAULT_CHUNK,Float64}},
                           thread_sources_assignment::Vector{Vector{Vector{Int64}}},
                           n_iters::Int,
                           within_batch_shuffling::Bool)
@@ -694,7 +694,7 @@ end
 function process_sources_dynamic!(images::Vector{Model.Image},
                                   ea_vec::Vector{ElboArgs},
                                   vp_vec::Vector{VariationalParams{Float64}},
-                                  cfg_vec::Vector{Config{DEFAULT_CHUNK,Float64}},
+                                  cfg_vec::Vector{ElboConfig{DEFAULT_CHUNK,Float64}},
                                   thread_sources_assignment::Vector{Vector{Vector{Int64}}},
                                   n_iters::Int,
                                   within_batch_shuffling::Bool;
@@ -783,7 +783,7 @@ end
 # Process partition of sources. Multiple threads call this function in parallel.
 function process_sources_kernel!(ea_vec::Vector{ElboArgs},
                                  vp_vec::Vector{VariationalParams{Float64}},
-                                 cfg_vec::Vector{Config{DEFAULT_CHUNK,Float64}},
+                                 cfg_vec::Vector{ElboConfig{DEFAULT_CHUNK,Float64}},
                                  source_assignment::Vector{Int64},
                                  within_batch_shuffling::Bool)
     try
@@ -793,7 +793,7 @@ function process_sources_kernel!(ea_vec::Vector{ElboArgs},
         if within_batch_shuffling
             shuffle!(source_assignment)
         end
-	
+
 	#tic()
         for i in source_assignment
             maximize!(ea_vec[i], vp_vec[i], cfg_vec[i])
@@ -828,4 +828,3 @@ function show_pixels_processed()
     n_active, n_inactive = get_pixels_processed()
     Log.message("$(Time(now())): (active,inactive) pixels processed: \($n_active,$n_inactive\)")
 end
-

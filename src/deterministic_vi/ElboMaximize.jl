@@ -22,7 +22,7 @@ using ..DeterministicVI.ConstraintTransforms: TransformDerivatives,
 # defaults for optional arguments to `maximize!` #
 ##################################################
 
-immutable Config{N,T}
+struct ElboConfig{N,T}
     bound_params::VariationalParams{T}
     free_params::VariationalParams{T}
     free_initial_input::Vector{T}
@@ -35,7 +35,7 @@ immutable Config{N,T}
     trust_region::NewtonTrustRegion{T}
 end
 
-function Config{T}(ea::ElboArgs,
+function ElboConfig{T}(ea::ElboArgs,
                    vp::VariationalParams{T},
                    bound_params::VariationalParams{T} = vp[ea.active_sources];
                    termination_callback = nothing,
@@ -52,7 +52,7 @@ function Config{T}(ea::ElboArgs,
     free_result = SensitiveFloat{Float64}(length(free_params[1]), length(bound_params), true, true)
     bvn_bundle = Model.BvnBundle{T}(ea.psf_K, ea.S)
     derivs = TransformDerivatives(bound_params, free_params)
-    return Config(bound_params, free_params, free_initial_input,
+    return ElboConfig(bound_params, free_params, free_initial_input,
                   free_previous_input, free_result, bvn_bundle,
                   constraints, derivs, optim_options, trust_region)
 end
@@ -64,26 +64,26 @@ function elbo_constraints{T}(bound::VariationalParams{T},
     boxes = Vector{Vector{ParameterConstraint{BoxConstraint}}}(n_sources)
     simplexes = Vector{Vector{ParameterConstraint{SimplexConstraint}}}(n_sources)
     for src in 1:n_sources
-        i1, i2 = ids.u[1], ids.u[2]
+        i1, i2 = ids.pos[1], ids.pos[2]
         u1, u2 = bound[src][i1], bound[src][i2]
         boxes[src] = [
             ParameterConstraint(BoxConstraint(u1 - loc_width, u1 + loc_width, loc_scale), i1),
             ParameterConstraint(BoxConstraint(u2 - loc_width, u2 + loc_width, loc_scale), i2),
-            ParameterConstraint(BoxConstraint(1e-2, 0.99, 1.0), ids.e_dev),
-            ParameterConstraint(BoxConstraint(1e-2, 0.99, 1.0), ids.e_axis),
-            ParameterConstraint(BoxConstraint(-10.0, 10.0, 1.0), ids.e_angle),
-            ParameterConstraint(BoxConstraint(0.10, 70.0, 1.0), ids.e_scale),
-            ParameterConstraint(BoxConstraint(-1.0, 10.0, 1.0), ids.r1),
-            ParameterConstraint(BoxConstraint(1e-4, 0.10, 1.0), ids.r2),
-            ParameterConstraint(BoxConstraint(-10.0, 10.0, 1.0), ids.c1[:, 1]),
-            ParameterConstraint(BoxConstraint(-10.0, 10.0, 1.0), ids.c1[:, 2]),
-            ParameterConstraint(BoxConstraint(1e-4, 1.0, 1.0), ids.c2[:, 1]),
-            ParameterConstraint(BoxConstraint(1e-4, 1.0, 1.0), ids.c2[:, 2])
+            ParameterConstraint(BoxConstraint(1e-2, 0.99, 1.0), ids.gal_fracdev),
+            ParameterConstraint(BoxConstraint(1e-2, 0.99, 1.0), ids.gal_ab),
+            ParameterConstraint(BoxConstraint(-10.0, 10.0, 1.0), ids.gal_angle),
+            ParameterConstraint(BoxConstraint(0.10, 70.0, 1.0), ids.gal_scale),
+            ParameterConstraint(BoxConstraint(-1.0, 10.0, 1.0), ids.flux_loc),
+            ParameterConstraint(BoxConstraint(1e-4, 0.10, 1.0), ids.flux_scale),
+            ParameterConstraint(BoxConstraint(-10.0, 10.0, 1.0), ids.color_mean[:, 1]),
+            ParameterConstraint(BoxConstraint(-10.0, 10.0, 1.0), ids.color_mean[:, 2]),
+            ParameterConstraint(BoxConstraint(1e-4, 1.0, 1.0), ids.color_var[:, 1]),
+            ParameterConstraint(BoxConstraint(1e-4, 1.0, 1.0), ids.color_var[:, 2])
         ]
         simplexes[src] = [
-            ParameterConstraint(SimplexConstraint(0.005, 1.0, 2), ids.a),
-            ParameterConstraint(SimplexConstraint(0.01/D, 1.0, D), ids.k[:, 1]),
-            ParameterConstraint(SimplexConstraint(0.01/D, 1.0, D), ids.k[:, 2])
+            ParameterConstraint(SimplexConstraint(0.005, 1.0, 2), ids.is_star),
+            ParameterConstraint(SimplexConstraint(0.01/NUM_COLOR_COMPONENTS, 1.0, NUM_COLOR_COMPONENTS), ids.k[:, 1]),
+            ParameterConstraint(SimplexConstraint(0.01/NUM_COLOR_COMPONENTS, 1.0, NUM_COLOR_COMPONENTS), ids.k[:, 2])
         ]
     end
     return ConstraintBatch(boxes, simplexes)
@@ -104,7 +104,7 @@ function elbo_trust_region(; initial_delta = 1.0, delta_hat = 1e9)
                                    delta_hat = delta_hat)
 end
 
-function enforce_references!{T}(ea::ElboArgs, vp::VariationalParams{T}, cfg::Config)
+function enforce_references!{T}(ea::ElboArgs, vp::VariationalParams{T}, cfg::ElboConfig)
     @assert length(cfg.bound_params) == length(ea.active_sources)
     for i in 1:length(ea.active_sources)
         cfg.bound_params[i] = vp[ea.active_sources[i]]
@@ -155,7 +155,7 @@ __init__()
 # Callable Types Passed to Optim #
 ##################################
 
-function evaluate!{T}(ea::ElboArgs, vp::VariationalParams{T}, cfg::Config, x::Vector)
+function evaluate!{T}(ea::ElboArgs, vp::VariationalParams{T}, cfg::ElboConfig, x::Vector)
     if x != cfg.free_previous_input
         copy!(cfg.free_previous_input, x)
         to_variational_params!(cfg.free_params, x)
@@ -171,10 +171,10 @@ end
 # Objective #
 #-----------#
 
-immutable Objective{N,T} <: Function
+struct Objective{N,T} <: Function
     ea::ElboArgs
     vp::VariationalParams{T}
-    cfg::Config{N,T}
+    cfg::ElboConfig{N,T}
 end
 
 function (f::Objective)(x::Vector)
@@ -185,10 +185,10 @@ end
 # Gradient #
 #----------#
 
-immutable Gradient{N,T} <: Function
+struct Gradient{N,T} <: Function
     ea::ElboArgs
     vp::VariationalParams{T}
-    cfg::Config{N,T}
+    cfg::ElboConfig{N,T}
 end
 
 function (f::Gradient)(x::Vector, result::Vector)
@@ -203,10 +203,10 @@ end
 # Hessian #
 #---------#
 
-immutable Hessian{N,T} <: Function
+struct Hessian{N,T} <: Function
     ea::ElboArgs
     vp::VariationalParams{T}
-    cfg::Config{N,T}
+    cfg::ElboConfig{N,T}
 end
 
 function (f::Hessian)(x::Vector, result::Matrix)
@@ -222,7 +222,7 @@ end
 # maximize! #
 #############
 
-function maximize!(ea::ElboArgs, vp::VariationalParams{Float64}, cfg::Config = Config(ea, vp))
+function maximize!(ea::ElboArgs, vp::VariationalParams{Float64}, cfg::ElboConfig = ElboConfig(ea, vp))
     enforce_references!(ea, vp, cfg)
     enforce!(cfg.bound_params, cfg.constraints)
     to_free!(cfg.free_params, cfg.bound_params, cfg.constraints)

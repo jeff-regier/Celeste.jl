@@ -21,7 +21,7 @@ const DEFAULT_MASK_PLANES = ["S_MASK_INTERP",  # bad pixel (was interpolated)
 const BAND_CHAR_TO_NUM = Dict('u'=>1, 'g'=>2, 'r'=>3, 'i'=>4, 'z'=>5)
 
 
-immutable RunCamcolField
+struct RunCamcolField
     run::Int16
     camcol::UInt8
     field::Int16
@@ -195,7 +195,7 @@ function read_mask(strategy, rcf, b, mask_planes=DEFAULT_MASK_PLANES; data=nothi
 end
 
 
-immutable RawImage
+struct RawImage
     rcf::RunCamcolField
     b::Int  # band index
     pixels::Matrix{Float32} # in nMgy, sky-subtracted and calibrated
@@ -286,11 +286,11 @@ function convert(::Type{Image}, r::RawImage)
         r.pixels[i, j] = (r.gain / r.calibration[i]) * (r.pixels[i, j] + sky_ij)
     end
 
-    iota_vec = r.gain ./ r.calibration
+    nelec_per_nmgy = r.gain ./ r.calibration
 
     Image(H, W, r.pixels, r.b, r.wcs, celeste_psf,
           r.rcf.run, r.rcf.camcol, r.rcf.field,
-          r.sky, iota_vec, r.raw_psf_comp)
+          r.sky, nelec_per_nmgy, r.raw_psf_comp)
 end
 
 # -----------------------------------------------------------------------------
@@ -347,10 +347,11 @@ columns.
 The photoObj file format is documented here:
 https://data.sdss.org/datamodel/files/BOSS_PHOTOOBJ/RERUN/RUN/CAMCOL/photoObj.html
 """
-function read_photoobj(strategy, rcf, band::Char='r')
-    b = BAND_CHAR_TO_NUM[band]
+read_photoobj(strategy, rcf, band::Char='r') =
+    read_photoobj(readFITS(strategy, PhotoObj(rcf)), band, true)
 
-    f = readFITS(strategy, PhotoObj(rcf))
+function read_photoobj(f::FITSIO.FITS, band::Char='r', close_file=true)
+    b = BAND_CHAR_TO_NUM[band]
 
     # sometimes the expected table extension is only an empty generic FITS
     # header, indicating no objects. We check explicitly for this case here
@@ -442,7 +443,7 @@ function read_photoobj(strategy, rcf, band::Char='r')
     ab_exp = read(hdu, "ab_exp")::Matrix{Float32}
     ab_dev = read(hdu, "ab_dev")::Matrix{Float32}
 
-    close(f)
+    close_file && close(f)
 
     # construct result catalog
     catalog = Dict("objid"=>objid[mask],
@@ -478,7 +479,7 @@ end
 Convert from a catalog in dictionary-of-arrays, as returned by
 read_photoobj to Vector{CatalogEntry}.
 """
-function convert(::Type{Vector{CatalogEntry}}, catalog::Dict{String, Any})
+function convert(::Type{Vector{CatalogEntry}}, catalog::Dict)
     out = CatalogEntry[]
 
     for i=1:length(catalog["objid"])

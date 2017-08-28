@@ -1,7 +1,7 @@
 ## test the main entry point in Celeste: the `infer` function
 import JLD
 
-import Celeste.Configs
+import Celeste: Config
 using Celeste.SDSSIO
 
 """
@@ -24,7 +24,7 @@ function test_load_active_pixels()
     # the star is bright but it doesn't cover the whole image.
     # it's hard to say exactly how many pixels should be active,
     # but not all of them, and not none of them.
-    config = Configs.Config()
+    config = Config()
     config.min_radius_pix = 0
     Infer.load_active_pixels!(config, ea.images, ea.patches)
 
@@ -67,7 +67,7 @@ function test_load_active_pixels()
 
     # only 2 pixels per image are within 0.6 pixels of the
     # source's center (10.9, 11.5)
-    config = Configs.Config()
+    config = Config()
     config.min_radius_pix = 0.6
     Infer.load_active_pixels!(config, ea.images, ea.patches)
 
@@ -81,7 +81,7 @@ end
 function test_patch_pixel_selection()
     ea, vp, catalog = gen_two_body_dataset();
     patches = Infer.get_sky_patches(ea.images, catalog; radius_override_pix=5);
-    config = Configs.Config()
+    config = Config()
     config.min_radius_pix = 5
     Infer.load_active_pixels!(config, ea.images, patches, noise_fraction=Inf)
 

@@ -3,17 +3,17 @@ module ArgumentParse
 const KEYWORD_ARGUMENT_PREFIX = "--"
 const HELP_ARGUMENTS = ["--help", "-h"]
 
-immutable NoDefault end
+struct NoDefault end
 
-immutable ArgumentParsingError <: Exception
+struct ArgumentParsingError <: Exception
     message::String
 end
 
-immutable ShowHelp <: Exception
+struct ShowHelp <: Exception
     message::String
 end
 
-immutable ArgumentSpecification
+struct ArgumentSpecification
     name::String
     argument_string::String
     help::String
@@ -23,7 +23,7 @@ immutable ArgumentSpecification
     action::Symbol
 end
 
-type ArgumentParser
+struct ArgumentParser
     program_name::String
     propagate_errors::Bool
     positional_arguments::Vector{ArgumentSpecification}

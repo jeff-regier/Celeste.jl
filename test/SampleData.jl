@@ -79,17 +79,17 @@ end
 # for testing away from the truth, where derivatives != 0
 function perturb_params(vp)
     for vs in vp
-        vs[ids.a] = [ 0.4, 0.6 ]
-        vs[ids.u[1]] += .8
-        vs[ids.u[2]] -= .7
-        vs[ids.r1] -= log(10)
-        vs[ids.r2] *= 25.
-        vs[ids.e_dev] += 0.05
-        vs[ids.e_axis] += 0.05
-        vs[ids.e_angle] += pi/10
-        vs[ids.e_scale] *= 1.2
-        vs[ids.c1] += 0.5
-        vs[ids.c2] =  1e-1
+        vs[ids.is_star] = [ 0.4, 0.6 ]
+        vs[ids.pos[1]] += .8
+        vs[ids.pos[2]] -= .7
+        vs[ids.flux_loc] -= log(10)
+        vs[ids.flux_scale] *= 25.
+        vs[ids.gal_fracdev] += 0.05
+        vs[ids.gal_ab] += 0.05
+        vs[ids.gal_angle] += pi/10
+        vs[ids.gal_scale] *= 1.2
+        vs[ids.color_mean] += 0.5
+        vs[ids.color_var] =  1e-1
     end
 end
 
@@ -213,7 +213,7 @@ function gen_n_body_dataset(
 
     # Make non-constant background.
     for b=1:5
-        images[b].iota_vec = fill(images[b].iota_vec[1], images[b].H)
+        images[b].nelec_per_nmgy = fill(images[b].nelec_per_nmgy[1], images[b].H)
         images[b].sky = SkyIntensity(fill(images[b].sky[1,1], images[b].H, images[b].W),
                                      collect(1:images[b].H), collect(1:images[b].W),
                                      ones(images[b].H))
@@ -234,10 +234,10 @@ end
 function true_star_init()
     ea, vp, catalog = gen_sample_star_dataset(perturb=false)
 
-    vp[1][ids.a] = [ 1.0 - 1e-4, 1e-4 ]
-    vp[1][ids.r2] = 1e-4
-    vp[1][ids.r1] = log(sample_star_fluxes[3]) - 0.5 * vp[1][ids.r2]
-    vp[1][ids.c2] = 1e-4
+    vp[1][ids.is_star] = [ 1.0 - 1e-4, 1e-4 ]
+    vp[1][ids.flux_scale] = 1e-4
+    vp[1][ids.flux_loc] = log(sample_star_fluxes[3]) - 0.5 * vp[1][ids.flux_scale]
+    vp[1][ids.color_var] = 1e-4
 
     ea, vp, catalog
 end

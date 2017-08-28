@@ -9,7 +9,7 @@ using Compat
 using ..SensitiveFloats
 import ..Log
 
-import ..Model: Ia, ParamSet, B, D
+import ..Model: NUM_SOURCE_TYPES, ParamSet, NUM_BANDS, NUM_COLOR_COMPONENTS
 
 export DataTransform, ParamBounds, ParamBox, SimplexBox,
        get_mp_transform, enforce_bounds!,
@@ -19,63 +19,63 @@ export DataTransform, ParamBounds, ParamBox, SimplexBox,
 # A vector of variational parameters.  The outer index is
 # of celestial objects, and the inner index is over individual
 # parameters for that object (referenced using ParamIndex).
-@compat const VariationalParams{NumType <: Number}     = Vector{Vector{NumType}}
-@compat const FreeVariationalParams{NumType <: Number} = Vector{Vector{NumType}}
+const VariationalParams{NumType <: Number} = Vector{Vector{NumType}}
+const FreeVariationalParams{NumType <: Number} = Vector{Vector{NumType}}
 
 #####################################################################################
 # this is essentially a compatibility layer since Model has gotten rid of this code
 # it's messy, but this doesn't really matter too much, since Transforms.jl is going
 # the way of the dinosaur
 
-type CanonicalParams <: ParamSet
-    u::Vector{Int}
-    e_dev::Int
-    e_axis::Int
-    e_angle::Int
-    e_scale::Int
-    r1::Vector{Int}
-    r2::Vector{Int}
-    c1::Matrix{Int}
-    c2::Matrix{Int}
+struct CanonicalParams <: ParamSet
+    pos::Vector{Int}
+    gal_fracdev::Int
+    gal_ab::Int
+    gal_angle::Int
+    gal_scale::Int
+    flux_loc::Vector{Int}
+    flux_scale::Vector{Int}
+    color_mean::Matrix{Int}
+    color_var::Matrix{Int}
     a::Matrix{Int}
     k::Matrix{Int}
     CanonicalParams() =
         new([1, 2], 3, 4, 5, 6,
-            collect(7:(7+Ia-1)),  # r1
-            collect((7+Ia):(7+2Ia-1)), # r2
-            reshape((7+2Ia):(7+2Ia+(B-1)*Ia-1), (B-1, Ia)),  # c1
-            reshape((7+2Ia+(B-1)*Ia):(7+2Ia+2*(B-1)*Ia-1), (B-1, Ia)),  # c2
-            reshape((7+2Ia+2*(B-1)*Ia):(7+3Ia+2*(B-1)*Ia-1), (Ia, 1)),  # a
-            reshape((7+3Ia+2*(B-1)*Ia):(7+3Ia+2*(B-1)*Ia+D*Ia-1), (D, Ia))) # k
+            collect(7:(7+NUM_SOURCE_TYPES-1)),  # flux_loc
+            collect((7+NUM_SOURCE_TYPES):(7+2NUM_SOURCE_TYPES-1)), # flux_scale
+            reshape((7+2NUM_SOURCE_TYPES):(7+2NUM_SOURCE_TYPES+(NUM_BANDS-1)*NUM_SOURCE_TYPES-1), (NUM_BANDS-1, NUM_SOURCE_TYPES)),  # color_mean
+            reshape((7+2NUM_SOURCE_TYPES+(NUM_BANDS-1)*NUM_SOURCE_TYPES):(7+2NUM_SOURCE_TYPES+2*(NUM_BANDS-1)*NUM_SOURCE_TYPES-1), (NUM_BANDS-1, NUM_SOURCE_TYPES)),  # color_var
+            reshape((7+2NUM_SOURCE_TYPES+2*(NUM_BANDS-1)*NUM_SOURCE_TYPES):(7+3NUM_SOURCE_TYPES+2*(NUM_BANDS-1)*NUM_SOURCE_TYPES-1), (NUM_SOURCE_TYPES, 1)),  # a
+            reshape((7+3NUM_SOURCE_TYPES+2*(NUM_BANDS-1)*NUM_SOURCE_TYPES):(7+3NUM_SOURCE_TYPES+2*(NUM_BANDS-1)*NUM_SOURCE_TYPES+NUM_COLOR_COMPONENTS*NUM_SOURCE_TYPES-1), (NUM_COLOR_COMPONENTS, NUM_SOURCE_TYPES))) # k
 end
 const ids = CanonicalParams()
-Base.length(::Type{CanonicalParams}) = 6 + 3*Ia + 2*(B-1)*Ia + D*Ia
+Base.length(::Type{CanonicalParams}) = 6 + 3*NUM_SOURCE_TYPES + 2*(NUM_BANDS-1)*NUM_SOURCE_TYPES + NUM_COLOR_COMPONENTS*NUM_SOURCE_TYPES
 
-type UnconstrainedParams <: ParamSet
-    u::Vector{Int}
-    e_dev::Int
-    e_axis::Int
-    e_angle::Int
-    e_scale::Int
-    r1::Vector{Int}
-    r2::Vector{Int}
-    c1::Matrix{Int}
-    c2::Matrix{Int}
+struct UnconstrainedParams <: ParamSet
+    pos::Vector{Int}
+    gal_fracdev::Int
+    gal_ab::Int
+    gal_angle::Int
+    gal_scale::Int
+    flux_loc::Vector{Int}
+    flux_scale::Vector{Int}
+    color_mean::Matrix{Int}
+    color_var::Matrix{Int}
     a::Matrix{Int}
     k::Matrix{Int}
     UnconstrainedParams() =
         new([1, 2], 3, 4, 5, 6,
-            collect(7:(7+Ia-1)),  # r1
-            collect((7+Ia):(7+2Ia-1)), # r2
-            reshape((7+2Ia):(7+2Ia+(B-1)*Ia-1), (B-1, Ia)),  # c1
-            reshape((7+2Ia+(B-1)*Ia):(7+2Ia+2*(B-1)*Ia-1), (B-1, Ia)),  # c2
-            reshape((7+2Ia+2*(B-1)*Ia):
-                    (7+2Ia+2*(B-1)*Ia+(Ia-1)-1), (Ia - 1, 1)),  # a
-            reshape((7+2Ia+2*(B-1)*Ia+(Ia-1)):
-                    (7+2Ia+2*(B-1)*Ia+(Ia-1)+(D-1)*Ia-1), (D-1, Ia))) # k
+            collect(7:(7+NUM_SOURCE_TYPES-1)),  # flux_loc
+            collect((7+NUM_SOURCE_TYPES):(7+2NUM_SOURCE_TYPES-1)), # flux_scale
+            reshape((7+2NUM_SOURCE_TYPES):(7+2NUM_SOURCE_TYPES+(NUM_BANDS-1)*NUM_SOURCE_TYPES-1), (NUM_BANDS-1, NUM_SOURCE_TYPES)),  # color_mean
+            reshape((7+2NUM_SOURCE_TYPES+(NUM_BANDS-1)*NUM_SOURCE_TYPES):(7+2NUM_SOURCE_TYPES+2*(NUM_BANDS-1)*NUM_SOURCE_TYPES-1), (NUM_BANDS-1, NUM_SOURCE_TYPES)),  # color_var
+            reshape((7+2NUM_SOURCE_TYPES+2*(NUM_BANDS-1)*NUM_SOURCE_TYPES):
+                    (7+2NUM_SOURCE_TYPES+2*(NUM_BANDS-1)*NUM_SOURCE_TYPES+(NUM_SOURCE_TYPES-1)-1), (NUM_SOURCE_TYPES - 1, 1)),  # a
+            reshape((7+2NUM_SOURCE_TYPES+2*(NUM_BANDS-1)*NUM_SOURCE_TYPES+(NUM_SOURCE_TYPES-1)):
+                    (7+2NUM_SOURCE_TYPES+2*(NUM_BANDS-1)*NUM_SOURCE_TYPES+(NUM_SOURCE_TYPES-1)+(NUM_COLOR_COMPONENTS-1)*NUM_SOURCE_TYPES-1), (NUM_COLOR_COMPONENTS-1, NUM_SOURCE_TYPES))) # k
 end
 const ids_free = UnconstrainedParams()
-Base.length(::Type{UnconstrainedParams}) =  6 + 2*Ia + 2*(B-1)*Ia + (D-1)*Ia + Ia-1
+Base.length(::Type{UnconstrainedParams}) =  6 + 2*NUM_SOURCE_TYPES + 2*(NUM_BANDS-1)*NUM_SOURCE_TYPES + (NUM_COLOR_COMPONENTS-1)*NUM_SOURCE_TYPES + NUM_SOURCE_TYPES-1
 
 ################################
 # Elementary functions.
@@ -135,7 +135,7 @@ end
 ################################
 # The transforms for Celeste.
 
-immutable ParamBox
+struct ParamBox
     lb::Float64  # lower bound
     ub::Float64  # upper bound
     scale::Float64
@@ -148,7 +148,7 @@ immutable ParamBox
     end
 end
 
-immutable SimplexBox
+struct SimplexBox
     lb::Float64  # lower bound
     scale::Float64
     n::Int
@@ -161,7 +161,7 @@ immutable SimplexBox
 end
 
 # The vector of transform parameters for a Symbol.
-@compat const ParamBounds = Dict{Symbol, Union{Vector{ParamBox}, Vector{SimplexBox}}}
+const ParamBounds = Dict{Symbol, Union{Vector{ParamBox}, Vector{SimplexBox}}}
 
 
 ###############################################
@@ -345,7 +345,7 @@ Members:
   d2param_dfree2: A vector of hessians.  Each element is the Hessian of one
                   component of the aforementioned f()
 """
-type TransformDerivatives{NumType <: Number}
+struct TransformDerivatives{NumType <: Number}
     dparam_dfree::Matrix{NumType}
     d2param_dfree2::Vector{Matrix{NumType}}
     Sa::Int
@@ -587,7 +587,7 @@ bounds: The bounds for each parameter and each object in ElboArgs.
 active_sources: The sources that are being optimized.    Only these sources'
     parameters are transformed into the parameter vector.
 """
-type DataTransform
+struct DataTransform
     bounds::Vector{ParamBounds}
     active_sources::Vector{Int}
     S::Int
@@ -738,35 +738,35 @@ function get_mp_transform{NumType <: Number}(
     for si in 1:length(active_sources)
         s = active_sources[si]
         bounds[si] = ParamBounds()
-        bounds[si][:u] = Vector{ParamBox}(2)
-        u = vp[s][ids.u]
+        bounds[si][:pos] = Vector{ParamBox}(2)
+        pos = vp[s][ids.pos]
         for axis in 1:2
-            bounds[si][:u][axis] =
-                ParamBox(u[axis] - loc_width, u[axis] + loc_width, loc_scale)
+            bounds[si][:pos][axis] =
+                ParamBox(pos[axis] - loc_width, pos[axis] + loc_width, loc_scale)
         end
-        bounds[si][:r1] = Vector{ParamBox}(Ia)
-        bounds[si][:r2] = Vector{ParamBox}(Ia)
-        for i in 1:Ia
-            bounds[si][:r1][i] = ParamBox(-1.0, 10., 1.0)
-            bounds[si][:r2][i] = ParamBox(1e-4, 0.1, 1.0)
+        bounds[si][:flux_loc] = Vector{ParamBox}(NUM_SOURCE_TYPES)
+        bounds[si][:flux_scale] = Vector{ParamBox}(NUM_SOURCE_TYPES)
+        for i in 1:NUM_SOURCE_TYPES
+            bounds[si][:flux_loc][i] = ParamBox(-1.0, 10., 1.0)
+            bounds[si][:flux_scale][i] = ParamBox(1e-4, 0.1, 1.0)
         end
-        bounds[si][:c1] = Vector{ParamBox}(4 * Ia)
-        bounds[si][:c2] = Vector{ParamBox}(4 * Ia)
-        for ind in 1:length(ids.c1)
-            bounds[si][:c1][ind] = ParamBox(-10., 10., 1.0)
-            bounds[si][:c2][ind] = ParamBox(1e-4, 1., 1.0)
+        bounds[si][:color_mean] = Vector{ParamBox}(4 * NUM_SOURCE_TYPES)
+        bounds[si][:color_var] = Vector{ParamBox}(4 * NUM_SOURCE_TYPES)
+        for ind in 1:length(ids.color_mean)
+            bounds[si][:color_mean][ind] = ParamBox(-10., 10., 1.0)
+            bounds[si][:color_var][ind] = ParamBox(1e-4, 1., 1.0)
         end
-        bounds[si][:e_dev] = ParamBox[ ParamBox(1e-2, 1 - 1e-2, 1.0) ]
-        bounds[si][:e_axis] = ParamBox[ ParamBox(1e-2, 1 - 1e-2, 1.0) ]
-        bounds[si][:e_angle] = ParamBox[ ParamBox(-10.0, 10.0, 1.0) ]
-        bounds[si][:e_scale] = ParamBox[ ParamBox(0.1, 70., 1.0) ]
+        bounds[si][:gal_fracdev] = ParamBox[ ParamBox(1e-2, 1 - 1e-2, 1.0) ]
+        bounds[si][:gal_ab] = ParamBox[ ParamBox(1e-2, 1 - 1e-2, 1.0) ]
+        bounds[si][:gal_angle] = ParamBox[ ParamBox(-10.0, 10.0, 1.0) ]
+        bounds[si][:gal_scale] = ParamBox[ ParamBox(0.1, 70., 1.0) ]
 
         bounds[si][:a] = Vector{SimplexBox}(1)
         bounds[si][:a][1] = SimplexBox(0.005, 1.0, 2)
 
-        bounds[si][:k] = Vector{SimplexBox}(Ia)
-        for i in 1:Ia
-            bounds[si][:k][i] = SimplexBox(0.01 / D, 1.0, D)
+        bounds[si][:k] = Vector{SimplexBox}(NUM_SOURCE_TYPES)
+        for i in 1:NUM_SOURCE_TYPES
+            bounds[si][:k][i] = SimplexBox(0.01 / NUM_COLOR_COMPONENTS, 1.0, NUM_COLOR_COMPONENTS)
         end
     end
 

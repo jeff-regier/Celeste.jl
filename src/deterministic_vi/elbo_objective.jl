@@ -41,9 +41,9 @@ function calculate_G_s!{NumType <: Number}(
         var_G_s.v[] = 0.0
     end
 
-    @inbounds for i in 1:Ia # Celestial object types (e.g. stars and galaxies)
+    @inbounds for i in 1:NUM_SOURCE_TYPES # Celestial object types (e.g. stars and galaxies)
         fsm_i = (i == 1) ? elbo_vars.fs0m : elbo_vars.fs1m
-        a_i = vp[s][ids.a[i]]
+        a_i = vp[s][ids.is_star[i]]
         sb_E_l_a_b_i = sb.E_l_a[b, i]
         sb_E_ll_a_b_i = sb.E_ll_a[b, i]
 
@@ -69,12 +69,12 @@ function calculate_G_s!{NumType <: Number}(
         ############ Only gradient and hessian code below ##############
         (is_active_source && elbo_vars.elbo.has_gradient) || continue
 
-        E_G_s_d[ids.a[i], 1] += lf
-        E_G2_s_d[ids.a[i], 1] += llff
+        E_G_s_d[ids.is_star[i], 1] += lf
+        E_G2_s_d[ids.is_star[i], 1] += llff
 
         p0_shape = shape_standard_alignment[i]
         p0_bright = brightness_standard_alignment[i]
-        u_ind = i == 1 ? star_ids.u : gal_ids.u
+        u_ind = i == 1 ? star_ids.pos : gal_ids.pos
 
         # Derivatives with respect to the spatial parameters
         tmp1 = sb_E_l_a_b_i_v * a_i
@@ -143,26 +143,26 @@ function calculate_G_s!{NumType <: Number}(
 
         # The (a, bright) blocks:
         for p0_ind in 1:length(p0_bright)
-            E_G_s_h[p0_bright[p0_ind], ids.a[i]] =
+            E_G_s_h[p0_bright[p0_ind], ids.is_star[i]] =
                 fsm_i_v * sb_E_l_a_b_i_d[p0_ind, 1]
-            E_G2_s_h[p0_bright[p0_ind], ids.a[i]] =
+            E_G2_s_h[p0_bright[p0_ind], ids.is_star[i]] =
                 (fsm_i_v ^ 2) * sb_E_ll_a_b_i_d[p0_ind, 1]
-            E_G_s_h[ids.a[i], p0_bright[p0_ind]] =
-                E_G_s_h[p0_bright[p0_ind], ids.a[i]]
-            E_G2_s_h[ids.a[i], p0_bright[p0_ind]] =
-                E_G2_s_h[p0_bright[p0_ind], ids.a[i]]
+            E_G_s_h[ids.is_star[i], p0_bright[p0_ind]] =
+                E_G_s_h[p0_bright[p0_ind], ids.is_star[i]]
+            E_G2_s_h[ids.is_star[i], p0_bright[p0_ind]] =
+                E_G2_s_h[p0_bright[p0_ind], ids.is_star[i]]
         end
 
         # The (a, shape) blocks.
         for p0_ind in 1:length(p0_shape)
-            E_G_s_h[p0_shape[p0_ind], ids.a[i]] =
+            E_G_s_h[p0_shape[p0_ind], ids.is_star[i]] =
                 sb_E_l_a_b_i_v * fsm_i_d[p0_ind, 1]
-            E_G2_s_h[p0_shape[p0_ind], ids.a[i]] =
+            E_G2_s_h[p0_shape[p0_ind], ids.is_star[i]] =
                 sb_E_ll_a_b_i_v * 2 * fsm_i_v * fsm_i_d[p0_ind, 1]
-            E_G_s_h[ids.a[i], p0_shape[p0_ind]] =
-                E_G_s_h[p0_shape[p0_ind], ids.a[i]]
-            E_G2_s_h[ids.a[i], p0_shape[p0_ind]] =
-                E_G2_s_h[p0_shape[p0_ind], ids.a[i]]
+            E_G_s_h[ids.is_star[i], p0_shape[p0_ind]] =
+                E_G_s_h[p0_shape[p0_ind], ids.is_star[i]]
+            E_G2_s_h[ids.is_star[i], p0_shape[p0_ind]] =
+                E_G2_s_h[p0_shape[p0_ind], ids.is_star[i]]
         end
 
         for ind_b in 1:length(p0_bright), ind_s in 1:length(p0_shape)
@@ -179,21 +179,21 @@ function calculate_G_s!{NumType <: Number}(
     end # i loop
 
     if elbo_vars.elbo.has_hessian
-        # Accumulate the u Hessian. u is the only parameter that is shared between
+        # Accumulate the pos Hessian. pos is the only parameter that is shared between
         # different values of i.
 
         # This is
-        # for i = 1:Ia
+        # for i = 1:NUM_SOURCE_TYPES
         #     E_G_u_u_hess += elbo_vars.E_G_s_hsub_vec[i].u_u
         #     E_G2_u_u_hess += elbo_vars.E_G2_s_hsub_vec[i].u_u
         # end
-        # For each value in 1:Ia, written this way for speed.
+        # For each value in 1:NUM_SOURCE_TYPES, written this way for speed.
         for u_ind1 = 1:2, u_ind2 = 1:2
-            elbo_vars.E_G_s.h[ids.u[u_ind1], ids.u[u_ind2]] =
+            elbo_vars.E_G_s.h[ids.pos[u_ind1], ids.pos[u_ind2]] =
                 elbo_vars.E_G_s_hsub_vec[1].u_u[u_ind1, u_ind2] +
                 elbo_vars.E_G_s_hsub_vec[2].u_u[u_ind1, u_ind2]
 
-            elbo_vars.E_G2_s.h[ids.u[u_ind1], ids.u[u_ind2]] =
+            elbo_vars.E_G2_s.h[ids.pos[u_ind1], ids.pos[u_ind2]] =
                 elbo_vars.E_G2_s_hsub_vec[1].u_u[u_ind1, u_ind2] +
                 elbo_vars.E_G2_s_hsub_vec[2].u_u[u_ind1, u_ind2]
         end
@@ -382,10 +382,10 @@ function add_pixel_term!{NumType <: Number}(
                        elbo_vars.var_G,
                        elbo_vars.elbo,
                        img.pixels[h,w],
-                       img.iota_vec[h])
+                       img.nelec_per_nmgy[h])
     add_scaled_sfs!(elbo_vars.elbo,
                     elbo_vars.E_G,
-                    -img.iota_vec[h])
+                    -img.nelec_per_nmgy[h])
 
     # Subtract the log factorial term. This is not a function of the
     # parameters so the derivatives don't need to be updated. Note that

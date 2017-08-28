@@ -4,7 +4,7 @@ using DataFrames
 
 import Celeste.AccuracyBenchmark
 import Celeste.ArgumentParse
-import Celeste.Configs
+import Celeste: Config
 import Celeste.Infer
 import Celeste.ParallelRun
 import Celeste.SDSSIO
@@ -101,7 +101,7 @@ else
 end
 neighbor_map = Infer.find_neighbors(target_sources, catalog_entries, images)
 
-config = Configs.Config()
+config = Config()
 if haskey(parsed_args, "min-radius-px")
     config.min_radius_pix = parsed_args["min-radius-px"]
 end

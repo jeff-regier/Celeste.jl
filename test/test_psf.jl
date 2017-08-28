@@ -56,7 +56,7 @@ function load_raw_psf(; x::Float64=500., y::Float64=500.)
         datadir, run_num, camcol_num, field_num,
                  run_num, camcol_num, field_num)
   psf_fits = FITSIO.FITS(psf_filename)
-  raw_psf_comp = SDSSIO.read_psf(psf_fits, band_letters[b])
+  raw_psf_comp = SDSSIO.read_psf(psf_fits, BAND_LETTERS[b])
   close(psf_fits)
 
   eval_psf(raw_psf_comp, x, y)
@@ -109,13 +109,13 @@ function test_psf_fit()
     # sig_sf_vec = Vector{GalaxySigmaDerivs{NumType}}(K)
     #
     # for k = 1:K
-    #   sigma_vec[k] = PSF.get_bvn_cov(psf_params[k][psf_ids.e_axis],
-    #                                   psf_params[k][psf_ids.e_angle],
-    #                                   psf_params[k][psf_ids.e_scale])
+    #   sigma_vec[k] = PSF.get_bvn_cov(psf_params[k][psf_ids.gal_ab],
+    #                                   psf_params[k][psf_ids.gal_angle],
+    #                                   psf_params[k][psf_ids.gal_scale])
     #   sig_sf_vec[k] = GalaxySigmaDerivs(
-    #     psf_params[k][psf_ids.e_angle],
-    #     psf_params[k][psf_ids.e_axis],
-    #     psf_params[k][psf_ids.e_scale], sigma_vec[k], calculate_gradient)
+    #     psf_params[k][psf_ids.gal_angle],
+    #     psf_params[k][psf_ids.gal_ab],
+    #     psf_params[k][psf_ids.gal_scale], sigma_vec[k], calculate_gradient)
     #
     # end
 
@@ -135,9 +135,9 @@ function test_psf_fit()
 
   sigma_vec = Vector{Matrix{Float64}}(K)
   for k = 1:K
-    sigma_vec[k] = PSF.get_bvn_cov(psf_params[k][psf_ids.e_axis],
-                                    psf_params[k][psf_ids.e_angle],
-                                    psf_params[k][psf_ids.e_scale])
+    sigma_vec[k] = PSF.get_bvn_cov(psf_params[k][psf_ids.gal_ab],
+                                    psf_params[k][psf_ids.gal_angle],
+                                    psf_params[k][psf_ids.gal_scale])
   end
 
   println("Testing single pixel value")

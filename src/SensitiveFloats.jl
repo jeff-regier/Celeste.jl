@@ -21,7 +21,7 @@ Attributes:
       in the same format as d.  This is used for the full Hessian
       with respect to all the sources.
 """
-immutable SensitiveFloat{NumType}
+struct SensitiveFloat{NumType}
     v::Base.RefValue{NumType}
 
     # local_P x local_S matrix of gradients

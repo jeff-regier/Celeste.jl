@@ -90,8 +90,8 @@ function load_sources(
         sources::Vector{ParallelRun.OptimizedSource} = JLD.load(file_path)["results"]
         Log.info("  Found $(length(sources)) sources in $file_path")
         for source in sources
-            source_ra_deg = source.vs[Model.ids.u[1]]
-            source_dec_deg = source.vs[Model.ids.u[2]]
+            source_ra_deg = source.vs[Model.ids.pos[1]]
+            source_dec_deg = source.vs[Model.ids.pos[2]]
             if source_ra_deg < ra_min_deg || source_ra_deg > ra_max_deg
                 continue
             elseif source_dec_deg < dec_min_deg || source_dec_deg > dec_max_deg

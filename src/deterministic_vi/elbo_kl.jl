@@ -1,7 +1,7 @@
 module KLDivergence
 
 using ..DeterministicVI: ElboArgs, VariationalParams, init_thread_pool!
-using ...Model: CanonicalParams, ids, prior, Ia, D
+using ...Model: CanonicalParams, ids, prior, NUM_SOURCE_TYPES, NUM_COLOR_COMPONENTS
 using ...SensitiveFloats: SensitiveFloat, add_sources_sf!
 using Compat
 using ForwardDiff, ReverseDiff, DiffBase
@@ -91,13 +91,13 @@ end
 # Subtracting KL divergences from sources #
 ###########################################
 
-kl_source_a(vs) = categorical_kl(vs[ids.a], prior.a)
+kl_source_a(vs) = categorical_kl(vs[ids.is_star], prior.is_star)
 
 function kl_source_r(vs)
     kl = zero(eltype(vs))
-    for i in 1:Ia
-        kl += vs[ids.a[i]] * gaussian_kl(vs[ids.r1[i]], vs[ids.r2[i]],
-                                            prior.r_μ[i], prior.r_σ²[i])
+    for i in 1:NUM_SOURCE_TYPES
+        kl += vs[ids.is_star[i]] * gaussian_kl(vs[ids.flux_loc[i]], vs[ids.flux_scale[i]],
+                                            prior.flux_mean[i], prior.flux_var[i])
     end
     assert(!isnan(kl))
     return kl
@@ -105,8 +105,8 @@ end
 
 function kl_source_k(vs)
     kl = zero(eltype(vs))
-    for i in 1:Ia
-        kl += vs[ids.a[i]] * categorical_kl(vs[ids.k[:, i]], prior.k[:, i])
+    for i in 1:NUM_SOURCE_TYPES
+        kl += vs[ids.is_star[i]] * categorical_kl(vs[ids.k[:, i]], prior.k[:, i])
     end
     assert(!isnan(kl))
     return kl
@@ -114,11 +114,11 @@ end
 
 function kl_source_c(vs)
     kl = zero(eltype(vs))
-    for i in 1:Ia
-        μ₁, var₁ = vs[ids.c1[:, i]], vs[ids.c2[:, i]]
-        a = vs[ids.a[i]]
-        for d in 1:D
-            μ₂, Σ₂ = prior.c_mean[:, d, i], prior.c_cov[:, :, d, i]
+    for i in 1:NUM_SOURCE_TYPES
+        μ₁, var₁ = vs[ids.color_mean[:, i]], vs[ids.color_var[:, i]]
+        a = vs[ids.is_star[i]]
+        for d in 1:NUM_COLOR_COMPONENTS
+            μ₂, Σ₂ = prior.color_mean[:, d, i], prior.color_cov[:, :, d, i]
             kl += a * vs[ids.k[d, i]] * diagmvn_mvn_kl(μ₁, var₁, μ₂, Σ₂)
         end
     end
@@ -128,9 +128,9 @@ end
 
 
 function source_e_log_prob(vs)
-    x = vs[ids.e_scale]
-    μ = prior.e_scale_μ
-    σ² = prior.e_scale_σ²
+    x = vs[ids.gal_scale]
+    μ = prior.gal_scale_mean
+    σ² = prior.gal_scale_var
     kl = -0.5 * (log(2pi) + log(σ²) + (x - μ)^2 / σ²)
     assert(!isnan(kl))
     return kl
@@ -160,11 +160,11 @@ end
 using ForwardDiff: Dual, JacobianConfig, pickchunksize
 using ReverseDiff: TrackedArray, TrackedReal, CompiledTape, GradientTape
 
-@compat const KLGradientTape{T} = GradientTape{typeof(subtract_kl),
-                                               TrackedArray{T,T,1,Vector{T},Vector{T}},
-                                               TrackedReal{T,T,Void}}
+const KLGradientTape{T} = GradientTape{typeof(subtract_kl),
+                                       TrackedArray{T,T,1,Vector{T},Vector{T}},
+                                       TrackedReal{T,T,Void}}
 
-immutable KLHelper{N,T}
+struct KLHelper{N,T}
     gradient_tape::CompiledTape{:kl_gradient,KLGradientTape{T}}
     nested_gradient_tape::CompiledTape{:kl_nested_gradient,KLGradientTape{Dual{N,T}}}
     dual_buffer::Vector{Dual{N,T}}

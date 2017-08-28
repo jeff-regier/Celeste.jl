@@ -6,25 +6,26 @@ module Celeste
 # workaround a bug
 import ForwardDiff
 
-# alias scopes
 include("aliasscopes.jl")
+include("config.jl")
 
 # submodules
-include("Configs.jl")
 include("Log.jl")
 
 include("SensitiveFloats.jl")
+
+include("Coordinates.jl")
 
 include("Model.jl")
 include("Infer.jl")
 include("Transform.jl")
 include("PSF.jl")
 include("SDSSIO.jl")
+include("SEP.jl")
 
 include("MCMC.jl")
 include("StochasticVI.jl")
 include("DeterministicVI.jl")
-
 include("ParallelRun.jl")
 
 include("Synthetic.jl")

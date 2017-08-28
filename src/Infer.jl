@@ -12,7 +12,7 @@ module Infer
 import WCS
 using StaticArrays
 
-import ..Configs
+import ..Config
 using ..Model
 import ..Log
 
@@ -29,13 +29,13 @@ Arguments:
 function find_neighbors(target_sources::Vector{Int64},
                         catalog::Vector{CatalogEntry},
                         images::Vector{Image})
-    psf_width_ub = zeros(B)
+    psf_width_ub = zeros(NUM_BANDS)
     for img in images
         psf_width = Model.get_psf_width(img.psf)
         psf_width_ub[img.b] = max(psf_width_ub[img.b], psf_width)
     end
 
-    epsilon_lb = fill(Inf, B)
+    epsilon_lb = fill(Inf, NUM_BANDS)
     for img in images
         epsilon = img.sky[div(img.H, 2), div(img.W, 2)]
         epsilon_lb[img.b] = min(epsilon_lb[img.b], epsilon)
@@ -129,7 +129,7 @@ objective function.
 Non-standard arguments:
   noise_fraction: The proportion of the noise below which we will remove pixels.
 """
-function load_active_pixels!(config::Configs.Config,
+function load_active_pixels!(config::Config,
                              images::Vector{Image},
                              patches::Matrix{SkyPatch};
                              exclude_nan=true,
@@ -166,7 +166,7 @@ function load_active_pixels!(config::Configs.Config,
             # Note: This is risky because bright pixels are disproportionately likely
             # to get included, even if it's because of noise. Therefore it's important
             # to keep the noise fraction pretty low.
-            threshold = img.iota_vec[h] * img.sky[h, w] * (1. + noise_fraction)
+            threshold = img.nelec_per_nmgy[h] * img.sky[h, w] * (1. + noise_fraction)
             p.active_pixel_bitmap[h2, w2] = img.pixels[h, w] > threshold
         end
     end
@@ -178,7 +178,7 @@ function load_active_pixels!(images::Vector{Image},
                              exclude_nan=true,
                              noise_fraction=0.5)
     load_active_pixels!(
-        Configs.Config(),
+        Config(),
         images,
         patches,
         exclude_nan=exclude_nan,
