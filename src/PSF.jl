@@ -9,6 +9,8 @@ module PSF
 using Celeste
 using Celeste: Const, @aliasscope, @unroll_loop
 using ..Model
+using ..Model: GalaxySigmaDerivs, BivariateNormalDerivatives, get_bvn_derivs!,
+               eval_bvn_pdf!, transform_bvn_derivs!, BvnComponent, get_bvn_cov
 using ..Transform
 using ..SensitiveFloats.SensitiveFloat
 import ..SensitiveFloats.clear!
@@ -19,8 +21,6 @@ import WCS
 
 using ForwardDiff
 using StaticArrays
-
-include("bivariate_normals.jl")
 
 
 const ID_MAT_2D = eye(Float64, 2)

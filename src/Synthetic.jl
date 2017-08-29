@@ -2,15 +2,14 @@ module Synthetic
 
 export gen_blob
 
-using Celeste, Celeste.Model
-import Celeste: Infer, DeterministicVI
+using Celeste
+using Celeste.Model
 
 import WCS
 import Distributions
 using ForwardDiff
 using StaticArrays
 
-include("bivariate_normals.jl")
 
 # Generate synthetic data.
 
@@ -66,7 +65,7 @@ function write_galaxy(img0::Image, ce::CatalogEntry, pixels::Matrix{Float64};
                       expectation=false)
     iota = median(img0.nelec_per_nmgy)
     gal_fracdevs = [ce.gal_frac_dev, 1 - ce.gal_frac_dev]
-    XiXi = DeterministicVI.get_bvn_cov(ce.gal_ab, ce.gal_angle, ce.gal_scale)
+    XiXi = Model.get_bvn_cov(ce.gal_ab, ce.gal_angle, ce.gal_scale)
 
     for i in 1:2
         for gproto in galaxy_prototypes[i]
