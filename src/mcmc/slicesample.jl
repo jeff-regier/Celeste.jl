@@ -182,7 +182,9 @@ end
 """
 Helper that draws N samples using slice sampling
 """
-function slicesample_chain(lnpdf, th, N; print_skip=50)
+function slicesample_chain(lnpdf, th, N;
+                           print_skip=50,
+                           verbose=false)
     D = length(th)
     samps = zeros(N, D)
     lls   = zeros(N)
@@ -191,7 +193,8 @@ function slicesample_chain(lnpdf, th, N; print_skip=50)
     for n in 1:N
         th, ll = slicesample(th, lnpdf;
                              doubling_step=true,
-                             compwise=true)
+                             compwise=true,
+                             verbose=verbose)
         samps[n,:] = th
         lls[n]     = ll
         if mod(n, print_skip) == 0
@@ -202,4 +205,3 @@ function slicesample_chain(lnpdf, th, N; print_skip=50)
     @printf "%2.3f ms per sample (%d samples in %2.3f seconds) \n" 1000*(elapsed/N) N elapsed
     return samps, lls
 end
-

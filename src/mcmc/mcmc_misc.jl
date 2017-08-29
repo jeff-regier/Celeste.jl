@@ -15,9 +15,21 @@ end
 
 # output a single poisson log likelihood
 function poisson_lnpdf(data, lam)
-    return float(logpdf(Distributions.Poisson(lam), data))
+    try
+      return float(logpdf(Distributions.Poisson(lam), data))
+    catch err
+      println("data, lambda", data, lam)
+      throw()
+    end
 end
 
+# constrain checking
+function inrange(val, a, b)
+    if (val <= a) || (val >= b)
+        return false
+    end
+    return true
+end
 
 #######################################################
 # save images + plotting stuff for numpy/matplotlib   #
@@ -95,28 +107,31 @@ function catalog_to_data_frame_row(catalog_entry; objid="truth")
     return df
 end
 
-function samples_to_data_frame_rows(chain; is_star=true)
+function samples_to_dataframe(chain; is_star=true)
     df = DataFrame()
 
     # reference band flux (+ log flux) and colors
     df[:log_reference_band_flux]  = chain[:,3]
     df[:reference_band_flux_nmgy] = exp.(chain[:,3])
-    df[:color_log_ratio_ug] = chain[:,2] .- chain[:,1]
-    df[:color_log_ratio_gr] = chain[:,3] .- chain[:,2]
-    df[:color_log_ratio_ri] = chain[:,4] .- chain[:,3]
-    df[:color_log_ratio_iz] = chain[:,5] .- chain[:,4]
+    df[:color_log_ratio_ug]       = chain[:,2] .- chain[:,1]
+    df[:color_log_ratio_gr]       = chain[:,3] .- chain[:,2]
+    df[:color_log_ratio_ri]       = chain[:,4] .- chain[:,3]
+    df[:color_log_ratio_iz]       = chain[:,5] .- chain[:,4]
+    df[:right_ascension_deg]      = chain[:, 6]
+    df[:declination_deg]          = chain[:, 7]
 
-    u_samps = [constrain_pos(chain[p,6:7]) for p in 1:size(chain, 1)]
-    u_samps = transpose(hcat(u_samps...))
-
-    df[:right_ascension_deg] = u_samps[:,1]
-    df[:declination_deg]     = u_samps[:,2]
+    if !is_star
+      df[:de_vaucouleurs_mixture_weight] = chain[:, 8]
+      df[:minor_major_axis_ratio]        = chain[:, 9]
+      df[:angle_deg]                     = chain[:, 10]
+      df[:half_light_radius_px]          = chain[:, 11]
+    end
 
     return df
 end
 
 
-function samples_to_data_frame_row(sampdf; objid="mcmc")
+function samples_to_dataframe_row(sampdf; is_star=true, objid="mcmc")
     """ only for stars right now """
     df = DataFrame()
     df[:objid]                          = [objid]
@@ -138,6 +153,13 @@ function samples_to_data_frame_row(sampdf; objid="mcmc")
     df[:color_log_ratio_gr_stderr]      = [std(sampdf[:color_log_ratio_gr])]
     df[:color_log_ratio_ri_stderr]      = [std(sampdf[:color_log_ratio_ri])]
     df[:color_log_ratio_iz_stderr]      = [std(sampdf[:color_log_ratio_iz])]
+    if !is_star
+        df[:is_star]                        = [false]
+        df[:de_vaucouleurs_mixture_weight]  = [mean(sampdf[:de_vaucouleurs_mixture_weight])]
+        df[:minor_major_axis_ratio]         = [mean(sampdf[:minor_major_axis_ratio])]
+        df[:half_light_radius_px]           = [mean(sampdf[:half_light_radius_px])]
+        df[:angle_deg]                      = [mean(sampdf[:angle_deg])]
+    end
     return df
 end
 

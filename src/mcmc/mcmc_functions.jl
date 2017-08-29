@@ -29,45 +29,50 @@ function make_star_loglike(imgs::Array{Image},
     # patch offset (0 if no patches passed in)
     if patches == nothing
         offsets = zeros(2, length(imgs))
+        active_bitmaps = [BitArray(ones(img.H, img.W)) for img in imgs]
     else
         offsets = hcat([convert(Array{Float64, 1}, p.bitmap_offset)
                         for p in patches]...)
+        active_bitmaps = [p.active_pixel_bitmap for p in patches]
     end
 
     # create function to return
     function star_loglike(th::Array{Float64, 1})
+        # unpack log fluxes and location (ra, dec)
+        #lnfluxes, unc_pos = th[1:5], th[6:end]
+        #pos = constrain_pos(unc_pos)
+        lnfluxes, pos = th[1:5], th[6:end]
 
-      # unpack location and 
-      lnfluxes, unc_pos = th[1:5], th[6:end]
-      pos = constrain_pos(unc_pos)
+        ll = 0.
+        for ii in 1:length(imgs)
+            img, active_bitmap = imgs[ii], active_bitmaps[ii]
 
-      ll = 0.
-      for ii in 1:length(imgs)
-          img  = imgs[ii]
+            # sky pixel intensity (sky image)
+            background = background_images[ii]
 
-          # sky pixel intensity (sky image)
-          background = background_images[ii]
+            # create and cache unit flux src image
+            src_pixels = zeros(img.H, img.W)
+            write_star_unit_flux(pos, img.psf, img.wcs,
+                                 Float64(median(img.nelec_per_nmgy)), src_pixels,
+                                 offset=offsets[:,ii])
 
-          # create and cache unit flux src image
-          src_pixels = zeros(img.H, img.W)
-          write_star_unit_flux(pos, img.psf, img.wcs,
-                               Float64(median(img.nelec_per_nmgy)), src_pixels,
-                               offset=offsets[:,ii])
+            # band-specific flux --- do bounds check
+            bflux = exp(lnfluxes[img.b])
+            if isinf(bflux)  # if bflux overflows, then return -Inf logprob
+                return -Inf
+            end
 
-          # sum per-pixel likelihood contribution
-          bflux = exp(lnfluxes[img.b])
-          for h in 1:img.H, w in 1:img.W
-              # TODO ---incorporate patches[ii].active_pixel_bitmap
-              # into likelihood calculation
-              pixel_data = img.pixels[h,w]
-              if !isnan(pixel_data)
-                  rate_hw = background[h,w] + bflux*src_pixels[h,w]
-                  ll += poisson_lnpdf(pixel_data, rate_hw)
-              end
-          end
-
-      end
-    return ll
+            # sum per-pixel likelihood contribution
+            for h in 1:img.H, w in 1:img.W
+                pixel_data = img.pixels[h,w]
+                is_active  = active_bitmap[h, w]
+                if !isnan(pixel_data) && is_active
+                    rate_hw = background[h,w] + bflux*src_pixels[h,w]
+                    ll += poisson_lnpdf(pixel_data, rate_hw)
+                end
+            end
+        end
+        return ll
     end
 
     return star_loglike, constrain_pos, unconstrain_pos
@@ -104,9 +109,11 @@ function make_gal_loglike(imgs::Array{Image},
     # patch offset (0 if no patches passed in)
     if patches == nothing
         offsets = zeros(2, length(imgs))
+        active_bitmaps = [BitArray(ones(img.H, img.W)) for img in imgs]
     else
         offsets = hcat([convert(Array{Float64, 1}, p.bitmap_offset)
                         for p in patches]...)
+        active_bitmaps = [p.active_pixel_bitmap for p in patches]
     end
 
     function pretty_print_galaxy_params(th)
@@ -127,7 +134,7 @@ function make_gal_loglike(imgs::Array{Image},
 
         # unpack location and log fluxes (smushed)
         lnfluxes, unc_pos, ushape = th[1:5], th[6:7], th[8:end]
-        pos   = constrain_pos(unc_pos)
+        pos = unc_pos #constrain_pos(unc_pos)
         gal_frac_dev, gal_ab, gal_angle, gal_scale = ushape
 
         if print_params
@@ -136,7 +143,7 @@ function make_gal_loglike(imgs::Array{Image},
 
         ll = 0.
         for ii in 1:length(imgs)
-            img = imgs[ii]
+            img, active_bitmap = imgs[ii], active_bitmaps[ii]
 
             # sky pixel intensity (sky image)
             background = background_images[ii]
@@ -149,11 +156,17 @@ function make_gal_loglike(imgs::Array{Image},
                 src_pixels;
                 offset=offsets[:,ii])
 
-            # sum per-pixel likelihood contribution
+            # image specific flux
             bflux = exp(lnfluxes[img.b])
+            if isinf(bflux)
+                return -Inf
+            end
+
+            # sum per-pixel likelihood contribution
             for h in 1:img.H, w in 1:img.W
                 pixel_data = img.pixels[h,w]
-                if !isnan(pixel_data)
+                is_active  = active_bitmap[h,w]
+                if !isnan(pixel_data) && is_active
                     rate_hw = background[h,w] + bflux*src_pixels[h,w]
                     ll += poisson_lnpdf(pixel_data, rate_hw)
                 end
@@ -167,18 +180,51 @@ function make_gal_loglike(imgs::Array{Image},
 end
 
 
+##########
+# priors #
+##########
+
+
+"""
+Create a uniform prior around a RA/DEC location --- specify size of box
+by number of pixels
+"""
+function make_location_prior(img::Image,
+                             pos0::Array{Float64, 1};
+                             pos_pixel_delta::Array{Float64, 1} = [1., 1.])
+    # figure out lower and upper bounds on RA, Dec
+    pos0_pix = WCS.world_to_pix(img.wcs, pos0)
+    pos0_pix_lower = pos0_pix - .5 * pos_pixel_delta
+    pos0_pix_upper = pos0_pix + .5 * pos_pixel_delta
+    pos0_world_lower = WCS.pix_to_world(img.wcs, pos0_pix_lower)
+    pos0_world_upper = WCS.pix_to_world(img.wcs, pos0_pix_upper)
+
+    # lower and upper bounds on the ra/dec
+    ra_lo, ra_hi   = pos0_world_lower[1], pos0_world_upper[2]
+    dec_lo, dec_hi = pos0_world_lower[1], pos0_world_upper[2]
+
+    # corresponding uniform log likelihoods
+    llra  = log(1./(ra_hi - ra_lo))
+    lldec = log(1./(dec_hi - dec_lo))
+
+    function pos_logprior(pos)
+        if !inrange(pos[1], ra_lo, ra_hi)
+            return -Inf
+        end
+        if !inrange(pos[2], dec_lo, dec_hi)
+            return -Inf
+        end
+        return llra + lldec
+    end
+
+    return pos_logprior
+end
+
+
 function make_gal_logprior()
 
     # distributions over galaxy parameters
     prior = Model.construct_prior()
-
-    # constrain checking
-    function inrange(val, a, b)
-        if (val <= a) || (val >= b)
-            return false
-        end
-        return true
-    end
 
     function gal_logprior(th)
         lnfluxes, u, ushape = th[1:5], th[6:7], th[8:end]
@@ -191,14 +237,23 @@ function make_gal_logprior()
         if !inrange(gal_ab, 0., 1.)
             return -Inf
         end
-        if !inrange(gal_angle, 0., 2*pi)
+        if !inrange(gal_angle, 0., pi)
             return -Inf
         end
         if !inrange(gal_scale, 0., Inf)
             return -Inf
         end
 
-        ll = MCMC.logflux_logprior(lnfluxes; is_star=false)
+        # uniform over angle, ll log normal over scale
+        llangle = log(pi)
+        llscale = logpdf(prior.galaxy.gal_scale, gal_scale)
+        if isinf(llangle)
+          println(" angle bad!")
+        end
+        if isinf(llscale)
+          println(" scale bad!")
+        end
+        ll = MCMC.logflux_logprior(lnfluxes; is_star=false) + llangle + llscale
         return ll
     end
     return gal_logprior
@@ -434,15 +489,18 @@ end
 """
 Convert catalog entry into unconstrained parameters for star or gal loglikes
 """
-function parameters_from_catalog(entry::CatalogEntry, unconstrain_pos::Function;
-                                 is_star=true)
+function parameters_from_catalog(entry::CatalogEntry;
+                                 unconstrain_pos::Function= x-> x,
+                                 is_star=true, epsilon=1e-5)
     if is_star
         return vcat([log.(entry.star_fluxes), unconstrain_pos(entry.pos)]...)
     else
         #ushape = Model.unconstrain_gal_shape([
         #  entry.gal_frac_dev, entry.gal_ab, entry.gal_angle, entry.gal_scale])
-        ushape = [entry.gal_frac_dev, entry.gal_ab,
-                  entry.gal_angle, entry.gal_scale]
+        ushape = [clamp(entry.gal_frac_dev, epsilon, 1-epsilon),
+                  clamp(entry.gal_ab, epsilon, 1-epsilon),
+                  clamp(entry.gal_angle, epsilon, pi-epsilon),
+                  clamp(entry.gal_scale, epsilon, Inf)]
         return vcat([log.(entry.gal_fluxes), unconstrain_pos(entry.pos), ushape]...)
     end
 end
