@@ -32,6 +32,7 @@ import FITSIO, WCS
 import WCS.WCSTransform
 import ..Log
 import ..Celeste: Const, @aliasscope, @unroll_loop
+import ..SensitiveFloats: SensitiveFloat, clear!
 
 import Base.length
 
@@ -49,9 +50,7 @@ include("model/image_model.jl")
 include("model/param_set.jl")
 include("model/imaged_sources.jl")
 include("model/wcs_utils.jl")
-
-import ..SensitiveFloats: SensitiveFloat, clear!
-include("bivariate_normals.jl")
+include("model/bivariate_normals.jl")
 include("model/fsm_util.jl")
 include("model/log_prob.jl")
 

@@ -1,7 +1,10 @@
-# Defining gal_shape_ids_len might not be needed but it is critical that this is compile time constant
-const gal_shape_ids_len = 3
+# Bivarate normals -- 2-d gaussians and their derivatives, as well as
+# derivatives of model components.
 
-using Celeste: Const, @aliasscope, @unroll_loop
+# Hardcoding this might not be needed but it is critical that this is
+# compile time constant.
+const GAL_SHAPE_IDS_LENGTH = 3
+@assert GAL_SHAPE_IDS_LENGTH == length(gal_shape_ids)
 
 """
 Unpack a rotation-parameterized BVN covariance matrix.
@@ -302,7 +305,6 @@ function get_bvn_derivs!{NumType <: Number}(
   end
 end
 
-##############################
 
 """
 The derivatives of sigma with respect to the galaxy shape parameters.  In
@@ -314,8 +316,8 @@ parameters are indexed by GalaxyShapeParams.
       derivatives d2 Sigma / d GalaxyShapeParams d GalaxyShapeParams.
 """
 struct GalaxySigmaDerivs{NumType <: Number}
-    j::SMatrix{3,gal_shape_ids_len,NumType,9}
-    t::SArray{Tuple{3,gal_shape_ids_len,gal_shape_ids_len},NumType,3,27}
+    j::SMatrix{3,GAL_SHAPE_IDS_LENGTH,NumType,9}
+    t::SArray{Tuple{3,GAL_SHAPE_IDS_LENGTH,GAL_SHAPE_IDS_LENGTH},NumType,3,27}
 end
 
 
@@ -359,6 +361,13 @@ function GalaxySigmaDerivs{NumType <: Number}(
 
   GalaxySigmaDerivs(j*nuBar, t*nuBar)
 end
+
+
+GalaxySigmaDerivs{NumType}(::Type{NumType}) = GalaxySigmaDerivs(
+                                                     @SMatrix(zeros(NumType,3,GAL_SHAPE_IDS_LENGTH)),
+                                                     @SArray( zeros(NumType,3,GAL_SHAPE_IDS_LENGTH,GAL_SHAPE_IDS_LENGTH)))
+
+
 
 
 """
@@ -421,9 +430,6 @@ function GalaxyCacheComponent{NumType <: Number}(
   GalaxyCacheComponent(gal_fracdev_dir, gal_fracdev_i, bmc, sig_sf)
 end
 
-GalaxySigmaDerivs{NumType}(::Type{NumType}) = GalaxySigmaDerivs(
-                                                     @SMatrix(zeros(NumType,3,gal_shape_ids_len)),
-                                                     @SArray( zeros(NumType,3,gal_shape_ids_len,gal_shape_ids_len)))
 
 ###################################################
 # Transform derivatives into the model parameterization.
