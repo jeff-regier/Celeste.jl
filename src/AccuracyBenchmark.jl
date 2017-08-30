@@ -377,7 +377,7 @@ function draw_source_params(prior, object_id)
 
     if !is_star
         half_light_radius_px = exp(rand(
-            Normal(prior.flux_mean[source_type_index], sqrt(prior.flux_var[source_type_index]))
+            Normal(prior.gal_scale_mean, sqrt(prior.gal_scale_var))
         ))
         angle_deg = rand(Uniform(0, 180))
         minor_major_axis_ratio = rand(Beta(2, 2))
