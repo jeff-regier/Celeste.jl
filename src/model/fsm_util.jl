@@ -1,3 +1,79 @@
+
+"""
+The convolution of a one galaxy component with one PSF component.
+It also contains the derivatives of sigma with respect to the shape parameters.
+It does not contain the derivatives with respect to other parameters
+(pos and gal_fracdev) because they have easy expressions in terms of other known
+quantities.
+
+Args:
+ - gal_fracdev_dir: "Theta direction": this is 1 or -1, depending on whether
+     increasing gal_fracdev increases the weight of this GalaxyCacheComponent
+     (1) or decreases it (-1).
+ - gal_fracdev_i: The weight given to this type of galaxy for this celestial object.
+     This is either gal_fracdev or (1 - gal_fracdev).
+ - gc: The galaxy component to be convolved
+ - pc: The psf component to be convolved
+ - pos: The location of the celestial object in pixel coordinates as a 2x1 vector
+ - gal_ab: The ratio of the galaxy minor axis to major axis (0 < gal_ab <= 1)
+ - gal_scale: The scale of the galaxy major axis
+
+Attributes:
+ - gal_fracdev_dir: Same as input
+ - gal_fracdev_i: Same as input
+ - bmc: A BvnComponent with the convolution.
+ - dSigma: A 3x3 matrix containing the derivates of
+     [Sigma11, Sigma12, Sigma22] (in the rows) with respect to
+     [gal_ab, gal_angle, gal_scale] (in the columns)
+"""
+struct GalaxyCacheComponent{NumType <: Number}
+    gal_fracdev_dir::Float64
+    gal_fracdev_i::NumType
+    bmc::BvnComponent{NumType}
+    sig_sf::GalaxySigmaDerivs{NumType}
+    # [Sigma11, Sigma12, Sigma22] x [gal_ab, gal_angle, gal_scale]
+end
+
+
+function GalaxyCacheComponent{NumType <: Number}(
+    gal_fracdev_dir::Float64, gal_fracdev_i::NumType,
+    gc::GalaxyComponent, pc::PsfComponent, pos::Vector{NumType},
+    gal_ab::NumType, gal_angle::NumType, gal_scale::NumType,
+    calculate_gradient::Bool, calculate_hessian::Bool)
+
+  XiXi = get_bvn_cov(gal_ab, gal_angle, gal_scale)
+  mean_s = @SVector NumType[pc.xiBar[1] + pos[1], pc.xiBar[2] + pos[2]]
+  var_s = pc.tauBar + gc.nuBar * XiXi
+  weight = pc.alphaBar * gc.etaBar  # excludes gal_fracdev
+
+  # d siginv / dsigma is only necessary for the Hessian.
+  bmc = BvnComponent(mean_s, var_s, weight, calculate_gradient && calculate_hessian)
+
+  if calculate_gradient
+    sig_sf = GalaxySigmaDerivs(
+      gal_angle, gal_ab, gal_scale, XiXi, gc.nuBar, calculate_hessian)
+  else
+    sig_sf = GalaxySigmaDerivs(NumType)
+  end
+
+  GalaxyCacheComponent(gal_fracdev_dir, gal_fracdev_i, bmc, sig_sf)
+end
+
+
+struct BvnBundle{T<:Real}
+    bvn_derivs::BivariateNormalDerivatives{T}
+    star_mcs::Matrix{BvnComponent{T}}
+    gal_mcs::Array{GalaxyCacheComponent{T},4}
+    function (::Type{BvnBundle{T}}){T}(psf_K::Int, S::Int)
+        return new{T}(BivariateNormalDerivatives{T}(),
+                      Matrix{BvnComponent{T}}(psf_K, S),
+                      Array{GalaxyCacheComponent{T}}(psf_K, 8, 2, S))
+    end
+end
+
+clear!(bvn_bundle::BvnBundle) = (clear!(bvn_bundle.bvn_derivs); bvn_bundle)
+
+
 """
 Convolve the current locations and galaxy shapes with the PSF.  If
 calculate_gradient is true, also calculate derivatives and hessians for

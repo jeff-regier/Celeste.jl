@@ -13,6 +13,7 @@ include("config.jl")
 include("Log.jl")
 
 include("SensitiveFloats.jl")
+include("BivariateNormals.jl")
 
 include("Coordinates.jl")
 

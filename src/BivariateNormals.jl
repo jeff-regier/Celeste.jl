@@ -1,10 +1,19 @@
-# Bivarate normals -- 2-d gaussians and their derivatives, as well as
-# derivatives of model components.
+"""BivarateNormals
+
+2-d gaussians and their derivatives.
+"""
+module BivariateNormals
+
+using StaticArrays
+using ..Celeste: Const, @aliasscope, @unroll_loop
+
+# TODO: Many parameter and type names sound specific to "galaxies". However,
+# they're actually general to bivariate normals or mixtures thereof.
+# Parameters should be renamed to reflect this.
 
 # Hardcoding this might not be needed but it is critical that this is
 # compile time constant.
 const GAL_SHAPE_IDS_LENGTH = 3
-@assert GAL_SHAPE_IDS_LENGTH == length(gal_shape_ids)
 
 """
 Unpack a rotation-parameterized BVN covariance matrix.
@@ -62,8 +71,8 @@ struct BivariateNormalDerivatives{NumType <: Number}
   bvn_u_d::Array{NumType, 1}
   bvn_uu_h::SizedMatrix{2, 2, NumType, 2}
   bvn_s_d::Array{NumType, 1}
-  bvn_ss_h::SizedMatrix{length(gal_shape_ids), length(gal_shape_ids), NumType, 2}
-  bvn_us_h::SizedMatrix{2, length(gal_shape_ids), NumType, 2}
+  bvn_ss_h::SizedMatrix{GAL_SHAPE_IDS_LENGTH, GAL_SHAPE_IDS_LENGTH, NumType, 2}
+  bvn_us_h::SizedMatrix{2, GAL_SHAPE_IDS_LENGTH, NumType, 2}
 
   function (::Type{BivariateNormalDerivatives{NumType}}){NumType}()
     py1 = zeros(NumType, 1)
@@ -84,11 +93,11 @@ struct BivariateNormalDerivatives{NumType <: Number}
     bvn_uu_h = zeros(NumType, 2, 2)
 
     # Shape deriviatives.  Here, s stands for "shape".
-    bvn_s_d = zeros(NumType, length(gal_shape_ids))
+    bvn_s_d = zeros(NumType, GAL_SHAPE_IDS_LENGTH)
 
     # The hessians.
-    bvn_ss_h = zeros(NumType, length(gal_shape_ids), length(gal_shape_ids))
-    bvn_us_h = zeros(NumType, 2, length(gal_shape_ids))
+    bvn_ss_h = zeros(NumType, GAL_SHAPE_IDS_LENGTH, GAL_SHAPE_IDS_LENGTH)
+    bvn_us_h = zeros(NumType, 2, GAL_SHAPE_IDS_LENGTH)
 
     new{NumType}(py1, py2, f_pre,
         bvn_x_d, bvn_sig_d, bvn_xx_h, bvn_xsig_h, bvn_sigsig_h,
@@ -347,12 +356,12 @@ function GalaxySigmaDerivs{NumType <: Number}(
 
     t = SArray{Tuple{3,3,3}, NumType, 3, 27}(sin_sq * 2 * gal_scale^2, -cos_sin * 2 * gal_scale^2, cos_sq * 2 * gal_scale^2,
       2cos_sin * 2 * gal_scale^2 * gal_ab, (sin_sq - cos_sq) * 2 * gal_scale^2 * gal_ab, -2cos_sin * 2 * gal_scale^2 * gal_ab,
-      2 * j[1, gal_shape_ids.gal_ab]  / gal_scale, 2 * j[2, gal_shape_ids.gal_ab]  / gal_scale, 2 * j[3, gal_shape_ids.gal_ab]  / gal_scale,
+      2 * j[1, 1]  / gal_scale, 2 * j[2, 1]  / gal_scale, 2 * j[3, 1]  / gal_scale,
       2cos_sin * 2 * gal_scale^2 * gal_ab, (sin_sq - cos_sq) * 2 * gal_scale^2 * gal_ab, -2cos_sin * 2 * gal_scale^2 * gal_ab,
       (cos_sq - sin_sq) * 2 * gal_scale^2 * (gal_ab^2 - 1), 2cos_sin * 2 * gal_scale^2 * (gal_ab^2 - 1), (sin_sq - cos_sq) * 2 * gal_scale^2 * (gal_ab^2 - 1),
-      2 * j[1, gal_shape_ids.gal_angle] / gal_scale, 2 * j[2, gal_shape_ids.gal_angle] / gal_scale, 2 * j[3, gal_shape_ids.gal_angle] / gal_scale,
-      2 * j[1, gal_shape_ids.gal_ab]  / gal_scale, 2 * j[2, gal_shape_ids.gal_ab]  / gal_scale, 2 * j[3, gal_shape_ids.gal_ab]  / gal_scale,
-      2 * j[1, gal_shape_ids.gal_angle] / gal_scale, 2 * j[2, gal_shape_ids.gal_angle] / gal_scale, 2 * j[3, gal_shape_ids.gal_angle] / gal_scale,
+      2 * j[1, 2] / gal_scale, 2 * j[2, 2] / gal_scale, 2 * j[3, 2] / gal_scale,
+      2 * j[1, 1]  / gal_scale, 2 * j[2, 1]  / gal_scale, 2 * j[3, 1]  / gal_scale,
+      2 * j[1, 2] / gal_scale, 2 * j[2, 2] / gal_scale, 2 * j[3, 2] / gal_scale,
       2 * XiXi[1 << (1 - 1)] / gal_scale^2, 2 * XiXi[1 << (2 - 1)] / gal_scale^2, 2 * XiXi[1 << (3 - 1)] / gal_scale^2)
 
   else
@@ -366,69 +375,6 @@ end
 GalaxySigmaDerivs{NumType}(::Type{NumType}) = GalaxySigmaDerivs(
                                                      @SMatrix(zeros(NumType,3,GAL_SHAPE_IDS_LENGTH)),
                                                      @SArray( zeros(NumType,3,GAL_SHAPE_IDS_LENGTH,GAL_SHAPE_IDS_LENGTH)))
-
-
-
-
-"""
-The convolution of a one galaxy component with one PSF component.
-It also contains the derivatives of sigma with respect to the shape parameters.
-It does not contain the derivatives with respect to other parameters
-(pos and gal_fracdev) because they have easy expressions in terms of other known
-quantities.
-
-Args:
- - gal_fracdev_dir: "Theta direction": this is 1 or -1, depending on whether
-     increasing gal_fracdev increases the weight of this GalaxyCacheComponent
-     (1) or decreases it (-1).
- - gal_fracdev_i: The weight given to this type of galaxy for this celestial object.
-     This is either gal_fracdev or (1 - gal_fracdev).
- - gc: The galaxy component to be convolved
- - pc: The psf component to be convolved
- - pos: The location of the celestial object in pixel coordinates as a 2x1 vector
- - gal_ab: The ratio of the galaxy minor axis to major axis (0 < gal_ab <= 1)
- - gal_scale: The scale of the galaxy major axis
-
-Attributes:
- - gal_fracdev_dir: Same as input
- - gal_fracdev_i: Same as input
- - bmc: A BvnComponent with the convolution.
- - dSigma: A 3x3 matrix containing the derivates of
-     [Sigma11, Sigma12, Sigma22] (in the rows) with respect to
-     [gal_ab, gal_angle, gal_scale] (in the columns)
-"""
-struct GalaxyCacheComponent{NumType <: Number}
-    gal_fracdev_dir::Float64
-    gal_fracdev_i::NumType
-    bmc::BvnComponent{NumType}
-    sig_sf::GalaxySigmaDerivs{NumType}
-    # [Sigma11, Sigma12, Sigma22] x [gal_ab, gal_angle, gal_scale]
-end
-
-
-function GalaxyCacheComponent{NumType <: Number}(
-    gal_fracdev_dir::Float64, gal_fracdev_i::NumType,
-    gc::GalaxyComponent, pc::PsfComponent, pos::Vector{NumType},
-    gal_ab::NumType, gal_angle::NumType, gal_scale::NumType,
-    calculate_gradient::Bool, calculate_hessian::Bool)
-
-  XiXi = get_bvn_cov(gal_ab, gal_angle, gal_scale)
-  mean_s = @SVector NumType[pc.xiBar[1] + pos[1], pc.xiBar[2] + pos[2]]
-  var_s = pc.tauBar + gc.nuBar * XiXi
-  weight = pc.alphaBar * gc.etaBar  # excludes gal_fracdev
-
-  # d siginv / dsigma is only necessary for the Hessian.
-  bmc = BvnComponent(mean_s, var_s, weight, calculate_gradient && calculate_hessian)
-
-  if calculate_gradient
-    sig_sf = GalaxySigmaDerivs(
-      gal_angle, gal_ab, gal_scale, XiXi, gc.nuBar, calculate_hessian)
-  else
-    sig_sf = GalaxySigmaDerivs(NumType)
-  end
-
-  GalaxyCacheComponent(gal_fracdev_dir, gal_fracdev_i, bmc, sig_sf)
-end
 
 
 ###################################################
@@ -508,7 +454,7 @@ function transform_bvn_derivs_hessian!{NumType <: Number}(
     # Second derviatives involving only shape parameters.
     # TODO: time consuming **************
     sig_sf_t = sig_sf.t
-    @unroll_loop for shape_id2 in 1:length(gal_shape_ids)
+    @unroll_loop for shape_id2 in 1:GAL_SHAPE_IDS_LENGTH
       @unroll_loop for shape_id1 in 1:shape_id2
         @inbounds @unroll_loop for sig_id1 in 1:3
           bvn_ss_h[shape_id1, shape_id2] += bvn_sig_d[sig_id1] * sig_sf_t[sig_id1, shape_id1, shape_id2]
@@ -519,7 +465,7 @@ function transform_bvn_derivs_hessian!{NumType <: Number}(
     bvn_sigsig_h = Const(bvn_derivs.bvn_sigsig_h)
     @unroll_loop for sig_id1 in 1:3
       @unroll_loop for sig_id2 in 1:3
-        @inbounds @unroll_loop for shape_id2 in 1:length(gal_shape_ids)
+        @inbounds @unroll_loop for shape_id2 in 1:GAL_SHAPE_IDS_LENGTH
           inner_term = bvn_sigsig_h[sig_id1, sig_id2] * sig_sf_j[sig_id2, shape_id2]
           @unroll_loop for shape_id1 in 1:shape_id2
             bvn_ss_h[shape_id1, shape_id2] += inner_term * sig_sf_j[sig_id1, shape_id1]
@@ -528,7 +474,7 @@ function transform_bvn_derivs_hessian!{NumType <: Number}(
       end
     end
 
-    @unroll_loop for shape_id2 in 1:length(gal_shape_ids)
+    @unroll_loop for shape_id2 in 1:GAL_SHAPE_IDS_LENGTH
       @inbounds @unroll_loop for shape_id1 in 1:shape_id2
         bvn_ss_h[shape_id2, shape_id1] = bvn_ss_h[shape_id1, shape_id2]
       end
@@ -537,7 +483,7 @@ function transform_bvn_derivs_hessian!{NumType <: Number}(
     # Second derivates involving both a shape term and a pos term.
     # TODO: time consuming **************
     bvn_xsig_h = Const(bvn_derivs.bvn_xsig_h)
-    @unroll_loop for shape_id in 1:length(gal_shape_ids)
+    @unroll_loop for shape_id in 1:GAL_SHAPE_IDS_LENGTH
       @unroll_loop for u_id in 1:2
         @unroll_loop for sig_id in 1:3
           @inbounds @unroll_loop for x_id in 1:2
@@ -582,7 +528,7 @@ function transform_bvn_derivs!{NumType <: Number}(
         sig_sf_j = sig_sf.j
 
         fast_fill!(bvn_s_d, 0.0)
-        @unroll_loop for shape_id in 1:length(gal_shape_ids)
+        @unroll_loop for shape_id in 1:GAL_SHAPE_IDS_LENGTH
           @inbounds @unroll_loop for sig_id in 1:3
             bvn_s_d[shape_id] += bvn_sig_d[sig_id] * sig_sf_j[sig_id, shape_id]
           end
@@ -595,15 +541,4 @@ function transform_bvn_derivs!{NumType <: Number}(
     end
 end
 
-struct BvnBundle{T<:Real}
-    bvn_derivs::BivariateNormalDerivatives{T}
-    star_mcs::Matrix{BvnComponent{T}}
-    gal_mcs::Array{GalaxyCacheComponent{T},4}
-    function (::Type{BvnBundle{T}}){T}(psf_K::Int, S::Int)
-        return new{T}(BivariateNormalDerivatives{T}(),
-                      Matrix{BvnComponent{T}}(psf_K, S),
-                      Array{GalaxyCacheComponent{T}}(psf_K, 8, 2, S))
-    end
-end
-
-clear!(bvn_bundle::BvnBundle) = (clear!(bvn_bundle.bvn_derivs); bvn_bundle)
+end  # module
