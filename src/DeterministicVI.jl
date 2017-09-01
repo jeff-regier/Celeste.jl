@@ -6,11 +6,11 @@ module DeterministicVI
 using Base.Threads: threadid, nthreads
 
 import ..Config
+using ..BivariateNormals: BivariateNormalDerivatives, BvnComponent,
+                          GalaxySigmaDerivs, get_bvn_cov, eval_bvn_pdf!,
+                          get_bvn_derivs!, transform_bvn_derivs!
 using ..Model
-import ..Model: BivariateNormalDerivatives, BvnComponent, GalaxyCacheComponent,
-                BvnBundle, GalaxySigmaDerivs, SkyPatch,
-                get_bvn_cov, eval_bvn_pdf!, get_bvn_derivs!,
-                transform_bvn_derivs!, populate_fsm!
+using ..Model: SkyPatch, BvnBundle, populate_fsm!
 import ..Celeste: Const, @aliasscope, @unroll_loop
 import ..Infer
 using ..SensitiveFloats

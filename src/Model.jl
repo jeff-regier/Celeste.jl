@@ -25,16 +25,16 @@ export NUM_COLOR_COMPONENTS, NUM_SOURCE_TYPES, NUM_BANDS,
        ids, star_ids, gal_ids, gal_shape_ids, psf_ids, bids
 
 
-import Base.convert
-import Base.+
+import Base: convert, length, +
 import Distributions
 import FITSIO, WCS
 import WCS.WCSTransform
 import ..Log
 import ..Celeste: Const, @aliasscope, @unroll_loop
 import ..SensitiveFloats: SensitiveFloat, clear!
-
-import Base.length
+using ..BivariateNormals: BivariateNormalDerivatives, BvnComponent,
+                          GalaxySigmaDerivs, get_bvn_cov, eval_bvn_pdf!,
+                          get_bvn_derivs!, transform_bvn_derivs!
 
 const cfgdir = joinpath(Pkg.dir("Celeste"), "cfg")
 
@@ -50,7 +50,6 @@ include("model/image_model.jl")
 include("model/param_set.jl")
 include("model/imaged_sources.jl")
 include("model/wcs_utils.jl")
-include("model/bivariate_normals.jl")
 include("model/fsm_util.jl")
 include("model/log_prob.jl")
 
