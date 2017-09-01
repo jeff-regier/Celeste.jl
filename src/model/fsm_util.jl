@@ -26,37 +26,42 @@ Attributes:
      [Sigma11, Sigma12, Sigma22] (in the rows) with respect to
      [gal_ab, gal_angle, gal_scale] (in the columns)
 """
-struct GalaxyCacheComponent{NumType <: Number}
+struct GalaxyCacheComponent{T<:Number}
     gal_fracdev_dir::Float64
-    gal_fracdev_i::NumType
-    bmc::BvnComponent{NumType}
-    sig_sf::GalaxySigmaDerivs{NumType}
+    gal_fracdev_i::T
+    bmc::BvnComponent{T}
+    sig_sf::GalaxySigmaDerivs{T}
     # [Sigma11, Sigma12, Sigma22] x [gal_ab, gal_angle, gal_scale]
 end
 
+function GalaxyCacheComponent(
+        gal_fracdev_dir::Float64,
+        gal_fracdev_i::T,
+        gc::GalaxyComponent,
+        pc::PsfComponent,
+        pos::Vector{T},
+        gal_ab::T,
+        gal_angle::T,
+        gal_scale::T,
+        calculate_gradient::Bool,
+        calculate_hessian::Bool) where {T<:Number}
 
-function GalaxyCacheComponent{NumType <: Number}(
-    gal_fracdev_dir::Float64, gal_fracdev_i::NumType,
-    gc::GalaxyComponent, pc::PsfComponent, pos::Vector{NumType},
-    gal_ab::NumType, gal_angle::NumType, gal_scale::NumType,
-    calculate_gradient::Bool, calculate_hessian::Bool)
+    XiXi = get_bvn_cov(gal_ab, gal_angle, gal_scale)
+    mean_s = @SVector T[pc.xiBar[1] + pos[1], pc.xiBar[2] + pos[2]]
+    var_s = pc.tauBar + gc.nuBar * XiXi
+    weight = pc.alphaBar * gc.etaBar  # excludes gal_fracdev
 
-  XiXi = get_bvn_cov(gal_ab, gal_angle, gal_scale)
-  mean_s = @SVector NumType[pc.xiBar[1] + pos[1], pc.xiBar[2] + pos[2]]
-  var_s = pc.tauBar + gc.nuBar * XiXi
-  weight = pc.alphaBar * gc.etaBar  # excludes gal_fracdev
+    # d siginv / dsigma is only necessary for the Hessian.
+    bmc = BvnComponent(mean_s, var_s, weight, calculate_gradient && calculate_hessian)
 
-  # d siginv / dsigma is only necessary for the Hessian.
-  bmc = BvnComponent(mean_s, var_s, weight, calculate_gradient && calculate_hessian)
+    if calculate_gradient
+        sig_sf = GalaxySigmaDerivs(gal_angle, gal_ab, gal_scale, XiXi,
+                                   gc.nuBar, calculate_hessian)
+    else
+        sig_sf = GalaxySigmaDerivs(T)
+    end
 
-  if calculate_gradient
-    sig_sf = GalaxySigmaDerivs(
-      gal_angle, gal_ab, gal_scale, XiXi, gc.nuBar, calculate_hessian)
-  else
-    sig_sf = GalaxySigmaDerivs(NumType)
-  end
-
-  GalaxyCacheComponent(gal_fracdev_dir, gal_fracdev_i, bmc, sig_sf)
+    GalaxyCacheComponent(gal_fracdev_dir, gal_fracdev_i, bmc, sig_sf)
 end
 
 
@@ -71,7 +76,10 @@ struct BvnBundle{T<:Real}
     end
 end
 
-clear!(bvn_bundle::BvnBundle) = (clear!(bvn_bundle.bvn_derivs); bvn_bundle)
+function zero!(bvn_bundle::BvnBundle)
+    BivariateNormals.zero!(bvn_bundle.bvn_derivs)
+    return bvn_bundle
+end
 
 
 """
@@ -100,19 +108,19 @@ Returns:
     - Source (index within active_sources)
   Hessians are only populated for s in ea.active_sources.
 """
-function load_bvn_mixtures!{NumType <: Number}(
+function load_bvn_mixtures!(
                     #outputs
-                    star_mcs::Matrix{BvnComponent{NumType}},
-                    gal_mcs::Array{GalaxyCacheComponent{NumType},4},
+                    star_mcs::Matrix{BvnComponent{T}},
+                    gal_mcs::Array{GalaxyCacheComponent{T},4},
                     #inputs
                     S::Int64,
                     patches::Matrix{SkyPatch},
-                    source_params::Vector{Vector{NumType}},
+                    source_params::Vector{Vector{T}},
                     active_sources::Vector{Int},
                     psf_K::Int64,
                     n::Int,
                     calculate_gradient::Bool=true,
-                    calculate_hessian::Bool=true)
+                    calculate_hessian::Bool=true) where {T<:Number}
     @assert size(star_mcs, 1) == psf_K
     @assert size(star_mcs, 2) == S
     # TODO: do not keep any derviative information if the sources are not in
@@ -134,7 +142,7 @@ function load_bvn_mixtures!{NumType <: Number}(
         # Convolve the star locations with the PSF.
         for k in 1:psf_K
             pc = psf[k]
-            mean_s = @SVector NumType[pc.xiBar[1] + m_pos[1], pc.xiBar[2] + m_pos[2]]
+            mean_s = @SVector T[pc.xiBar[1] + m_pos[1], pc.xiBar[2] + m_pos[2]]
             star_mcs[k, s] =
               BvnComponent(mean_s, pc.tauBar, pc.alphaBar, false)
         end
@@ -161,18 +169,20 @@ function load_bvn_mixtures!{NumType <: Number}(
     star_mcs, gal_mcs
 end
 
-function load_bvn_mixtures{NumType <: Number}(S::Int64,
-              patches::Matrix{SkyPatch},
-              source_params::Vector{Vector{NumType}},
-              active_sources::Vector{Int},
-              psf_K::Int64,
-              n::Int;
-              calculate_gradient::Bool=true,
-              calculate_hessian::Bool=true)
-    star_mcs = Matrix{BvnComponent{NumType}}(psf_K, S)
-    gal_mcs  = Array{GalaxyCacheComponent{NumType}}(psf_K, 8, 2, S)
-    load_bvn_mixtures!(star_mcs, gal_mcs, S, patches, source_params, active_sources,
-      psf_K, n, calculate_gradient, calculate_hessian)
+function load_bvn_mixtures(
+        S::Int64,
+        patches::Matrix{SkyPatch},
+        source_params::Vector{Vector{T}},
+        active_sources::Vector{Int},
+        psf_K::Int64,
+        n::Int;
+        calculate_gradient::Bool=true,
+        calculate_hessian::Bool=true) where {T<:Number}
+    star_mcs = Matrix{BvnComponent{T}}(psf_K, S)
+    gal_mcs  = Array{GalaxyCacheComponent{T}}(psf_K, 8, 2, S)
+    load_bvn_mixtures!(star_mcs, gal_mcs, S, patches, source_params,
+                       active_sources, psf_K, n, calculate_gradient,
+                       calculate_hessian)
 end
 
 
@@ -182,15 +192,15 @@ Populate fs0m and fs1m for source s in the a given pixel.
 Non-standard args:
     - x: The pixel location in the image
 """
-function populate_gal_fsm!{NumType <: Number}(
-                    bvn_derivs::BivariateNormalDerivatives{NumType},
-                    fs1m::SensitiveFloat{NumType},
-                    s::Int,
-                    x::SVector{2,Float64},
-                    is_active_source::Bool,
-                    wcs_jacobian::Matrix{Float64},
-                    gal_mcs::Array{GalaxyCacheComponent{NumType}, 4})
-    clear!(fs1m)
+function populate_gal_fsm!(
+        bvn_derivs::BivariateNormalDerivatives{T},
+        fs1m::SensitiveFloat{T},
+        s::Int,
+        x::SVector{2,Float64},
+        is_active_source::Bool,
+        wcs_jacobian::Matrix{Float64},
+        gal_mcs::Array{GalaxyCacheComponent{T}, 4}) where {T<:Number}
+    SensitiveFloats.zero!(fs1m)
     for i = 1:2 # Galaxy types
         for j in 1:8 # Galaxy component
             # If i == 2 then there are only six galaxy components.
@@ -213,17 +223,17 @@ Populate fs0m and fs1m for source s in the a given pixel.
 Non-standard args:
     - x: The pixel location in the image
 """
-function populate_fsm!{NumType <: Number}(
-                    bvn_derivs::BivariateNormalDerivatives{NumType},
-                    fs0m::SensitiveFloat{NumType},
-                    fs1m::SensitiveFloat{NumType},
+function populate_fsm!{T <: Number}(
+                    bvn_derivs::BivariateNormalDerivatives{T},
+                    fs0m::SensitiveFloat{T},
+                    fs1m::SensitiveFloat{T},
                     s::Int,
                     x::SVector{2,Float64},
                     is_active_source::Bool,
                     wcs_jacobian::Matrix{Float64},
-                    gal_mcs::Array{GalaxyCacheComponent{NumType}, 4},
-                    star_mcs::Array{BvnComponent{NumType}, 2})
-    clear!(fs0m)
+                    gal_mcs::Array{GalaxyCacheComponent{T}, 4},
+                    star_mcs::Array{BvnComponent{T}, 2})
+    SensitiveFloats.zero!(fs0m)
     for k = 1:size(star_mcs, 1) # PSF component
         accum_star_pos!(
             bvn_derivs, fs0m,
@@ -250,13 +260,12 @@ Args:
     - x: An offset for the component in pixel coordinates (e.g. a pixel location)
     - wcs_jacobian: The jacobian of the function pixel = F(world) at this location.
 """
-function accum_star_pos!{NumType <: Number}(
-                    bvn_derivs::BivariateNormalDerivatives{NumType},
-                    fs0m::SensitiveFloat{NumType},
-                    bmc::BvnComponent{NumType},
-                    x::SVector{2,Float64},
-                    wcs_jacobian::Array{Float64, 2},
-                    is_active_source::Bool)
+function accum_star_pos!(bvn_derivs::BivariateNormalDerivatives{T},
+                         fs0m::SensitiveFloat{T},
+                         bmc::BvnComponent{T},
+                         x::SVector{2,Float64},
+                         wcs_jacobian::Array{Float64, 2},
+                         is_active_source::Bool) where {T<:Number}
     eval_bvn_pdf!(bvn_derivs, bmc, x)
 
     if fs0m.has_gradient && is_active_source
@@ -292,13 +301,12 @@ end
 Add the contributions of a galaxy component term to the ELBO by
 updating fs1m in place.
 """
-function accum_galaxy_pos!{NumType <: Number}(
-                    bvn_derivs::BivariateNormalDerivatives{NumType},
-                    fs1m::SensitiveFloat{NumType},
-                    gcc::GalaxyCacheComponent{NumType},
-                    x::SVector{2,Float64},
-                    wcs_jacobian::Array{Float64, 2},
-                    is_active_source::Bool)
+function accum_galaxy_pos!(bvn_derivs::BivariateNormalDerivatives{T},
+                           fs1m::SensitiveFloat{T},
+                           gcc::GalaxyCacheComponent{T},
+                           x::SVector{2,Float64},
+                           wcs_jacobian::Array{Float64, 2},
+                           is_active_source::Bool) where {T<:Number}
     eval_bvn_pdf!(bvn_derivs, gcc.bmc, x)
     f = bvn_derivs.f_pre[1] * gcc.gal_fracdev_i
     fs1m.v[] += f

@@ -1,7 +1,7 @@
 # Functions to compute the log probability of star parameters and galaxy
 # parameters given pixel data
 using Distributions
-import ..SensitiveFloats: SensitiveFloat, clear!
+import ..SensitiveFloats: SensitiveFloat
 
 const eps_prob_a = 1e-6
 

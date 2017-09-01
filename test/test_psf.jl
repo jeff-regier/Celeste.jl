@@ -119,7 +119,7 @@ function test_psf_fit()
     #
     # end
 
-    clear!(pixel_value)
+    SensitiveFloats.zero!(pixel_value)
     PSF.evaluate_psf_pixel_fit!(
         x, psf_params, sig_sf_vec, bvn_vec,
         bvn_derivs, log_pdf, pdf, pixel_value, calculate_gradient)

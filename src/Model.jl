@@ -31,10 +31,13 @@ import FITSIO, WCS
 import WCS.WCSTransform
 import ..Log
 import ..Celeste: Const, @aliasscope, @unroll_loop
-import ..SensitiveFloats: SensitiveFloat, clear!
+import ..SensitiveFloats
+import ..SensitiveFloats: SensitiveFloat
+import ..BivariateNormals
 using ..BivariateNormals: BivariateNormalDerivatives, BvnComponent,
                           GalaxySigmaDerivs, get_bvn_cov, eval_bvn_pdf!,
-                          get_bvn_derivs!, transform_bvn_derivs!
+                          get_bvn_derivs!, transform_bvn_derivs!,
+                          transform_bvn_ux_derivs!
 
 const cfgdir = joinpath(Pkg.dir("Celeste"), "cfg")
 

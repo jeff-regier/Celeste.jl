@@ -112,28 +112,28 @@ function ElboIntermediateVariables(NumType::DataType,
         elbo_log_term, elbo, 0, 0)
 end
 
-function clear!{NumType <: Number}(elbo_vars::ElboIntermediateVariables{NumType})
-    clear!(elbo_vars.fs0m)
-    clear!(elbo_vars.fs1m)
-    clear!(elbo_vars.E_G_s)
-    clear!(elbo_vars.E_G2_s)
-    clear!(elbo_vars.var_G_s)
+function zero!(elbo_vars::ElboIntermediateVariables{T}) where {T<:Number}
+    SensitiveFloats.zero!(elbo_vars.fs0m)
+    SensitiveFloats.zero!(elbo_vars.fs1m)
+    SensitiveFloats.zero!(elbo_vars.E_G_s)
+    SensitiveFloats.zero!(elbo_vars.E_G2_s)
+    SensitiveFloats.zero!(elbo_vars.var_G_s)
 
     for i in 1:NUM_SOURCE_TYPES
-        fill!(elbo_vars.E_G_s_hsub_vec[i].u_u, zero(NumType))
-        fill!(elbo_vars.E_G_s_hsub_vec[i].shape_shape, zero(NumType))
-        fill!(elbo_vars.E_G2_s_hsub_vec[i].u_u, zero(NumType))
-        fill!(elbo_vars.E_G2_s_hsub_vec[i].shape_shape, zero(NumType))
+        fill!(elbo_vars.E_G_s_hsub_vec[i].u_u, zero(T))
+        fill!(elbo_vars.E_G_s_hsub_vec[i].shape_shape, zero(T))
+        fill!(elbo_vars.E_G2_s_hsub_vec[i].u_u, zero(T))
+        fill!(elbo_vars.E_G2_s_hsub_vec[i].shape_shape, zero(T))
     end
 
-    clear!(elbo_vars.E_G)
-    clear!(elbo_vars.var_G)
+    SensitiveFloats.zero!(elbo_vars.E_G)
+    SensitiveFloats.zero!(elbo_vars.var_G)
 
-    fill!(elbo_vars.combine_grad, zero(NumType))
-    fill!(elbo_vars.combine_hess, zero(NumType))
+    fill!(elbo_vars.combine_grad, zero(T))
+    fill!(elbo_vars.combine_hess, zero(T))
 
-    clear!(elbo_vars.elbo_log_term)
-    clear!(elbo_vars.elbo)
+    SensitiveFloats.zero!(elbo_vars.elbo_log_term)
+    SensitiveFloats.zero!(elbo_vars.elbo)
 end
 
 

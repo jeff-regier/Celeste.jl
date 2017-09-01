@@ -32,9 +32,9 @@ function calculate_G_s!{NumType <: Number}(
 
     # we'd like to get rid of these calls to `fill!`
     if is_active_source
-        clear!(E_G_s)
-        clear!(E_G2_s)
-        clear!(var_G_s)
+        SensitiveFloats.zero!(E_G_s)
+        SensitiveFloats.zero!(E_G2_s)
+        SensitiveFloats.zero!(var_G_s)
     else
         E_G_s.v[] = 0.0
         E_G2_s.v[] = 0.0
@@ -337,8 +337,8 @@ function add_pixel_term!{NumType <: Number}(
                     elbo_vars::ElboIntermediateVariables = ElboIntermediateVariables(NumType, ea.Sa))
     img = ea.images[n]
 
-    clear!(elbo_vars.E_G)
-    clear!(elbo_vars.var_G)
+    SensitiveFloats.zero!(elbo_vars.E_G)
+    SensitiveFloats.zero!(elbo_vars.var_G)
 
     for s in 1:ea.S
         p = ea.patches[s,n]
@@ -404,8 +404,8 @@ function elbo_likelihood{T}(ea::ElboArgs,
                             vp::VariationalParams{T},
                             elbo_vars::ElboIntermediateVariables = ElboIntermediateVariables(T, ea.Sa),
                             bvn_bundle::BvnBundle{T} = BvnBundle{T}(ea.psf_K, ea.S))
-    clear!(elbo_vars)
-    clear!(bvn_bundle)
+    zero!(elbo_vars)
+    Model.zero!(bvn_bundle)
 
     # this call loops over light sources (but not images)
     sbs = load_source_brightnesses(ea, vp)

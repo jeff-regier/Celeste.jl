@@ -14,14 +14,13 @@ using ..Model: SkyPatch, BvnBundle, populate_fsm!
 import ..Celeste: Const, @aliasscope, @unroll_loop
 import ..Infer
 using ..SensitiveFloats
-import ..SensitiveFloats.clear!
 import ..Log
 using ..Transform
 import DataFrames
 import Optim
 import ForwardDiff.Dual
 using StaticArrays
-import Base.convert
+import Base: convert
 
 export ElboArgs, generic_init_source, catalog_init_source, init_sources,
        VariationalParams, elbo, ElboIntermediateVariables
