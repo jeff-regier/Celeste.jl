@@ -13,7 +13,6 @@ using ..Model: GalaxySigmaDerivs, BivariateNormalDerivatives, get_bvn_derivs!,
                eval_bvn_pdf!, transform_bvn_derivs!, BvnComponent, get_bvn_cov
 using ..Transform
 using ..SensitiveFloats.SensitiveFloat
-import ..SensitiveFloats.clear!
 import ..SensitiveFloats
 
 import Optim
@@ -404,7 +403,7 @@ function evaluate_psf_pixel_fit!{NumType <: Number}(
         pdf::SensitiveFloat{NumType},
         pixel_value::SensitiveFloat{NumType},
         calculate_gradient::Bool)
-    clear!(pixel_value)
+    SensitiveFloats.zero!(pixel_value)
 
     K = length(psf_params)
     sigma_ids = (psf_ids.gal_ab, psf_ids.gal_angle, psf_ids.gal_scale)
@@ -416,8 +415,8 @@ function evaluate_psf_pixel_fit!{NumType <: Number}(
         get_bvn_derivs!(bvn_derivs, bvn, true, true)
         transform_bvn_derivs!(bvn_derivs, sig_sf_vec[k], I, true)
 
-        clear!(log_pdf)
-        clear!(pdf)
+        SensitiveFloats.zero!(log_pdf)
+        SensitiveFloats.zero!(pdf)
 
         # This is redundant, but it's what eval_bvn_pdf returns.
         log_pdf.v[] = log(bvn_derivs.f_pre[1])
@@ -519,10 +518,10 @@ function evaluate_psf_fit!{NumType <: Number}(
         calculate_gradient::Bool)
     K = length(psf_params)
     sigma_vec, sig_sf_vec, bvn_vec = get_sigma_from_params(psf_params)
-    clear!(squared_error)
+    SensitiveFloats.zero!(squared_error)
 
     @inbounds for x_ind in 1:length(x_mat)
-        clear!(pixel_value)
+        SensitiveFloats.zero!(pixel_value)
         evaluate_psf_pixel_fit!(
                 x_mat[x_ind], psf_params, sig_sf_vec, bvn_vec,
                 bvn_derivs, log_pdf, pdf, pixel_value, calculate_gradient)

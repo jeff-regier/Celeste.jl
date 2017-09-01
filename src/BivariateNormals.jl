@@ -106,7 +106,7 @@ struct BivariateNormalDerivatives{NumType <: Number}
   end
 end
 
-function clear!{T}(bvn_derivs::BivariateNormalDerivatives{T})
+function zero!(bvn_derivs::BivariateNormalDerivatives{T}) where {T}
     x = zero(T)
     fill!(bvn_derivs.py1, x)
     fill!(bvn_derivs.py2, x)
