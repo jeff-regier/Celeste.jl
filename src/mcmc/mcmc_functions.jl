@@ -90,6 +90,20 @@ Args:
   pos0: Initial location of the source in ra/dec
   pos_delta: (optional) determines how much ra/dec we allow the sampler
     to drift away from pos0
+
+Note on Galaxy Shapes: the `gal_scale` parameter is in pixels.  The 
+  Celeste parameterization sigma^2_{cel} is slightly different from the
+  Photo and SDSS parameterization for :half_light_radius_px (sigma^2_{sdss}).
+  The two have the following relationship:
+
+      sigma^2_{cel}  = sigma^2_{sdss} / sqrt(gal_ab)
+   => sigma^2_{sdss} = sigma^2_{cel} * sqrt(gal_ab)
+
+  The function `write_galaxy_unit_flux` is defined for sigma^2_{cel}, that is
+  a scale parameter in pixels that indicates the length of the major axis
+  (as given by the bivariate_normals.jl#get_bvn_cov function).
+
+  Also note that the scale prior defined below is over sigma^2_{cel}.
 """
 function make_gal_loglike(imgs::Array{Image},
                           pos0::Array{Float64, 1};
@@ -192,6 +206,7 @@ by number of pixels
 function make_location_prior(img::Image,
                              pos0::Array{Float64, 1};
                              pos_pixel_delta::Array{Float64, 1} = [1., 1.])
+
     # figure out lower and upper bounds on RA, Dec
     pos0_pix = WCS.world_to_pix(img.wcs, pos0)
     pos0_pix_lower = pos0_pix - .5 * pos_pixel_delta
@@ -200,8 +215,10 @@ function make_location_prior(img::Image,
     pos0_world_upper = WCS.pix_to_world(img.wcs, pos0_pix_upper)
 
     # lower and upper bounds on the ra/dec
-    ra_lo, ra_hi   = pos0_world_lower[1], pos0_world_upper[2]
-    dec_lo, dec_hi = pos0_world_lower[1], pos0_world_upper[2]
+    ra_lo, ra_hi   = sort([pos0_world_lower[1], pos0_world_upper[1]])
+    dec_lo, dec_hi = sort([pos0_world_lower[2], pos0_world_upper[2]])
+    @printf " ... limiting RA  to [%2.5f, %2.5f] \n" ra_lo ra_hi
+    @printf " ... limiting DEC to [%2.5f, %2.5f] \n" dec_lo dec_hi
 
     # corresponding uniform log likelihoods
     llra  = log(1./(ra_hi - ra_lo))
@@ -217,7 +234,7 @@ function make_location_prior(img::Image,
         return llra + lldec
     end
 
-    return pos_logprior
+    return pos_logprior, [ra_lo, ra_hi], [dec_lo, dec_hi]
 end
 
 
@@ -240,7 +257,7 @@ function make_gal_logprior()
         if !inrange(gal_angle, 0., pi)
             return -Inf
         end
-        if !inrange(gal_scale, 0., Inf)
+        if !inrange(gal_scale, 1e-5, Inf)
             return -Inf
         end
 

@@ -108,6 +108,17 @@ function catalog_to_data_frame_row(catalog_entry; objid="truth")
 end
 
 function samples_to_dataframe(chain; is_star=true)
+    """ Turns MCMC samples (star or galaxy chain) into a dataframe of samples 
+    with parameters we can compare to Photo and VB inferences
+
+    Conversions performed:
+      - lnfluxes  : lnfluxes => reference band lnflux and colors
+      - gal_angle : radians [0, pi] => degrees [0, 180]
+      - half_light_radius_px : the Celeste parameterization is uncoupled from
+         the minor_major_axis_ratio --- in the coadd+primary catalogs the
+         :half_light_radius_px is scaled by the sqrt of the
+         :minor_major_axis_ratio, e.g. px => px / sqrt(gal_ab)
+    """
     df = DataFrame()
 
     # reference band flux (+ log flux) and colors
@@ -123,8 +134,8 @@ function samples_to_dataframe(chain; is_star=true)
     if !is_star
       df[:de_vaucouleurs_mixture_weight] = chain[:, 8]
       df[:minor_major_axis_ratio]        = chain[:, 9]
-      df[:angle_deg]                     = chain[:, 10]
-      df[:half_light_radius_px]          = chain[:, 11]
+      df[:angle_deg]                     = chain[:, 10] * 360 / (2*pi) # rad => deg
+      df[:half_light_radius_px]          = chain[:, 11] .* sqrt.(df[:minor_major_axis_ratio])
     end
 
     return df
