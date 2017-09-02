@@ -37,9 +37,11 @@ function slicesample(init_x::Vector{Float64},
         end
 
         function acceptable(z, llh_s, L, U)
+            #println(" ... entered acceptable... ")
+            iter = 0
             while (U-L) > 1.1*sigma
                 middle = 0.5*(L+U)
-                splits = ((middle > 0) & (z >= middle)) | 
+                splits = ((middle > 0) & (z >= middle)) |
                          ((middle <= 0) & (z < middle))
                 if z < middle
                     U = middle
@@ -48,9 +50,21 @@ function slicesample(init_x::Vector{Float64},
                 end
                 # Probably these could be cached from the stepping out.
                 if splits & (llh_s >= dir_logprob(U)) & (llh_s >= dir_logprob(L))
+                    #println(" ... leaving acceptable... ")
                     return false
                 end
+
+                # catch infinite loops
+                if iter > 1000
+                  throw("acceptable caught in a loop --- exiting")
+                else
+                  iter += 1
+                end
+                if (iter > 100) && (iter % 100 == 0)
+                  println("has this gotten big yet? ", iter)
+                end
             end
+            #println(" ... leaving acceptable... ")
             return true
         end
 
