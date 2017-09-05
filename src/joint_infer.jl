@@ -232,9 +232,7 @@ function partition_cyclades(n_threads, target_sources, neighbor_map; batch_size=
     # Load balance the connected components within each batch into thread_sources_assignment.
     for (cur_batch, cur_batch_component) in enumerate(components)
         # Priority queue for load balancing.
-        pqueue = PriorityQueue([i for i=1:n_threads],
-                               [0 for i=1:n_threads],
-                               Base.Order.Forward)
+        pqueue = PriorityQueue(Base.Order.Forward, (i, 0) for i=1:n_threads)
 
         # Assign non-conflicting group of sources to different threads
         for (component_group_id, sources_of_component) in cur_batch_component

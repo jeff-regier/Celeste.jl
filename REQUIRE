@@ -2,7 +2,7 @@ julia 0.6
 BinDeps
 Compat 0.18.0
 DataFrames
-DataStructures 0.5.2
+DataStructures 0.7.0
 Distributions
 FITSIO 0.8.4
 DiffBase 0.0.3
