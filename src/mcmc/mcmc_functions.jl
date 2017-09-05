@@ -31,7 +31,7 @@ function make_star_loglike(imgs::Array{Image},
         offsets = zeros(2, length(imgs))
         active_bitmaps = [BitArray(ones(img.H, img.W)) for img in imgs]
     else
-        offsets = hcat([convert(Array{Float64, 1}, p.bitmap_offset)
+        offsets = hcat([convert(Array{Float64, 1}, p.bitmap_offset) - 1.
                         for p in patches]...)
         active_bitmaps = [p.active_pixel_bitmap for p in patches]
     end
@@ -125,7 +125,7 @@ function make_gal_loglike(imgs::Array{Image},
         offsets = zeros(2, length(imgs))
         active_bitmaps = [BitArray(ones(img.H, img.W)) for img in imgs]
     else
-        offsets = hcat([convert(Array{Float64, 1}, p.bitmap_offset)
+        offsets = hcat([convert(Array{Float64, 1}, p.bitmap_offset) - 1.
                         for p in patches]...)
         active_bitmaps = [p.active_pixel_bitmap for p in patches]
     end
