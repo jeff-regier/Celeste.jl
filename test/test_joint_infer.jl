@@ -495,17 +495,19 @@ if test_long_running
 
     # Test that we reach a higher objective with more iterations. This is a bit slow.
     test_one_node_joint_infer_obj_overlapping()
+
+    test_same_one_node_infer_twice()
+    test_different_result_with_different_iter()
+    test_same_result_with_diff_batch_sizes()
+
+    # Run this multiple times, since the cyclades algorithm shuffles the elements
+    # before batching them up.
+    for i=1:20
+        test_cyclades_partitioning()
+    end
+
+    test_one_node_joint_infer()
 end
 
 test_detect_sources()
-test_same_one_node_infer_twice()
-test_different_result_with_different_iter()
-test_same_result_with_diff_batch_sizes()
 
-# Run this multiple times, since the cyclades algorithm shuffles the elements
-# before batching them up.
-for i=1:20
-    test_cyclades_partitioning()
-end
-
-test_one_node_joint_infer()
