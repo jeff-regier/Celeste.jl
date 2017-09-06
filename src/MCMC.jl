@@ -12,6 +12,7 @@ include("mcmc/mcmc_functions.jl")
 
 # slice sampling function
 include("mcmc/slicesample.jl")
+include("mcmc/ais.jl")
 
 # misc MCMC functions
 include("mcmc/mcmc_misc.jl")
