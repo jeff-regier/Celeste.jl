@@ -1,4 +1,83 @@
 """
+Make star or galaxy logprior, loglike, log (unnormalized) posterior.
+"""
+function make_inference_functions(imgs::Array{Image},
+          entry::CatalogEntry;
+          pos_delta::Array{Float64, 1}=[2., 2.],
+          patches::Array{SkyPatch, 1}=nothing,
+          background_images::Array{Array{Float64, 2}, 1}=nothing,
+          is_star=true)
+
+    # position log prior --- same for both star and galaxy (constrains to a 
+    # small window around the existing catalog location.  Because the range
+    # of RA,DEC values is so small, numerical underflow becomes an issue in
+    # the slice sampler.  The generic parameter representation of the (ra,dec)
+    # position of the sampler will be on [0, 1]^2.  We transform this value
+    # before feeding it into the likelihood (but slice sampler machineary will
+    # be on the scale of [0, 1]).
+    pos_logprior, ra_lim, dec_lim =
+        make_location_prior(imgs[1], entry.pos; pos_pixel_delta=pos_delta)
+
+    function uniform_to_deg(u)
+        ra  = (ra_lim[2]  - ra_lim[1] )*u[1] + ra_lim[1]
+        dec = (dec_lim[2] - dec_lim[1])*u[2] + dec_lim[1]
+        return [ra, dec]
+    end
+
+    if is_star
+        # star parameters are [lnfluxes, upos]
+        loglike = make_star_loglike(imgs;
+                                    patches=patches,
+                                    background_images=background_images,
+                                    pos_transform=uniform_to_deg)
+
+        function logprior(th)
+            lnfluxes, pos = th[1:5], uniform_to_deg(th[6:end])
+            return logflux_logprior(lnfluxes; is_star=true) +
+                   pos_logprior(pos)
+        end
+
+        function sample_prior()
+            lnfluxes = MCMC.sample_logfluxes(; is_star=true)
+            pos      = rand(2)
+            return [lnfluxes..., pos...]
+        end
+
+    else
+        # gal parameters are [lnfluxes, upos, gal_shape]
+        loglike = make_gal_loglike(imgs;
+                                   patches=patches,
+                                   background_images=background_images,
+                                   pos_transform=uniform_to_deg)
+        gal_logprior = make_gal_logprior()
+        function logprior(th)
+            _, pos, _ = th[1:5], uniform_to_deg(th[6:7]), th[8:end]
+            return gal_logprior(th) + pos_logprior(pos)
+        end
+
+        th_cat = parameters_from_catalog(entry; is_star=false)
+        cat_shape = th_cat[8:end]
+        function sample_prior()
+            lnfluxes = MCMC.sample_logfluxes(; is_star=false)
+            pos = rand(2)
+            return [lnfluxes..., pos..., cat_shape...]
+        end
+    end
+
+    function logpost(th)
+        llprior = logprior(th)
+        if llprior < -1e100
+            return llprior
+        end
+        return loglike(th) + llprior
+    end
+
+    return loglike, logprior, logpost, sample_prior,
+           ra_lim, dec_lim, uniform_to_pos
+end
+
+
+"""
 Star log likelihood maker.  Creates a star log prob function that is
 parameterized by a flat vector
 
@@ -6,21 +85,11 @@ parameterized by a flat vector
 
 Args:
   imgs: Array of observed data Images with the .pixel field
-  pos0: Initial location of the source in ra/dec
-  pos_delta: (optional) determines how much ra/dec we allow the sampler
-    to drift away from pos0
 """
-function make_star_loglike(imgs::Array{Image},
-                           pos0::Array{Float64, 1};
-                           pos_delta::Array{Float64, 1}=[1., 1.],
+function make_star_loglike(imgs::Array{Image};
                            patches::Array{SkyPatch, 1}=nothing,
-                           background_images::Array{Array{Float64, 2}, 1}=nothing)
-
-    # create a function that constrains the pixel location to
-    # be within pos0 +- [pos_delta]
-    constrain_pos, unconstrain_pos =
-        make_position_transformations(pos0, pos_delta)
-
+                           background_images::Array{Array{Float64, 2}, 1}=nothing,
+                           pos_transform::Function=nothing)
     # create background images --- sky noise and neighbors if there
     if background_images == nothing
         background_images = make_empty_background_images(imgs)
@@ -38,10 +107,12 @@ function make_star_loglike(imgs::Array{Image},
 
     # create function to return
     function star_loglike(th::Array{Float64, 1})
+
         # unpack log fluxes and location (ra, dec)
-        #lnfluxes, unc_pos = th[1:5], th[6:end]
-        #pos = constrain_pos(unc_pos)
         lnfluxes, pos = th[1:5], th[6:end]
+        if pos_transform != nothing
+            pos = pos_transform(pos)
+        end
 
         ll = 0.
         for ii in 1:length(imgs)
@@ -75,7 +146,7 @@ function make_star_loglike(imgs::Array{Image},
         return ll
     end
 
-    return star_loglike, constrain_pos, unconstrain_pos
+    return star_loglike
 end
 
 
@@ -105,15 +176,10 @@ Note on Galaxy Shapes: the `gal_scale` parameter is in pixels.  The
 
   Also note that the scale prior defined below is over sigma^2_{cel}.
 """
-function make_gal_loglike(imgs::Array{Image},
-                          pos0::Array{Float64, 1};
-                          pos_delta::Array{Float64, 1}=[1., 1.],
+function make_gal_loglike(imgs::Array{Image};
                           patches::Array{SkyPatch, 1}=nothing,
-                          background_images::Array{Array{Float64, 2}, 1}=nothing)
-    # create a function that constrains the pixel location to be within
-    # pos0 +- [pos_delta]
-    constrain_pos, unconstrain_pos =
-        make_position_transformations(pos0, pos_delta)
+                          background_images::Array{Array{Float64, 2}, 1}=nothing,
+                          pos_transform::Function=nothing)
 
     # create background images --- sky noise and neighbors if there
     if background_images == nothing
@@ -147,9 +213,11 @@ function make_gal_loglike(imgs::Array{Image},
     function gal_loglike(th::Array{Float64, 1}; print_params=false)
 
         # unpack location and log fluxes (smushed)
-        lnfluxes, unc_pos, ushape = th[1:5], th[6:7], th[8:end]
-        pos = unc_pos #constrain_pos(unc_pos)
+        lnfluxes, pos, ushape = th[1:5], th[6:7], th[8:end]
         gal_frac_dev, gal_ab, gal_angle, gal_scale = ushape
+        if pos_transform != nothing
+            pos = pos_transform(pos)
+        end
 
         if print_params
           pretty_print_galaxy_params(th)
@@ -186,11 +254,10 @@ function make_gal_loglike(imgs::Array{Image},
                 end
             end
         end
-
-    return ll
+        return ll
     end
 
-    return gal_loglike, constrain_pos, unconstrain_pos
+    return gal_loglike
 end
 
 
