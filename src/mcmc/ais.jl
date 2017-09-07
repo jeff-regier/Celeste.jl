@@ -14,7 +14,8 @@ Args:
     - init_logZ : (optional) initial log partition (unused for now)
     - schedule  : temperature schedule, monotonically increasing from 0 to 1
 """
-function ais(lnpdf, lnpdf0, step, z0; init_logZ=nothing, schedule=nothing)
+function ais(lnpdf, lnpdf0, step, z0;
+             init_logZ=nothing, schedule=nothing, verbose=false)
     # set up initial log partition function for p(z) --- should be ln(1) = 0
     D = length(z0)
 
@@ -27,6 +28,12 @@ function ais(lnpdf, lnpdf0, step, z0; init_logZ=nothing, schedule=nothing)
 
     # set up function that returns intermediate distributions
     function lnpdf_t(z, t)
+        # do this to catch the 0 * -Inf = NaN cases
+        if t==0.
+            return lnpdf0(z)
+        elseif t==1.
+            return lnpdf(z)
+        end
         return t*lnpdf(z) + (1.-t)*lnpdf0(z)
     end
 
@@ -37,6 +44,9 @@ function ais(lnpdf, lnpdf0, step, z0; init_logZ=nothing, schedule=nothing)
     for ti in 2:length(schedule)
         # unpack previous and current temperatures
         tprev, tcurr = schedule[ti-1], schedule[ti]
+        if ti % 25 == 0
+            @printf "  temp %2.3f (%d/%d): logpost = %2.4f  logprior = %2.4f\n" tcurr ti length(schedule) lnpdf(z) lnpdf0(z)
+        end
 
         # generate zt | zt-1 using tcurr --- this leaves the distribution
         #   lnp_t = tcurr*lnpdf(z) + (1-tcurr)*lnpdf0(0) invariant
@@ -99,17 +109,26 @@ function ais_slicesample(logposterior::Function,
                          schedule::Array{Float64,1}=nothing,
                          num_temps::Int=50,
                          num_samps::Int=10,
-                         num_bootstrap::Int=5000)
+                         num_bootstrap::Int=5000,
+                         num_samples_per_step::Int=1)
     if schedule == nothing
-        schedule = sigmoid_schedule(num_temps; rad=4)
+        schedule = sigmoid_schedule(num_temps; rad=1)
+    end
+
+    function step(z, lnpdf)
+        for i in 1:num_samples_per_step
+            z, llh = MCMC.slicesample(z, lnpdf)
+        end
+        return z, 0.
     end
 
     D = length(prior_sample())
     zsamps = zeros(D, num_samps)
     wsamps = zeros(num_samps)
     for n in 1:num_samps
+        @printf "ais samp %d / %d\n" n num_samps
         z0   = prior_sample()
-        step = (z, lnpdf) -> MCMC.slicesample(z, lnpdf)
+        #step = (z, lnpdf) -> MCMC.slicesample(z, lnpdf)
         z, w, llrats, _ = ais(logposterior, logprior, step, z0; schedule=schedule)
         zsamps[:,n] = z
         wsamps[n]   = w
