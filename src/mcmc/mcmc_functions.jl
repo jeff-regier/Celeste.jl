@@ -1,13 +1,11 @@
 """
-Make star or galaxy logprior, loglike, log (unnormalized) posterior.
+Make all star inference functiouns: prior, loglike, log (unnormalized) posterior.
 """
-function make_inference_functions(imgs::Array{Image},
+function make_star_inference_functions(imgs::Array{Image},
           entry::CatalogEntry;
           pos_delta::Array{Float64, 1}=[2., 2.],
           patches::Array{SkyPatch, 1}=nothing,
-          background_images::Array{Array{Float64, 2}, 1}=nothing,
-          is_star=true)
-
+          background_images::Array{Array{Float64, 2}, 1}=nothing)
     # position log prior --- same for both star and galaxy (constrains to a 
     # small window around the existing catalog location.  Because the range
     # of RA,DEC values is so small, numerical underflow becomes an issue in
@@ -15,53 +13,25 @@ function make_inference_functions(imgs::Array{Image},
     # position of the sampler will be on [0, 1]^2.  We transform this value
     # before feeding it into the likelihood (but slice sampler machineary will
     # be on the scale of [0, 1]).
-    pos_logprior, ra_lim, dec_lim =
+    pos_logprior, ra_lim, dec_lim, uniform_to_deg, deg_to_uniform =
         make_location_prior(imgs[1], entry.pos; pos_pixel_delta=pos_delta)
 
-    function uniform_to_deg(u)
-        ra  = (ra_lim[2]  - ra_lim[1] )*u[1] + ra_lim[1]
-        dec = (dec_lim[2] - dec_lim[1])*u[2] + dec_lim[1]
-        return [ra, dec]
+    # star parameters are [lnfluxes, upos]
+    loglike = make_star_loglike(imgs;
+                                patches=patches,
+                                background_images=background_images,
+                                pos_transform=uniform_to_deg)
+
+    function logprior(th)
+        lnfluxes, pos = th[1:5], uniform_to_deg(th[6:end])
+        return logflux_logprior(lnfluxes; is_star=true) +
+               pos_logprior(pos)
     end
 
-    if is_star
-        # star parameters are [lnfluxes, upos]
-        loglike = make_star_loglike(imgs;
-                                    patches=patches,
-                                    background_images=background_images,
-                                    pos_transform=uniform_to_deg)
-
-        function logprior(th)
-            lnfluxes, pos = th[1:5], uniform_to_deg(th[6:end])
-            return logflux_logprior(lnfluxes; is_star=true) +
-                   pos_logprior(pos)
-        end
-
-        function sample_prior()
-            lnfluxes = MCMC.sample_logfluxes(; is_star=true)
-            pos      = rand(2)
-            return [lnfluxes..., pos...]
-        end
-
-    else
-        # gal parameters are [lnfluxes, upos, gal_shape]
-        loglike = make_gal_loglike(imgs;
-                                   patches=patches,
-                                   background_images=background_images,
-                                   pos_transform=uniform_to_deg)
-        gal_logprior = make_gal_logprior()
-        function logprior(th)
-            _, pos, _ = th[1:5], uniform_to_deg(th[6:7]), th[8:end]
-            return gal_logprior(th) + pos_logprior(pos)
-        end
-
-        th_cat = parameters_from_catalog(entry; is_star=false)
-        cat_shape = th_cat[8:end]
-        function sample_prior()
-            lnfluxes = MCMC.sample_logfluxes(; is_star=false)
-            pos = rand(2)
-            return [lnfluxes..., pos..., cat_shape...]
-        end
+    function sample_prior()
+        lnfluxes = sample_logfluxes(; is_star=true)
+        pos      = rand(2)
+        return [lnfluxes..., pos...]
     end
 
     function logpost(th)
@@ -72,8 +42,56 @@ function make_inference_functions(imgs::Array{Image},
         return loglike(th) + llprior
     end
 
+    # quick test
+    #th_cat = [log.(entry.star_fluxes)..., deg_to_uniform(entry.pos)...]
+    #th_rand = th_cat #sample_star_prior()
+    #println("star loglike at CATALOG vs PRIOR : ", star_loglike(th_cat), ", ", star_loglike(th_rand))
+    #println("star logprior at CATALOG vs PRIOR : ", star_logprior(th_cat), ", ", star_logprior(th_rand))
     return loglike, logprior, logpost, sample_prior,
-           ra_lim, dec_lim, uniform_to_pos
+           ra_lim, dec_lim, uniform_to_deg, deg_to_uniform
+end
+
+
+"""
+Make all star inference functiouns: prior, loglike, log (unnormalized) posterior.
+"""
+function make_gal_inference_functions(imgs::Array{Image},
+          entry::CatalogEntry;
+          pos_delta::Array{Float64, 1}=[2., 2.],
+          patches::Array{SkyPatch, 1}=nothing,
+          background_images::Array{Array{Float64, 2}, 1}=nothing)
+    # constrained location prior (same as above)
+    pos_logprior, ra_lim, dec_lim, uniform_to_deg, deg_to_uniform =
+        make_location_prior(imgs[1], entry.pos; pos_pixel_delta=pos_delta)
+
+    # gal parameters are [lnfluxes, upos, gal_shape]
+    loglike = make_gal_loglike(imgs;
+                               patches=patches,
+                               background_images=background_images,
+                               pos_transform=uniform_to_deg)
+    gal_logprior = make_gal_logprior()
+    function logprior(th)
+        _, pos, _ = th[1:5], uniform_to_deg(th[6:7]), th[8:end]
+        return gal_logprior(th) + pos_logprior(pos)
+    end
+
+    th_cat = parameters_from_catalog(entry; is_star=false)
+    cat_shape = th_cat[8:end]
+    function sample_prior()
+        lnfluxes = sample_logfluxes(; is_star=false)
+        pos = rand(2)
+        return [lnfluxes..., pos..., cat_shape...]
+    end
+
+    function logpost(th)
+        llprior = logprior(th)
+        if llprior < -1e100
+            return llprior
+        end
+        return loglike(th) + llprior
+    end
+    return loglike, logprior, logpost, sample_prior,
+           ra_lim, dec_lim, uniform_to_deg, deg_to_uniform
 end
 
 
@@ -301,7 +319,20 @@ function make_location_prior(img::Image,
         return llra + lldec
     end
 
-    return pos_logprior, [ra_lo, ra_hi], [dec_lo, dec_hi]
+    function uniform_to_deg(u)
+        ra  = (ra_hi  - ra_lo ) * u[1] + ra_lo
+        dec = (dec_hi - dec_lo) * u[2] + dec_lo
+        return [ra, dec]
+    end
+
+    function deg_to_uniform(radec)
+        u = [ (radec[1] - ra_lo)  / (ra_hi  - ra_lo),
+              (radec[2] - dec_lo) / (dec_hi - dec_lo) ]
+        return u
+    end
+
+    return pos_logprior, [ra_lo, ra_hi], [dec_lo, dec_hi],
+           uniform_to_deg, deg_to_uniform
 end
 
 
