@@ -21,7 +21,7 @@ function slicesample(init_x::Vector{Float64},
                      logprob::Function;
                      sigma = 1.,
                      step_out=true,
-                     max_steps_out=1000,
+                     max_steps_out=10,
                      compwise=true,
                      numdir=2,
                      doubling_step = true,
@@ -38,9 +38,10 @@ function slicesample(init_x::Vector{Float64},
 
         function acceptable(z, llh_s, L, U)
             #println(" ... entered acceptable... ")
+            starting_width = U - L
             Lt, Ut = L, U
             iter = 0
-            while (Ut-Lt) > 1.1*sigma
+            while ((Ut-Lt) > 1.1*sigma) && ((Ut - Lt) < 1.1*starting_width)
                 middle = 0.5*(Lt + Ut)
                 splits = ((middle > 0) && (z >= middle)) ||
                          ((middle <= 0) && (z < middle))
@@ -63,6 +64,8 @@ function slicesample(init_x::Vector{Float64},
                 end
                 if (iter > 100) && (iter % 100 == 0)
                   @printf "stuck in acceptable: interval = %2.4f; 1.1*sigma = %2.4f\n" (Ut - Lt) 1.1*sigma
+                  println("  interval: ", Ut - Lt)
+                  println("  starting width: ", starting_width)
                 end
             end
             #println(" ... leaving acceptable... ")
@@ -115,6 +118,13 @@ function slicesample(init_x::Vector{Float64},
         # uniformly sample - perform shrinkage (with accept check) on
         # interval I = [lower, upper]
         start_lower, start_upper = lower, upper
+        if (start_upper - start_lower) > 1e5
+            println("  ... pre-shrinkage interval size: ", start_upper-start_lower)
+            println("  ... lower ", start_lower)
+            println("  ... upper ", start_upper)
+            println("  ... num steps out ....", l_steps_out + u_steps_out)
+            println("  ... dir ", direction)
+        end
         steps_in, new_z, new_llh = 0, 0., -Inf
         while true
             steps_in += 1

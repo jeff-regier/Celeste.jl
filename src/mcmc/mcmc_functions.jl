@@ -75,12 +75,13 @@ function make_gal_inference_functions(imgs::Array{Image},
         return gal_logprior(th) + pos_logprior(pos)
     end
 
-    th_cat = parameters_from_catalog(entry; is_star=false)
-    cat_shape = th_cat[8:end]
+    #th_cat = parameters_from_catalog(entry; is_star=false)
+    #cat_shape = th_cat[8:end]
     function sample_prior()
         lnfluxes = sample_logfluxes(; is_star=false)
         pos = rand(2)
-        return [lnfluxes..., pos..., cat_shape...]
+        shape = sample_galaxy_shape()
+        return [lnfluxes..., pos..., shape...]
     end
 
     function logpost(th)
@@ -360,7 +361,7 @@ function make_gal_logprior()
         end
 
         # uniform over angle, ll log normal over scale
-        llangle = log(pi)
+        llangle = -log(pi)
         llscale = logpdf(prior.galaxy.gal_scale, gal_scale)
         if isinf(llangle)
           println(" angle bad!")
@@ -372,6 +373,17 @@ function make_gal_logprior()
         return ll
     end
     return gal_logprior
+end
+
+
+param_prior = Model.construct_prior()
+
+function sample_galaxy_shape()
+    gal_frac_dev = rand()
+    gal_ab       = rand()
+    gal_angle    = rand() * pi
+    gal_scale = rand(param_prior.galaxy.gal_scale)
+    return [gal_frac_dev, gal_ab, gal_angle, gal_scale]
 end
 
 
@@ -519,8 +531,7 @@ function logflux_logprior(lnfluxes::Vector{Float64}; is_star::Bool=true)
     lnr, colors = logfluxes_to_colors(lnfluxes)
 
     # compute brightness distribution
-    #llr = logpdf(Normal(pp.r_μ[type_i], 2*pp.r_σ²[type_i]), lnr)
-    llr = logpdf(Normal(pp.flux_mean[type_i], 2*pp.flux_var[type_i]), lnr)
+    llr = logpdf(Normal(pp.flux_mean[type_i], sqrt(pp.flux_var[type_i])), lnr)
 
     # compute color likelihoods (mixture model --- computes all component lls)
     nc, nk, ns = size(pp.color_mean)
@@ -557,7 +568,7 @@ function sample_logfluxes(; is_star=true, lnr=nothing)
 
     # sample log r
     if lnr == nothing
-        lnr = rand(Normal(pp.flux_mean[type_i], 2*pp.flux_var[type_i]))
+        lnr = rand(Normal(pp.flux_mean[type_i], sqrt(pp.flux_var[type_i])))
     end
 
     # sample colors
@@ -583,23 +594,9 @@ end
 
 function sample_logr(; is_star=true)
     type_i = is_star ? 1 : 2
-    lnr = rand(Normal(pp.flux_mean[type_i], 2*pp.flux_var[type_i]))
+    lnr = rand(Normal(pp.flux_mean[type_i], sqrt(pp.flux_var[type_i])))
     return lnr
 end
-
-
-#function sample_fluxes(i::Int, r_s)
-#    k_s = rand(Distributions.Categorical(pp.k[i]))
-#    c_s = rand(Distributions.MvNormal(pp.c[i][:, k_s], pp.c[i][:, :, k_s]))
-#
-#    l_s = Vector{Float64}(5)
-#    l_s[3] = r_s
-#    l_s[4] = l_s[3] * exp(c_s[3])
-#    l_s[5] = l_s[4] * exp(c_s[4])
-#    l_s[2] = l_s[3] / exp(c_s[2])
-#    l_s[1] = l_s[2] / exp(c_s[1])
-#    l_s
-#end
 
 """
 Convert catalog entry into unconstrained parameters for star or gal loglikes
