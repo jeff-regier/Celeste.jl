@@ -142,14 +142,33 @@ end
     @test check_row(:angle_deg)
 end
 
-@testset "sky distance" begin
-    @test isapprox(AccuracyBenchmark.sky_distance_px(0.0, 0.0, 0.02, 0.01), 203.27, atol=0.01)
-    @test isapprox(AccuracyBenchmark.sky_distance_px(0.0, 70.0, 0.02, 70.01), 110.14, atol=0.01)
 
-    ras = [0.04, 0.02, 0.06]
-    decs = [0.04, 0.01, 0.06]
-    matching_indices = AccuracyBenchmark.match_position(ras, decs, 0.0, 0.0, 210)
-    @test matching_indices == [2]
-    matching_indices = AccuracyBenchmark.match_position(ras[[1,3]], decs[[1,3]], 0.0, 0.0, 150)
-    @test isempty(matching_indices)
+@testset "match catalogs" begin
+    ra = [0.0, 1.0, 2.0, 3.0]
+    dec = [50.0, 51.0, 52.0, 53.0]
+    truth = DataFrame(Any[ra, dec], [:right_ascension_deg, :declination_deg])
+
+    off = 1.0 / 7200.0 # ~half an arcsecond
+    ra1 = [0.0 + off, 1.0 - off, 5.0, 3.0 + off, 4.0]
+    dec1 = [50.0 - off, 51.0 + off, 60.0, 53.0 - off, 50.0]
+    pred1 = DataFrame(Any[ra1, dec1], [:right_ascension_deg, :declination_deg])
+
+    ra2 = [3.0 - off, 0.0 - off, 7.0, 5.0, 4.0]
+    dec2 = [53.0 + off, 50.0 + off, 51.0, 60.0, 50.0]
+    pred2 = DataFrame(Any[ra2, dec2], [:right_ascension_deg, :declination_deg])
+
+    truth_matched, predictions_matched =
+        AccuracyBenchmark.match_catalogs(truth, [pred1, pred2])
+
+    @test nrow(truth_matched) == 2
+    @test length(predictions_matched) == 2
+    for pred in predictions_matched
+        @test nrow(pred) == 2
+    end
+    @test truth_matched[:right_ascension_deg] == [0.0, 3.0]
+    @test truth_matched[:declination_deg] == [50.0, 53.0]
+    @test predictions_matched[1][:right_ascension_deg] == [0.0 + off, 3.0 + off]
+    @test predictions_matched[1][:declination_deg] == [50.0 - off, 53.0 - off]
+    @test predictions_matched[2][:right_ascension_deg] == [0.0 - off, 3.0 - off]
+    @test predictions_matched[2][:declination_deg] == [50.0 + off, 53.0 + off]
 end

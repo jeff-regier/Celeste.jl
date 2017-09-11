@@ -12,7 +12,7 @@ import ..Infer
 import ..Model
 import ..ParallelRun
 import ..SDSSIO
-import ..Coordinates: match_coordinates
+using ..Coordinates: angular_separation, match_coordinates
 
 const ARCSEC_PER_DEGREE = 3600
 const SDSS_ARCSEC_PER_PIXEL = 0.396
@@ -787,12 +787,12 @@ function get_error_df(truth::DataFrame, predicted::DataFrame)
     errors[:missed_stars] = ifelse.(!true_galaxy, predicted_galaxy, NA)
     errors[:missed_galaxies] = ifelse.(true_galaxy, !predicted_galaxy, NA)
 
-    errors[:position] = sky_distance_px.(
-        truth[:right_ascension_deg],
-        truth[:declination_deg],
-        predicted[:right_ascension_deg],
-        predicted[:declination_deg],
-    )
+    errors[:position] =
+        (ARCSEC_PER_DEGREE / SDSS_ARCSEC_PER_PIXEL) .*
+        angular_separation.(truth[:right_ascension_deg],
+                            truth[:declination_deg],
+                            predicted[:right_ascension_deg],
+                            predicted[:declination_deg])
 
     # compare flux in both mags and nMgy for now
     errors[:reference_band_flux_mag] = abs(
@@ -999,25 +999,6 @@ end
 ################################################################################
 # Utilities
 ################################################################################
-
-"""
-Return distance in pixels using small-distance approximation. Falls apart at poles and RA boundary.
-"""
-function sky_distance_px(ra1, dec1, ra2, dec2)
-    distance_deg = sqrt((dec2 - dec1)^2 + (cosd(dec1) * (ra2 - ra1))^2)
-    distance_deg * ARCSEC_PER_DEGREE / SDSS_ARCSEC_PER_PIXEL
-end
-
-"""
-Return indices of positions in `ras`, `decs` that are within a distance `maxdist_px` of the target
-position `ra`, `dec`.
-"""
-function match_position(ras, decs, ra, dec, maxdist_px)
-    @assert length(ras) == length(decs)
-    filter(eachindex(ras)) do index
-        sky_distance_px(ra, dec, ras[index], decs[index]) < maxdist_px
-    end
-end
 
 # Run Celeste with any combination of single/joint inference
 function run_celeste(
