@@ -148,7 +148,7 @@ end
     dec = [50.0, 51.0, 52.0, 53.0]
     truth = DataFrame(Any[ra, dec], [:right_ascension_deg, :declination_deg])
 
-    off = 1.0 / 7200.0 # ~half an arcsecond
+    off = 0.2 / 3600.0
     ra1 = [0.0 + off, 1.0 - off, 5.0, 3.0 + off, 4.0]
     dec1 = [50.0 - off, 51.0 + off, 60.0, 53.0 - off, 50.0]
     pred1 = DataFrame(Any[ra1, dec1], [:right_ascension_deg, :declination_deg])

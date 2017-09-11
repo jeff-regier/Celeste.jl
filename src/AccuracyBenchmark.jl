@@ -901,10 +901,11 @@ end
 
 Return subset of rows in `truth` and `predictions`, such that each entry in
 `truth` has a corresponding match in all `predictions`. A "match" is the
-closest object within 1 arcsecond. The output data frames all have the same
+closest object within `tol` degrees. The output data frames all have the same
 number of rows, and rows correspond to matching objects.
 """
-function match_catalogs(truth::DataFrame, prediction_dfs::Vector{DataFrame})
+function match_catalogs(truth::DataFrame, prediction_dfs::Vector{DataFrame};
+                        tol::Float64=(0.396 / 3600.))
 
     matched = trues(nrow(truth))
     idxs = Vector{Int}[]
@@ -913,7 +914,7 @@ function match_catalogs(truth::DataFrame, prediction_dfs::Vector{DataFrame})
                                        truth[:declination_deg],
                                        prediction[:right_ascension_deg],
                                        prediction[:declination_deg])
-        matched .&= dists .< (1.0 / 3600.0)
+        matched .&= dists .< tol
         push!(idxs, idx)
     end
 
