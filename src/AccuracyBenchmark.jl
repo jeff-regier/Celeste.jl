@@ -12,6 +12,7 @@ import ..Infer
 import ..Model
 import ..ParallelRun
 import ..SDSSIO
+using ..Coordinates: angular_separation, match_coordinates
 
 const ARCSEC_PER_DEGREE = 3600
 const SDSS_ARCSEC_PER_PIXEL = 0.396
@@ -26,10 +27,6 @@ struct MatchException <: Exception
     msg::String
 end
 
-struct ObjectsMissingFromGroundTruth <: Exception
-    missing_objids::Vector{String}
-end
-
 struct MissingColumnsError <: Exception
     missing_columns::Vector{Symbol}
 end
@@ -39,7 +36,6 @@ end
 ################################################################################
 
 CATALOG_COLUMNS = Set([
-    :objid,
     :right_ascension_deg,
     :declination_deg,
     :is_star,
@@ -74,7 +70,6 @@ function read_catalog(csv_file::String)
     @printf("Reading '%s'...\n", csv_file)
     catalog_df = readtable(csv_file)
     assert_columns_are_present(catalog_df, CATALOG_COLUMNS)
-    catalog_df[:objid] = String[string(objid) for objid in catalog_df[:objid]]
     catalog_df
 end
 
@@ -360,7 +355,7 @@ const PRIOR_PROBABILITY_OF_STAR = 0.28
 """
 Draw a random source from the Celeste prior, returning a 1-row data frame.
 """
-function draw_source_params(prior, object_id)
+function draw_source_params(prior)
     is_star = (rand(Bernoulli(PRIOR_PROBABILITY_OF_STAR)) == 1)
     source_type_index = is_star ? 1 : 2
     reference_band_flux_nmgy = exp(rand(
@@ -394,7 +389,6 @@ function draw_source_params(prior, object_id)
     declination_deg = rand(Uniform(0, 0.22))
 
     DataFrame(
-        objid=object_id,
         right_ascension_deg=right_ascension_deg,
         declination_deg=declination_deg,
         is_star=is_star,
@@ -418,7 +412,7 @@ function generate_catalog_from_celeste_prior(num_sources::Int64, seed::Int64)
     srand(seed)
     prior = Model.load_prior()
     vcat(
-        [draw_source_params(prior, string(index)) for index in 1:num_sources]...
+        [draw_source_params(prior) for index in 1:num_sources]...
     )
 end
 
@@ -619,7 +613,7 @@ function make_initialization_catalog(catalog::DataFrame, use_full_initialzation:
             make_catalog_entry(
                 row[:right_ascension_deg] + position_offset_width,
                 row[:declination_deg] - 0.5 * position_offset_width,
-                row[:objid],
+                string(row[:objid])
             )
         end
     end
@@ -793,12 +787,12 @@ function get_error_df(truth::DataFrame, predicted::DataFrame)
     errors[:missed_stars] = ifelse.(!true_galaxy, predicted_galaxy, NA)
     errors[:missed_galaxies] = ifelse.(true_galaxy, !predicted_galaxy, NA)
 
-    errors[:position] = sky_distance_px.(
-        truth[:right_ascension_deg],
-        truth[:declination_deg],
-        predicted[:right_ascension_deg],
-        predicted[:declination_deg],
-    )
+    errors[:position] =
+        (ARCSEC_PER_DEGREE / SDSS_ARCSEC_PER_PIXEL) .*
+        angular_separation.(truth[:right_ascension_deg],
+                            truth[:declination_deg],
+                            predicted[:right_ascension_deg],
+                            predicted[:declination_deg])
 
     # compare flux in both mags and nMgy for now
     errors[:reference_band_flux_mag] = abs(
@@ -901,32 +895,42 @@ function get_scores_df(
     vcat(score_rows...)
 end
 
-function extract_rows_by_objid(catalog_df::DataFrame, objids::Vector{String})
-    row_indices = map(objids) do objid
-        findfirst(catalog_df[:objid] .== objid)
+
+"""
+    match_catalogs(truth, predictions)
+
+Return subset of rows in `truth` and `predictions`, such that each entry in
+`truth` has a corresponding match in all `predictions`. A "match" is the
+closest object within `tol` degrees. The output data frames all have the same
+number of rows, and rows correspond to matching objects.
+"""
+function match_catalogs(truth::DataFrame, prediction_dfs::Vector{DataFrame};
+                        tol::Float64=(0.396 / 3600.))
+
+    matched = trues(nrow(truth))
+    idxs = Vector{Int}[]
+    for prediction in prediction_dfs
+        idx, dists = match_coordinates(truth[:right_ascension_deg],
+                                       truth[:declination_deg],
+                                       prediction[:right_ascension_deg],
+                                       prediction[:declination_deg])
+        matched .&= dists .< tol
+        push!(idxs, idx)
     end
-    @assert all(row_indices .!= 0)
-    catalog_df[row_indices, :]
+
+    # For each row in `truth`, `matched` is now true if and only if all
+    # predictions have a close match.
+    #
+    # `idxs[i]` is same length as `truth` and contains the index in
+    # `prediction_dfs[i]` that is the closest match to each row in
+    # `truth`.
+    matched_truth = truth[matched, :]
+    matched_predictions = [prediction[idx[matched], :]
+                           for (prediction, idx) in zip(prediction_dfs, idxs)]
+
+    return matched_truth, matched_predictions
 end
 
-function match_catalogs(truth::DataFrame, prediction_dfs::Vector{DataFrame})
-    objid_sets = [Set(predictions[:objid]) for predictions in prediction_dfs]
-    common_objids = intersect(objid_sets...)
-    @printf("%d objids in common\n", length(common_objids))
-
-    objids_not_in_ground_truth = setdiff(common_objids, truth[:objid])
-    if !isempty(objids_not_in_ground_truth)
-        @printf("%d objids not found in ground truth catalog:\n", length(objids_not_in_ground_truth))
-        println(join(objids_not_in_ground_truth, ", "))
-        throw(ObjectsMissingFromGroundTruth([objids_not_in_ground_truth]))
-    end
-
-    ordered_objids = [common_objids...]
-    (
-        extract_rows_by_objid(truth, ordered_objids),
-        [extract_rows_by_objid(predictions, ordered_objids) for predictions in prediction_dfs]
-    )
-end
 
 function score_predictions(truth::DataFrame, prediction_dfs::Vector{DataFrame})
     matched_truth, matched_prediction_dfs = match_catalogs(truth, prediction_dfs)
@@ -996,25 +1000,6 @@ end
 ################################################################################
 # Utilities
 ################################################################################
-
-"""
-Return distance in pixels using small-distance approximation. Falls apart at poles and RA boundary.
-"""
-function sky_distance_px(ra1, dec1, ra2, dec2)
-    distance_deg = sqrt((dec2 - dec1)^2 + (cosd(dec1) * (ra2 - ra1))^2)
-    distance_deg * ARCSEC_PER_DEGREE / SDSS_ARCSEC_PER_PIXEL
-end
-
-"""
-Return indices of positions in `ras`, `decs` that are within a distance `maxdist_px` of the target
-position `ra`, `dec`.
-"""
-function match_position(ras, decs, ra, dec, maxdist_px)
-    @assert length(ras) == length(decs)
-    filter(eachindex(ras)) do index
-        sky_distance_px(ra, dec, ras[index], decs[index]) < maxdist_px
-    end
-end
 
 # Run Celeste with any combination of single/joint inference
 function run_celeste(
