@@ -156,9 +156,7 @@ function test_detect_sources()
     # Get raw images
     strategy = SDSSIO.PlainFITSStrategy(datadir)
     raw_images = SDSSIO.load_raw_images(strategy, [rcf])
-    catalog, source_rcfs, source_idxs, source_radii = detect_sources(raw_images)
-
-    @test all(source_rcfs .== rcf)
+    catalog, source_radii = detect_sources(raw_images)
 
     ra = [ce.pos[1] for ce in catalog]
     dec = [ce.pos[2] for ce in catalog]
