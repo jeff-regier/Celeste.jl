@@ -232,8 +232,7 @@ function detect_sources(images::Vector{SDSSIO.RawImage})
                                          gal_ab,
                                          gal_angle,
                                          gal_scale,
-                                         "",  # objid
-                                         0)  # thing_id
+                                         "")  # objid
 
             # get object extent in degrees from bounding box in pixels
             xmin = sep_catalog.xmin[i]
@@ -458,17 +457,14 @@ end
 # optimization result container
 
 struct OptimizedSource
-    thingid::Int64
     objid::String
     init_ra::Float64
     init_dec::Float64
     vs::Vector{Float64}
 end
-const OptimizedSourceLen = 465
 
 function serialize(s::Base.AbstractSerializer, os::OptimizedSource)
     Base.serialize_type(s, typeof(os))
-    write(s.io, os.thingid)
     @assert length(os.objid) == 19
     for i = 1:19
         write(s.io, os.objid.data[i])
@@ -481,7 +477,6 @@ function serialize(s::Base.AbstractSerializer, os::OptimizedSource)
 end
 
 function deserialize(s::Base.AbstractSerializer, ::Type{OptimizedSource})
-    thingid = read(s.io, Int64)::Int64
     objid_data = zeros(UInt8, 19)
     for i = 1:19
         objid_data[i] = read(s.io, UInt8)::UInt8
@@ -492,7 +487,7 @@ function deserialize(s::Base.AbstractSerializer, ::Type{OptimizedSource})
     for i = 1:length(Celeste.Model.ids)
         vs[i] = read(s.io, Float64)
     end
-    OptimizedSource(thingid, String(objid_data), init_ra, init_dec, vs)
+    OptimizedSource(String(objid_data), init_ra, init_dec, vs)
 end
 
 
@@ -515,8 +510,7 @@ function process_source(config::Config,
     tic()
     vs_opt = infer_source(config, images, neighbors, entry)
     Log.info("$(entry.objid): $(toq()) secs")
-    return OptimizedSource(entry.thing_id,
-                           entry.objid,
+    return OptimizedSource(entry.objid,
                            entry.pos[1],
                            entry.pos[2],
                            vs_opt)

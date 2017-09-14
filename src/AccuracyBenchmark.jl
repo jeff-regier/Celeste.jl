@@ -572,7 +572,6 @@ function make_catalog_entry(
         pi / 4, # gal_angle
         4., # gal_scale
         objid, # objid
-        0, # thing_id
     )
 end
 
@@ -599,8 +598,7 @@ function make_catalog_entry(row::DataFrameRow)
         minor_major_axis_ratio,
         na_to_default(row[:angle_deg], 0.) / 180.0 * pi,
         na_to_default(row[:half_light_radius_px] / sqrt(minor_major_axis_ratio), 2.),
-        row[:objid],
-        0, # thing_id
+        row[:objid]
     )
 end
 

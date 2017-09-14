@@ -519,8 +519,8 @@ function convert(::Type{Vector{CatalogEntry}}, catalog::Dict)
         celeste_phi_rad = fits_phi * (pi / 180)
 
         entry = CatalogEntry(worldcoords, catalog["is_star"][i], star_fluxes,
-                             gal_fluxes, frac_dev, fits_ab, celeste_phi_rad, re_pixel,
-                             catalog["objid"][i], Int(catalog["thing_id"][i]))
+                             gal_fluxes, frac_dev, fits_ab, celeste_phi_rad,
+                             re_pixel, catalog["objid"][i])
         push!(out, entry)
     end
 

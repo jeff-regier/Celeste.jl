@@ -18,7 +18,6 @@ mutable struct CatalogEntry
     gal_angle::Float64
     gal_scale::Float64
     objid::String
-    thing_id::Int
 end
 
 
