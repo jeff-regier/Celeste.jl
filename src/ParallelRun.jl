@@ -155,10 +155,6 @@ duplicates.
 # Returns
 
 - `catalog::Vector{CatalogEntry}`: Detected sources.
-- `source_rcfs::Vector{RunCamcolField}`: The `RunCamcolField` corresponding
-  to each entry in `catalog` (same length as `catalog`).
-- `source_idxs::Vector{Int16}`: The index in the `RunCamcolField` corresponding
-  to each entry in `catalog` (same length as `catalog`).
 - `source_radii::Vector{Float64}`: Radius of circle containing all of each
   source's member pixels (degrees).
 
@@ -178,7 +174,6 @@ first masking sources. (We could add this.)
 function detect_sources(images::Vector{SDSSIO.RawImage})
 
     catalog = Vector{CatalogEntry}()
-    source_rcfs = Vector{RunCamcolField}()
     source_radii = Vector{Float64}()
 
     for image in images
@@ -258,7 +253,6 @@ function detect_sources(images::Vector{SDSSIO.RawImage})
         if length(catalog) == 0
             catalog = im_catalog
             source_radii = im_source_radii
-            source_rcfs = fill(image.rcf, length(catalog))
         else
             # for each detection in image, find nearest match in joined catalog
             idx, dist = match_coordinates([ce.pos[1] for ce in im_catalog],
@@ -283,7 +277,6 @@ function detect_sources(images::Vector{SDSSIO.RawImage})
                 else
                     push!(catalog, ce)
                     push!(source_radii, im_source_radii[i])
-                    push!(source_rcfs, image.rcf)
                 end
             end
         end
@@ -301,18 +294,7 @@ function detect_sources(images::Vector{SDSSIO.RawImage})
         ce.star_fluxes = copy(ce.gal_fluxes)
     end
 
-    # build source_idx array (running index in each rcf).
-    # Hopefully we can eventually just entirely remove this: sources
-    # are not necessarily uniquely detected in single RCF, so assigning a single
-    # RCF and index to them doesn't make sense. Plus, RCF is SDSS specific.
-    source_idxs = similar(catalog, Int16)
-    running_max = Dict(rcf=>Int16(0) for rcf in Set(source_rcfs))
-    for (i, rcf) in enumerate(source_rcfs)
-        running_max[rcf] += Int16(1)
-        source_idxs[i] = running_max[rcf]
-    end
-
-    return catalog, source_rcfs, source_idxs, source_radii
+    return catalog, source_radii
 end
 
 
@@ -338,8 +320,6 @@ function infer_init_new(rcfs::Vector{RunCamcolField},
 
     # Initialize variables to empty vectors in case try block fails
     catalog = CatalogEntry[]
-    source_rcfs = RunCamcolField[]
-    source_cat_idxs = Int16[]
     source_radii = Float64[]
     target_sources = Int[]
     images = Image[]
@@ -351,8 +331,7 @@ function infer_init_new(rcfs::Vector{RunCamcolField},
         timing.read_img += toq()
 
         # detect sources on all raw images (before background added back)
-        catalog, source_rcfs, source_cat_idxs, source_radii =
-            detect_sources(raw_images)
+        catalog, source_radii = detect_sources(raw_images)
 
         # Get indices of entries in the RA/Dec range of interest.
         # (Some images can have regions that are outside the box, so not
@@ -400,8 +379,7 @@ function infer_init_new(rcfs::Vector{RunCamcolField},
     end
     timing.find_neigh += toq()
 
-    return catalog, target_sources, neighbor_map, images,
-           source_rcfs, source_cat_idxs
+    return catalog, target_sources, neighbor_map, images
 end
 
 
@@ -471,8 +449,7 @@ function infer_init(rcfs::Vector{RunCamcolField},
         timing.find_neigh += toq()
     end
 
-    return catalog, target_sources, neighbor_map, images,
-           source_rcfs, source_cat_idxs
+    return catalog, target_sources, neighbor_map, images
 end
 
 
