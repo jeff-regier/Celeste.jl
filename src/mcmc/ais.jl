@@ -137,7 +137,7 @@ function ais_slicesample(logposterior::Function,
     # estimate the partition function and get a bootstrap confidence interval
     lnZ  = logsumexp(wsamps, dim=1)[1] - log(num_samps)
     lnZs = bootstrap_lnZ(wsamps; num_bootstrap=num_bootstrap)
-    res = Dict(:lnZ => lnZ, :lnZsamps => lnZs,
-               :zsamps => zsamps, :wsamps => wsamps)
+    res = Dict(:lnZ => lnZ, :lnZ_bootstrap => lnZs,
+               :zsamps => zsamps, :lnZsamps => wsamps)
     return res
 end
