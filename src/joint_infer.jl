@@ -552,9 +552,7 @@ function one_node_joint_infer(config::Config, catalog, target_sources, neighbor_
     else
         for i = 1:n_sources
             entry = catalog[target_sources[i]]
-            result = OptimizedSource(entry.thing_id,
-                                     entry.objid,
-                                     entry.pos[1],
+            result = OptimizedSource(entry.pos[1],
                                      entry.pos[2],
                                      vp_vec[i][1])
             push!(results, result)

@@ -46,18 +46,20 @@ if haskey(parsed_args, "write-prediction-csv")
             end
         end
     end
+    matched_truth[:index] = collect(1:nrow(matched_truth))
     matched_truth[:source] = fill("truth", size(matched_truth, 1))
-    for (index, prediction_df) in enumerate(matched_prediction_dfs)
-        prediction_df[:source] = fill("prediction $index", size(prediction_df, 1))
+    for (i, prediction_df) in enumerate(matched_prediction_dfs)
+        prediction_df[:index] = collect(1:nrow(prediction_df))
+        prediction_df[:source] = fill("prediction $i", size(prediction_df, 1))
     end
     all_predictions = vcat(matched_truth, matched_prediction_dfs...)
-    long_df = melt(all_predictions, [:objid, :source])
-    long_df[:objid_var] = [
-        join([objid, variable], " ")
-        for (objid, variable) in zip(long_df[:objid], long_df[:variable])
+    long_df = melt(all_predictions, [:index, :source])
+    long_df[:index_var] = [
+        join([idx, variable], " ")
+        for (idx, variable) in zip(long_df[:index], long_df[:variable])
     ]
-    delete!(long_df, :objid)
+    delete!(long_df, :index)
     delete!(long_df, :variable)
-    final_df = unstack(long_df, :objid_var, :source, :value)
+    final_df = unstack(long_df, :index_var, :source, :value)
     writetable(parsed_args["write-prediction-csv"], final_df)
 end

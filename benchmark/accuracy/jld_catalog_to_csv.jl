@@ -13,10 +13,10 @@ for jld_path in ARGS
     sources = JLD.load(jld_path)["results"]
     Log.info("Found $(length(sources)) sources")
     for source in sources
-        push!(
-            data_rows,
-            AccuracyBenchmark.variational_parameters_to_data_frame_row(source.objid, source.vs),
-        )
+        push!(data_rows,
+              AccuracyBenchmark.variational_parameters_to_data_frame_row(
+                  source.vs)
+              )
     end
 end
 data = vcat(data_rows...)

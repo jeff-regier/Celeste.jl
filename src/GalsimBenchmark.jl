@@ -55,11 +55,21 @@ end
 function truth_comparison_df(truth_df::DataFrame, prediction_df::DataFrame)
     @assert size(truth_df, 1) == size(prediction_df, 1)
     parameter_columns = names(truth_df)
+
+    # remove objid if present
     deleteat!(parameter_columns, findin(parameter_columns, [:objid]))
+
+    # add an object index to truth and prediction, for when we reshape
+    idx = collect(1:nrow(truth_df))
+    truth_df = hcat(DataFrame(index=idx), truth_df)
+    prediction_df = hcat(DataFrame(index=idx), prediction_df)
+
     long_truth_df = stack(truth_df, parameter_columns)
-    sort!(long_truth_df, cols=[:objid, :variable])
+    sort!(long_truth_df, cols=[:index, :variable])
+
     long_prediction_df = stack(prediction_df, parameter_columns)
-    sort!(long_prediction_df, cols=[:objid, :variable])
+    sort!(long_prediction_df, cols=[:index, :variable])
+
     rename!(long_truth_df, :value, :truth)
     long_truth_df[:estimate] = long_prediction_df[:value]
     long_truth_df[:error] = long_truth_df[:estimate] .- long_truth_df[:truth]

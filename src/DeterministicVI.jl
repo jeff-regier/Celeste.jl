@@ -126,7 +126,7 @@ function infer_source(config::Config,
                       neighbors::Vector{CatalogEntry},
                       entry::CatalogEntry)
     if length(neighbors) > 100
-        msg = string("objid $(entry.objid) [ra: $(entry.pos)] has an excessive",
+        msg = string("object at RA, Dec = $(entry.pos) has an excessive",
                      "number ($(length(neighbors))) of neighbors")
         Log.warn(msg)
     end

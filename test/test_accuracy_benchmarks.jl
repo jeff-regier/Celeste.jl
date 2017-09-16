@@ -45,7 +45,8 @@ end
     variational_params[Model.ids.is_star[1]] = 0.01
     variational_params[Model.ids.is_star[2]] = 0.99
 
-    data = AccuracyBenchmark.variational_parameters_to_data_frame_row("12345", variational_params)
+    data = AccuracyBenchmark.variational_parameters_to_data_frame_row(
+        variational_params)
     # we'll just check a few particularly troublesome parameters :)
     @test isapprox(data[1, :half_light_radius_px], 10 * sqrt(0.5))
     @test isapprox(data[1, :angle_deg], 135.0)

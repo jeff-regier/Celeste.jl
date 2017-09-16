@@ -132,8 +132,8 @@ end
     strategy = PlainFITSStrategy(datadir)
     images = SDSSIO.load_field_images(strategy, rcfs)
     catalog = SDSSIO.read_photoobj_files(strategy, rcfs)
-    entry_id = findfirst((ce)->ce.objid == "1237663143711147274", catalog)
-    entry = catalog[entry_id]
+
+    entry_id = 429  # star at RA, Dec = (309.49754066435867, 45.54976572870953)
 
     neighbors = Infer.find_neighbors([entry_id,], catalog, images)[1]
 
