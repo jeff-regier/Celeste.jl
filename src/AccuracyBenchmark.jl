@@ -303,10 +303,9 @@ function get_median_fluxes(variational_params::Vector{Float64}, source_type::Int
     )
 end
 
-function variational_parameters_to_data_frame_row(objid::String, variational_params::Vector{Float64})
+function variational_parameters_to_data_frame_row(variational_params::Vector{Float64})
     ids = Model.ids
     result = DataFrame()
-    result[:objid] = objid
     result[:right_ascension_deg] = variational_params[ids.pos[1]]
     result[:declination_deg] = variational_params[ids.pos[2]]
     result[:is_saturated] = false
@@ -340,7 +339,7 @@ end
 Convert Celeste results to a dataframe.
 """
 function celeste_to_df(results::Vector{ParallelRun.OptimizedSource})
-    rows = [variational_parameters_to_data_frame_row(result.objid, result.vs) for result in results]
+    rows = [variational_parameters_to_data_frame_row(result.vs) for result in results]
     vcat(rows...)
 end
 
@@ -559,9 +558,8 @@ function typical_band_fluxes(is_star::Bool)
     fluxes_from_colors(reference_band_flux, color_log_ratios)
 end
 
-function make_catalog_entry(
-    x_position_world_coords::Float64, y_position_world_coords::Float64, objid::String
-)
+function make_catalog_entry(x_position_world_coords::Float64,
+                            y_position_world_coords::Float64)
     Model.CatalogEntry(
         [x_position_world_coords, y_position_world_coords],
         false, # is_star
@@ -571,7 +569,6 @@ function make_catalog_entry(
         0.7, # gal_ab
         pi / 4, # gal_angle
         4., # gal_scale
-        objid, # objid
     )
 end
 
@@ -597,9 +594,8 @@ function make_catalog_entry(row::DataFrameRow)
         na_to_default(row[:de_vaucouleurs_mixture_weight], 0.5),
         minor_major_axis_ratio,
         na_to_default(row[:angle_deg], 0.) / 180.0 * pi,
-        na_to_default(row[:half_light_radius_px] / sqrt(minor_major_axis_ratio), 2.),
-        row[:objid]
-    )
+        na_to_default(row[:half_light_radius_px] / sqrt(minor_major_axis_ratio), 2.)
+        )
 end
 
 function make_initialization_catalog(catalog::DataFrame, use_full_initialzation::Bool)
@@ -610,8 +606,7 @@ function make_initialization_catalog(catalog::DataFrame, use_full_initialzation:
         else
             make_catalog_entry(
                 row[:right_ascension_deg] + position_offset_width,
-                row[:declination_deg] - 0.5 * position_offset_width,
-                string(row[:objid])
+                row[:declination_deg] - 0.5 * position_offset_width
             )
         end
     end
@@ -776,7 +771,6 @@ Let's call the return type of this function an \"error data frame\".
 """
 function get_error_df(truth::DataFrame, predicted::DataFrame)
     errors = DataFrame(
-        objid=truth[:objid],
         is_saturated=predicted[:is_saturated],
     )
 
@@ -866,10 +860,6 @@ function get_scores_df(
 )
     score_rows = DataFrame[]
     for column_name in names(first_errors)
-        if column_name == :objid
-            continue
-        end
-
         good_row = filter_rows(truth, first_errors, column_name)
         if !isnull(second_errors)
             good_row .&= filter_rows(truth, get(second_errors), column_name)
@@ -972,12 +962,9 @@ function get_uncertainty_df(truth::DataFrame, predictions::DataFrame)
 
     mapreduce(vcat, zip(names, errors, std_errs)) do values
         name, error, std_err = values
-        DataFrame(
-            objid=matched_truth[:objid],
-            name=fill(name, length(error)),
-            error=error,
-            posterior_std_err=std_err,
-        )
+        DataFrame(name=fill(name, length(error)),
+                  error=error,
+                  posterior_std_err=std_err)
     end
 end
 

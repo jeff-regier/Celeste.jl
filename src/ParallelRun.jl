@@ -231,8 +231,7 @@ function detect_sources(images::Vector{SDSSIO.RawImage})
                                          0.5,  # gal_frac_dev
                                          gal_ab,
                                          gal_angle,
-                                         gal_scale,
-                                         "")  # objid
+                                         gal_scale)
 
             # get object extent in degrees from bounding box in pixels
             xmin = sep_catalog.xmin[i]
@@ -303,19 +302,8 @@ photoObj catalog for initialization.
 """
 function infer_init_new(rcfs::Vector{RunCamcolField},
                         strategy::SDSSIO.IOStrategy;
-                        objid="",
                         box=BoundingBox(-1000., 1000., -1000., 1000.),
-                        primary_initialization=true,
                         timing=InferTiming())
-
-    # check if any non-default values are passed for functionality that has
-    # been removed.
-    if !primary_initialization
-        error("primary_initialization no longer supported.")
-    end
-    if !(objid == "")
-        error("objid no longer supported")
-    end
 
     # Initialize variables to empty vectors in case try block fails
     catalog = CatalogEntry[]
@@ -388,7 +376,6 @@ load the images, and build the neighbor map.
 """
 function infer_init(rcfs::Vector{RunCamcolField},
                     strategy::SDSSIO.IOStrategy;
-                    objid="",
                     box=BoundingBox(-1000., 1000., -1000., 1000.),
                     primary_initialization=true,
                     timing=InferTiming())
@@ -396,8 +383,6 @@ function infer_init(rcfs::Vector{RunCamcolField},
     target_sources = Vector{Int}()
     neighbor_map = Vector{Vector{Int}}()
     images = Vector{Image}()
-    source_rcfs = Vector{RunCamcolField}()
-    source_cat_idxs = Vector{Int16}()
 
     # Read all primary objects in these fields.
     duplicate_policy = primary_initialization ? :primary : :first
@@ -406,13 +391,9 @@ function infer_init(rcfs::Vector{RunCamcolField},
 
     tic()
     for rcf in rcfs
-        this_cat = SDSSIO.read_photoobj_files(strategy, [rcf], duplicate_policy=duplicate_policy)
-        these_sources_rcfs = Vector{RunCamcolField}(length(this_cat))
-        fill!(these_sources_rcfs, rcf)
-        these_sources_idxs = collect(Int16, 1:length(this_cat))
+        this_cat = SDSSIO.read_photoobj_files(strategy, [rcf],
+                                              duplicate_policy=duplicate_policy)
         append!(catalog, this_cat)
-        append!(source_rcfs, these_sources_rcfs)
-        append!(source_cat_idxs, these_sources_idxs)
     end
     timing.read_photoobj += toq()
 
@@ -424,12 +405,6 @@ function infer_init(rcfs::Vector{RunCamcolField},
     Log.info("$(Time(now())): $(length(catalog)) primary sources, ",
              "$(length(target_sources)) target sources in $(box.ramin), ",
              "$(box.ramax), $(box.decmin), $(box.decmax)")
-
-    # Filter any object not specified, if an objid is specified
-    if objid != ""
-        target_sources = filter(ts->(catalog[ts].objid == objid), target_sources)
-        Log.info("$(length(target_sources)) target light sources after objid cut")
-    end
 
     # Load images and neighbor map for target sources
     if length(target_sources) > 0
@@ -457,7 +432,6 @@ end
 # optimization result container
 
 struct OptimizedSource
-    objid::String
     init_ra::Float64
     init_dec::Float64
     vs::Vector{Float64}
@@ -465,10 +439,6 @@ end
 
 function serialize(s::Base.AbstractSerializer, os::OptimizedSource)
     Base.serialize_type(s, typeof(os))
-    @assert length(os.objid) == 19
-    for i = 1:19
-        write(s.io, os.objid.data[i])
-    end
     write(s.io, os.init_ra)
     write(s.io, os.init_dec)
     for i = 1:length(Celeste.Model.ids)
@@ -477,17 +447,13 @@ function serialize(s::Base.AbstractSerializer, os::OptimizedSource)
 end
 
 function deserialize(s::Base.AbstractSerializer, ::Type{OptimizedSource})
-    objid_data = zeros(UInt8, 19)
-    for i = 1:19
-        objid_data[i] = read(s.io, UInt8)::UInt8
-    end
     init_ra = read(s.io, Float64)::Float64
     init_dec = read(s.io, Float64)::Float64
     vs = zeros(Float64, length(Celeste.Model.ids))
     for i = 1:length(Celeste.Model.ids)
         vs[i] = read(s.io, Float64)
     end
-    OptimizedSource(String(objid_data), init_ra, init_dec, vs)
+    OptimizedSource(init_ra, init_dec, vs)
 end
 
 
@@ -509,11 +475,8 @@ function process_source(config::Config,
 
     tic()
     vs_opt = infer_source(config, images, neighbors, entry)
-    Log.info("$(entry.objid): $(toq()) secs")
-    return OptimizedSource(entry.objid,
-                           entry.pos[1],
-                           entry.pos[2],
-                           vs_opt)
+    Log.info("#$(ts) at ($(entry.pos[1]), $(entry.pos[2])): $(toq()) secs")
+    return OptimizedSource(entry.pos[1], entry.pos[2], vs_opt)
 end
 
 
@@ -602,7 +565,6 @@ bounding box.
 function one_node_infer(rcfs::Vector{RunCamcolField},
                         stagedir::String;
                         infer_callback=one_node_single_infer,
-                        objid="",
                         box=BoundingBox(-1000., 1000., -1000., 1000.),
                         primary_initialization=true,
                         timing=InferTiming())
@@ -611,7 +573,6 @@ function one_node_infer(rcfs::Vector{RunCamcolField},
     catalog, target_sources, neighbor_map, images =
         infer_init(rcfs,
                    strategy;
-                   objid=objid,
                    box=box,
                    primary_initialization=primary_initialization)
 
