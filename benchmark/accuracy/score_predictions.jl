@@ -61,5 +61,9 @@ if haskey(parsed_args, "write-prediction-csv")
     delete!(long_df, :index)
     delete!(long_df, :variable)
     final_df = unstack(long_df, :index_var, :source, :value)
+    final_df[:, :source_id] = [parse(Int, match(r"^\S+", x).match) for x in final_df[:, :index_var]]
+    final_df[:, :property] = [match(r"[a-z].*", x).match for x in final_df[:, :index_var]]
+    delete!(final_df, :index_var)
+
     writetable(parsed_args["write-prediction-csv"], final_df)
 end

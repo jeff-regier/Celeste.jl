@@ -67,7 +67,6 @@ parsed_args = ArgumentParse.parse_args(parser, ARGS)
 
 srand(12345)
 
-run_camcol_field = nothing
 if haskey(parsed_args, "image-fits")
     extensions = AccuracyBenchmark.read_fits(parsed_args["image-fits"])
     images = AccuracyBenchmark.make_images(extensions)
@@ -99,7 +98,6 @@ if haskey(parsed_args, "limit-num-sources")
 else
     target_sources = collect(1:length(catalog_entries))
 end
-neighbor_map = Infer.find_neighbors(target_sources, catalog_entries, images)
 
 config = Config()
 if haskey(parsed_args, "min-radius-px")

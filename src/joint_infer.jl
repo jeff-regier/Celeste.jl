@@ -469,7 +469,7 @@ end
 
 
 """
-Like one_node_infer, uses multiple threads on one node to fit the Celeste
+Uses multiple threads on one node to fit the Celeste
 model over numerous iterations.
 
 catalog - the catalog of light sources
@@ -487,12 +487,13 @@ Returns:
 
 - Vector of OptimizedSource results
 """
-function one_node_joint_infer(config::Config, catalog, target_sources, neighbor_map, images;
+function one_node_joint_infer(catalog, target_sources, neighbor_map, images;
                               cyclades_partition::Bool=true,
                               batch_size::Int=7000,
                               within_batch_shuffling::Bool=true,
                               n_iters::Int=3,
-                              timing=InferTiming())
+                              timing=InferTiming(),
+                              config=Config())
     # Seed random number generator to ensure the same results per run.
     srand(42)
 
@@ -562,27 +563,6 @@ function one_node_joint_infer(config::Config, catalog, target_sources, neighbor_
     show_pixels_processed()
 
     results
-end
-
-# legacy wrapper
-function one_node_joint_infer(catalog, target_sources, neighbor_map, images;
-                              cyclades_partition::Bool=true,
-                              batch_size::Int=7000,
-                              within_batch_shuffling::Bool=true,
-                              n_iters::Int=3,
-                              timing=InferTiming())
-    one_node_joint_infer(
-        Config(),
-        catalog,
-        target_sources,
-        neighbor_map,
-        images,
-        cyclades_partition=cyclades_partition,
-        batch_size=batch_size,
-        within_batch_shuffling=within_batch_shuffling,
-        n_iters=n_iters,
-        timing=timing
-    )
 end
 
 function initialize_elboargs_sources!(config::Config, ea_vec, vp_vec, cfg_vec,

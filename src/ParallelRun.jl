@@ -484,13 +484,13 @@ end
 Use multiple threads to process each target source with the specified
 callback and write the results to a file.
 """
-function one_node_single_infer(config::Config,
-                               catalog::Vector{CatalogEntry},
+function one_node_single_infer(catalog::Vector{CatalogEntry},
                                target_sources::Vector{Int},
                                neighbor_map::Vector{Vector{Int}},
                                images::Vector{Image};
                                infer_source_callback=infer_source,
-                               timing=InferTiming())
+                               timing=InferTiming(),
+                               config=Config())
     curr_source = 1
     last_source = length(target_sources)
     sources_lock = SpinLock()
@@ -539,49 +539,6 @@ function one_node_single_infer(config::Config,
 
     return results
 end
-
-# legacy wrapper
-function one_node_single_infer(catalog::Vector{CatalogEntry},
-                               target_sources::Vector{Int},
-                               neighbor_map::Vector{Vector{Int}},
-                               images::Vector{Image};
-                               infer_source_callback=infer_source,
-                               timing=InferTiming())
-    one_node_single_infer(
-        Config(),
-        catalog,
-        target_sources,
-        neighbor_map,
-        images,
-        infer_source_callback=infer_source_callback,
-        timing=timing,
-    )
-end
-
-"""
-Use multiple threads on one node to fit the Celeste model to sources in a given
-bounding box.
-"""
-function one_node_infer(rcfs::Vector{RunCamcolField},
-                        stagedir::String;
-                        infer_callback=one_node_single_infer,
-                        box=BoundingBox(-1000., 1000., -1000., 1000.),
-                        primary_initialization=true,
-                        timing=InferTiming())
-    strategy = PlainFITSStrategy(stagedir)
-
-    catalog, target_sources, neighbor_map, images =
-        infer_init(rcfs,
-                   strategy;
-                   box=box,
-                   primary_initialization=primary_initialization)
-
-    Log.info("running with $(nthreads()) threads")
-
-    # NB: All I/O happens above. The methods below don't touch disk.
-    infer_callback(catalog, target_sources, neighbor_map, images)
-end
-
 
 """
 Query the SDSS database for all fields that overlap the given RA, Dec range.
@@ -766,8 +723,6 @@ function infer_box(strategy, box::BoundingBox, outdir::String)
                        primary_initialization=true,
                        timing=timing)
 
-        #results = one_node_single_infer(catalog, target_sources,
-        #                                neighbor_map, images; timing=timing)
         results = one_node_joint_infer(catalog, target_sources, neighbor_map,
                                        images; timing=timing)
 

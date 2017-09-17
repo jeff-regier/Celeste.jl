@@ -88,6 +88,7 @@ function append_hash_to_file(filename::String)
     new_filename = @sprintf("%s_%s%s", base, hash_string, extension)
     @printf("Renaming %s -> %s\n", filename, new_filename)
     mv(filename, new_filename, remove_destination=true)
+    new_filename
 end
 
 ################################################################################
@@ -797,6 +798,7 @@ function get_error_df(truth::DataFrame, predicted::DataFrame)
     errors[:angle_deg] = degrees_to_diff(truth[:angle_deg], predicted[:angle_deg])
 
     for column_symbol in ABSOLUTE_ERROR_COLUMNS
+        @show typeof(truth[column_symbol])
         errors[column_symbol] = abs(truth[column_symbol] - predicted[column_symbol])
     end
     for color_column in COLOR_COLUMNS
@@ -994,19 +996,19 @@ function run_celeste(
     neighbor_map = Infer.find_neighbors(target_sources, catalog_entries, images)
     if use_joint_inference
         ParallelRun.one_node_joint_infer(
-            config,
             catalog_entries,
             target_sources,
             neighbor_map,
             images,
+            config=config,
         )
     else
         ParallelRun.one_node_single_infer(
-            config,
             catalog_entries,
             target_sources,
             neighbor_map,
             images,
+            config=config,
         )
     end
 end

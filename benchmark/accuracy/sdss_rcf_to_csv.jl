@@ -33,20 +33,20 @@ ArgumentParse.add_argument(
 )
 parsed_args = ArgumentParse.parse_args(parser, ARGS)
 
-run_camcol_field = SDSSIO.RunCamcolField(
+rcf = SDSSIO.RunCamcolField(
     parsed_args["run"],
     parsed_args["camcol"],
     parsed_args["field"],
 )
-@printf("Reading %s...\n", run_camcol_field)
-catalog_df = AccuracyBenchmark.load_primary(run_camcol_field, AccuracyBenchmark.SDSS_DATA_DIR)
+@printf("Reading %s...\n", rcf)
+catalog_df = AccuracyBenchmark.load_primary(rcf, AccuracyBenchmark.SDSS_DATA_DIR)
 @printf("Loaded %d objects from catalog\n", size(catalog_df, 1))
 
 output_filename = @sprintf(
     "sdss_%s_%s_%s_primary.csv",
-    run_camcol_field.run,
-    run_camcol_field.camcol,
-    run_camcol_field.field,
+    rcf.run,
+    rcf.camcol,
+    rcf.field,
 )
 output_path = joinpath(OUTPUT_DIRECTORY, output_filename)
 AccuracyBenchmark.write_catalog(output_path, catalog_df)
