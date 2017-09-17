@@ -16,7 +16,7 @@ function make_star_loglike(imgs::Array{Image},
 
     # create a function that constrains the pixel location to be within
     # pos0 +- [pos_delta]
-    constrain_pos, unconstrain_pos = 
+    constrain_pos, unconstrain_pos =
         make_position_transformations(pos0, pos_delta)
 
     function star_loglike(th::Array{Float64, 1})
@@ -83,7 +83,7 @@ function make_gal_loglike(imgs::Array{Image},
         pos   = constrain_pos(unc_pos)
         shape = Model.constrain_gal_shape(ushape)
 
-        gal_frac_dev, gal_ab, gal_angle, gal_scale = 
+        gal_frac_dev, gal_ab, gal_angle, gal_scale =
             Model.constrain_gal_shape(ushape)
 
         ll = 0.
@@ -329,5 +329,3 @@ function sample_fluxes(i::Int, r_s)
     l_s[1] = l_s[2] / exp(c_s[1])
     l_s
 end
-
-

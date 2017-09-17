@@ -7,6 +7,42 @@ import Celeste: AccuracyBenchmark
 import Celeste: DeterministicVI
 import Celeste: Model
 
+@testset "whole accuracy benchmark pipeline runs" begin
+    rcf = RunCamcolField(4263, 5, 119)
+    strategy = SDSSIO.PlainFITSStrategy(datadir)
+    images = SDSSIO.load_field_images(strategy, [rcf])
+
+    primary_df = AccuracyBenchmark.load_primary(rcf, datadir)
+    output_path = joinpath(datadir, "test_primary.csv")
+    AccuracyBenchmark.write_catalog(output_path, primary_df)
+    new_csv = AccuracyBenchmark.append_hash_to_file(output_path)
+    primary_df2 = AccuracyBenchmark.read_catalog(new_csv)
+    catalog_entries = AccuracyBenchmark.make_initialization_catalog(primary_df2, true)
+    # entry 8 is a star near [0.513037, 0.535631],
+    # see http://legacysurvey.org/viewer/jpeg-cutout/?ra=0.5130&dec=0.5358&zoom=16&layer=sdss2
+    target_sources = [8,]
+
+    results = AccuracyBenchmark.run_celeste(
+        Celeste.Config(),
+        catalog_entries,
+        target_sources,
+        images,
+    )
+    results_df = AccuracyBenchmark.celeste_to_df(results)
+
+    coadd_path = joinpath(datadir, "coadd_for_4263_5_119.fit")
+    coadd_df = AccuracyBenchmark.load_coadd_catalog(coadd_path)
+    coadd_path2 = joinpath(datadir, "test_coadd.csv")
+    AccuracyBenchmark.write_catalog(coadd_path2, coadd_df)
+    coadd_csv = AccuracyBenchmark.append_hash_to_file(coadd_path2)
+    coadd_df2 = AccuracyBenchmark.read_catalog(coadd_csv)
+
+    scores = AccuracyBenchmark.score_predictions(coadd_df2, [results_df])
+
+    uncertainty_df = AccuracyBenchmark.get_uncertainty_df(coadd_df2, results_df)
+    uq_scores = AccuracyBenchmark.score_uncertainty(uncertainty_df)
+end
+
 @testset "flux <-> mags conversion" begin
     # reference values based on `nmgy2lups()` from
     # https://github.com/esheldon/sdsspy/blob/683d6e0f16a998240a129942f80ad3ce6e7d5dfe/sdsspy/util.py

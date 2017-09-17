@@ -1,7 +1,7 @@
 import JLD
 
 import Celeste.Infer
-import Celeste.ParallelRun: infer_init, one_node_infer, BoundingBox,
+import Celeste.ParallelRun: infer_init, BoundingBox,
     one_node_joint_infer, one_node_single_infer, detect_sources
 import Celeste.SensitiveFloats: SensitiveFloat
 import Celeste.DeterministicVI.ElboMaximize
@@ -174,6 +174,8 @@ test_improve_stripe_82_obj_value
 function test_improve_stripe_82_obj_value()
     println("Testing that joint_infer improves score on stripe 82...")
     (rcfs, datadir, target_sources, catalog, images) = load_stripe_82_data()
+
+    ctni = ParallelRun.infer_init(rcfs, strategy; box=box)
 
     # Single inference obj value
     infer_single(ctni...) = one_node_single_infer(ctni...)
@@ -508,4 +510,3 @@ if test_long_running
 end
 
 test_detect_sources()
-

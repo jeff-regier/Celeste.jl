@@ -12,8 +12,10 @@ function test_infer_single()
     # very small patch of sky that turns out to have 4 sources.
     # We checked that this patch is in the given field.
     box = ParallelRun.BoundingBox(164.39, 164.41, 39.11, 39.13)
-    field_triplets = [RunCamcolField(3900, 6, 269),]
-    result = ParallelRun.one_node_infer(field_triplets, datadir; box=box)
+    rcfs = [RunCamcolField(3900, 6, 269),]
+    strategy = PlainFITSStrategy(datadir)
+    ctni = ParallelRun.infer_init(rcfs, strategy; box=box)
+    result = ParallelRun.one_node_single_infer(ctni...)
 end
 
 
