@@ -37,6 +37,10 @@ end
 scores = AccuracyBenchmark.score_predictions(truth, prediction_dfs)
 println(repr(scores))
 
+# the code below is run only if the user specifies the --write-prediction-csv
+# flag. If present, we write out a csv file that is useful for debugging
+# individual predictions. In that file, coadd, primary, and celeste are matched
+# up for every light source.
 if haskey(parsed_args, "write-prediction-csv")
     matched_truth, matched_prediction_dfs = AccuracyBenchmark.match_catalogs(truth, prediction_dfs)
     for prediction_df in matched_prediction_dfs
@@ -60,7 +64,16 @@ if haskey(parsed_args, "write-prediction-csv")
     ]
     delete!(long_df, :index)
     delete!(long_df, :variable)
+
+    # The `index_var` column has the format "source_id property_name". In
+    # `long_df`, typically all three sets of predictions have one prediction
+    # for any particular source_id and property name. Below we unstack to
+    # put all three predictions for a particular (source_id, property) in the
+    # same row.
     final_df = unstack(long_df, :index_var, :source, :value)
+
+    # Next we split index_var into two columns: source_id and property.
+    # It's easier to work with subsequently this way.
     final_df[:, :source_id] = [parse(Int, match(r"^\S+", x).match) for x in final_df[:, :index_var]]
     final_df[:, :property] = [match(r"[a-z].*", x).match for x in final_df[:, :index_var]]
     delete!(final_df, :index_var)
