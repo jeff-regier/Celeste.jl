@@ -78,7 +78,7 @@ else
     println("train avll:", GaussianMixtures.avll(fit_gmm, c0_train))
     #println("test avll:", GaussianMixtures.avll(fit_gmm, c0_test))
 
-    save(ARGS[2], "r_params", params(fit_r),
+    save(ARGS[2], "r_params", collect(params(fit_r)),
         "c_weights", weights(fit_gmm),
         "color_means", means(fit_gmm)',
         "color_covs", vecmat_to_tensor(covars(fit_gmm)))
