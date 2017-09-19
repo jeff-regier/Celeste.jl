@@ -798,7 +798,6 @@ function get_error_df(truth::DataFrame, predicted::DataFrame)
     errors[:angle_deg] = degrees_to_diff(truth[:angle_deg], predicted[:angle_deg])
 
     for column_symbol in ABSOLUTE_ERROR_COLUMNS
-        @show typeof(truth[column_symbol])
         errors[column_symbol] = abs(truth[column_symbol] - predicted[column_symbol])
     end
     for color_column in COLOR_COLUMNS
