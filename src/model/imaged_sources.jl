@@ -65,6 +65,23 @@ function SkyPatch(img::Image, ce::CatalogEntry; radius_override_pix=NaN)
 end
 
 
+function get_sky_patches(images::Vector{Image},
+                         catalog::Vector{CatalogEntry};
+                         radius_override_pix=NaN)
+    N = length(images)
+    S = length(catalog)
+    patches = Matrix{SkyPatch}(S, N)
+
+    for n in 1:N, s in 1:S
+        patches[s, n] = SkyPatch(images[n],
+                                 catalog[s],
+                                 radius_override_pix=radius_override_pix)
+    end
+
+    patches
+end
+
+
 """
 Choose a reasonable patch radius based on the catalog.
 

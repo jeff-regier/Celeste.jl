@@ -5,7 +5,6 @@ using DataFrames
 import Celeste.AccuracyBenchmark
 import Celeste.ArgumentParse
 import Celeste: Config
-import Celeste.Infer
 import Celeste.ParallelRun
 import Celeste.SDSSIO
 

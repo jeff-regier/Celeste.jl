@@ -8,7 +8,6 @@ import WCS
 
 import ..Config
 import ..DeterministicVI
-import ..Infer
 import ..Model
 import ..ParallelRun
 import ..SDSSIO
@@ -992,7 +991,7 @@ function run_celeste(
     config::Config, catalog_entries, target_sources, images;
     use_joint_inference=false,
 )
-    neighbor_map = Infer.find_neighbors(target_sources, catalog_entries, images)
+    neighbor_map = ParallelRun.find_neighbors(target_sources, catalog_entries, images)
     if use_joint_inference
         ParallelRun.one_node_joint_infer(
             catalog_entries,

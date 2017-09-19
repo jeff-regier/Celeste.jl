@@ -33,7 +33,7 @@ end
     # but not all of them, and not none of them.
     config = Config()
     config.min_radius_pix = 0
-    Infer.load_active_pixels!(config, ea.images, ea.patches)
+    ParallelRun.load_active_pixels!(config, ea.images, ea.patches)
 
     # most star light (>90%) should be recorded by the active pixels
     num_active_photons = 0.0
@@ -76,7 +76,7 @@ end
     # source's center (10.9, 11.5)
     config = Config()
     config.min_radius_pix = 0.6
-    Infer.load_active_pixels!(config, ea.images, ea.patches)
+    ParallelRun.load_active_pixels!(config, ea.images, ea.patches)
 
     for n in 1:ea.N
 #  FIXME: is load active pixels off by (0.5, 0.5)?
@@ -87,10 +87,10 @@ end
 
 @testset "active pixel selection" begin
     ea, vp, catalog = gen_two_body_dataset();
-    patches = Infer.get_sky_patches(ea.images, catalog; radius_override_pix=5);
+    patches = Model.get_sky_patches(ea.images, catalog; radius_override_pix=5);
     config = Config()
     config.min_radius_pix = 5
-    Infer.load_active_pixels!(config, ea.images, patches, noise_fraction=Inf)
+    ParallelRun.load_active_pixels!(config, ea.images, patches, noise_fraction=Inf)
 
     for n in 1:ea.N
         # Make sure, for testing purposes, that the whole bitmap isn't full.
@@ -102,7 +102,7 @@ end
         function patch_in_whole_image(p::SkyPatch)
             patch_image = zeros(size(ea.images[n].pixels))
             for h in 1:ea.images[n].H, w in 1:ea.images[n].W
-                if Infer.is_pixel_in_patch(h, w, p)
+                if ParallelRun.is_pixel_in_patch(h, w, p)
                     patch_image[h, w] += 1
                 end
             end
@@ -114,12 +114,12 @@ end
         end
 
         H_min, W_min, H_max, W_max =
-            Infer.get_active_pixel_range(patches, collect(1:ea.S), n);
+            ParallelRun.get_active_pixel_range(patches, collect(1:ea.S), n);
         patch_image = zeros(H_max - H_min + 1, W_max - W_min + 1);
 
         for h in H_min:H_max, w in W_min:W_max, s in 1:ea.S
             p = patches[s, n]
-            if Infer.is_pixel_in_patch(h, w, p)
+            if ParallelRun.is_pixel_in_patch(h, w, p)
                 patch_image[h - H_min + 1, w - W_min + 1] += 1
             end
         end
@@ -142,7 +142,7 @@ end
 
     entry_id = 429  # star at RA, Dec = (309.49754066435867, 45.54976572870953)
 
-    neighbors = Infer.find_neighbors([entry_id,], catalog, images)[1]
+    neighbors = ParallelRun.find_neighbors([entry_id,], catalog, images)[1]
 
     # there's a lot near this star, but not a lot that overlaps with it, see
     # http://skyserver.sdss.org/dr10/en/tools/explore/summary.aspx?id=0x112d1012607f050a

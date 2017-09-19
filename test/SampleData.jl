@@ -1,7 +1,6 @@
 module SampleData
 
 using Celeste: Model, DeterministicVI
-import Celeste: Infer
 import Celeste: Synthetic
 import Celeste.SDSSIO: RunCamcolField, load_field_images, PlainFITSStrategy
 
@@ -51,7 +50,7 @@ function make_elbo_args(images::Vector{Image},
                         active_source=-1,
                         patch_radius_pix::Float64=NaN,
                         include_kl=true)
-    patches = Infer.get_sky_patches(images,
+    patches = Model.get_sky_patches(images,
                                     catalog,
                                     radius_override_pix=patch_radius_pix)
     S = length(catalog)

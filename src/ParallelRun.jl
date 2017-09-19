@@ -11,13 +11,10 @@ import ..Config
 import ..Log
 using ..Model
 import ..SDSSIO
-import ..Infer
 import ..SDSSIO: RunCamcolField, IOStrategy, PlainFITSStrategy
 import ..PSF
 import ..SEP
 import ..Coordinates: angular_separation, match_coordinates
-
-import ..DeterministicVI: infer_source
 
 export BoundingBox
 
@@ -47,6 +44,157 @@ end
 
 # ------
 # initialization helpers
+
+"""
+Computes the nearby light sources in the catalog for each of the target
+sources.
+
+Arguments:
+    target_sources: indexes of astronomical objects in the catalog to infer
+    catalog: astronomical objects appearing the images
+    images: astronomical images
+"""
+function find_neighbors(target_sources::Vector{Int64},
+                        catalog::Vector{CatalogEntry},
+                        images::Vector{Image})
+    psf_width_ub = zeros(NUM_BANDS)
+    for img in images
+        psf_width = Model.get_psf_width(img.psf)
+        psf_width_ub[img.b] = max(psf_width_ub[img.b], psf_width)
+    end
+
+    epsilon_lb = fill(Inf, NUM_BANDS)
+    for img in images
+        epsilon = img.sky[div(img.H, 2), div(img.W, 2)]
+        epsilon_lb[img.b] = min(epsilon_lb[img.b], epsilon)
+    end
+
+    radii_map = zeros(length(catalog))
+    for s in 1:length(catalog)
+        ce = catalog[s]
+        for img in images
+            radius_pix = Model.choose_patch_radius(ce, img, width_scale=1.2)
+            radii_map[s] = max(radii_map[s], radius_pix)
+        end
+        @assert radii_map[s] <= 25
+    end
+
+    dist(ra1, dec1, ra2, dec2) = (3600 / 0.396) * max(abs(dec2 - dec1), abs(ra2 - ra1))
+
+    neighbor_map = Vector{Int64}[Int64[] for s in target_sources]
+
+    # If this loop isn't super fast in pratice, we can tile (the sky, not the
+    # images) or build a spatial index with a library before distributing
+    for ts in 1:length(target_sources)
+        s = target_sources[ts]
+        ce = catalog[s]
+
+        for s2 in 1:length(catalog)
+            ce2 = catalog[s2]
+            ctrs_dist = dist(ce.pos[1], ce.pos[2], ce2.pos[1], ce2.pos[2])
+
+            if s2 != s && ctrs_dist < radii_map[s] + radii_map[s2]
+                push!(neighbor_map[ts], s2)
+            end
+        end
+    end
+
+    neighbor_map
+end
+
+
+"""
+Record which pixels in each patch will be considered when computing the
+objective function.
+
+Non-standard arguments:
+  noise_fraction: The proportion of the noise below which we will remove pixels.
+"""
+function load_active_pixels!(config::Config,
+                             images::Vector{Image},
+                             patches::Matrix{SkyPatch};
+                             exclude_nan=true,
+                             noise_fraction=0.5)
+    S, N = size(patches)
+
+    for n = 1:N, s=1:S
+        img = images[n]
+        p = patches[s,n]
+
+        # (h2, w2) index the local patch, while (h, w) index the image
+        H2, W2 = size(p.active_pixel_bitmap)
+        for w2 in 1:W2, h2 in 1:H2
+            h = p.bitmap_offset[1] + h2
+            w = p.bitmap_offset[2] + w2
+
+            # skip masked pixels
+            if isnan(img.pixels[h, w]) && exclude_nan
+                p.active_pixel_bitmap[h2, w2] = false
+                continue
+            end
+
+            # include pixels that are close, even if they aren't bright
+            sq_dist = (h - p.pixel_center[1])^2 + (w - p.pixel_center[2])^2
+            if sq_dist < config.min_radius_pix^2
+                p.active_pixel_bitmap[h2, w2] = true
+                continue
+            end
+
+            # if this pixel is bright, let's include it
+            # (in the future we may want to do something fancier, like
+            # fitting an elipse, so we don't include nearby sources' pixels,
+            # or adjusting active pixels during the optimization)
+            # Note: This is risky because bright pixels are disproportionately likely
+            # to get included, even if it's because of noise. Therefore it's important
+            # to keep the noise fraction pretty low.
+            threshold = img.nelec_per_nmgy[h] * img.sky[h, w] * (1. + noise_fraction)
+            p.active_pixel_bitmap[h2, w2] = img.pixels[h, w] > threshold
+        end
+    end
+end
+
+# legacy wrapper
+function load_active_pixels!(images::Vector{Image},
+                             patches::Matrix{SkyPatch};
+                             exclude_nan=true,
+                             noise_fraction=0.5)
+    load_active_pixels!(
+        Config(),
+        images,
+        patches,
+        exclude_nan=exclude_nan,
+        noise_fraction=noise_fraction,
+    )
+end
+
+# The range of image pixels in a vector of patches
+function get_active_pixel_range(
+    patches::Matrix{SkyPatch}, sources::Vector{Int}, n::Int)
+    H_min = minimum([ p.bitmap_offset[1] + 1 for p in patches[sources, n] ])
+    W_min = minimum([ p.bitmap_offset[2] + 1 for p in patches[sources, n] ])
+    H_max = maximum([ p.bitmap_offset[1] + size(p.active_pixel_bitmap, 1)
+                      for p in patches[sources, n] ])
+    W_max = maximum([ p.bitmap_offset[2] + size(p.active_pixel_bitmap, 2)
+                      for p in patches[sources, n] ])
+    H_min, W_min, H_max, W_max
+end
+
+
+# Is a pixel (h, w) in whole-image coordinates an active pixel in the patch p?
+function is_pixel_in_patch(h::Int, w::Int, p::SkyPatch)
+    hp = h - p.bitmap_offset[1]
+    wp = w - p.bitmap_offset[2]
+    in_patch =
+        (hp > 0) &
+        (wp > 0) &
+        (hp <= size(p.active_pixel_bitmap, 1)) &
+        (wp <= size(p.active_pixel_bitmap, 2))
+    if !in_patch
+        return false
+    else
+        return p.active_pixel_bitmap[hp, wp]
+    end
+end
 
 """
     detect_sources(images)
@@ -308,7 +456,7 @@ function infer_init(rcfs::Vector{RunCamcolField},
             empty!(target_sources)
         end
 
-        neighbor_map = Infer.find_neighbors(target_sources, catalog, images)
+        neighbor_map = ParallelRun.find_neighbors(target_sources, catalog, images)
     end
 
     return catalog, target_sources, neighbor_map, images
@@ -328,6 +476,7 @@ end
 
 """
 Optimize the `ts`th element of `target_sources`.
+Used only for one_node_single_infer, not one_node_joint_infer.
 """
 function process_source(config::Config,
                         ts::Int,
@@ -335,13 +484,28 @@ function process_source(config::Config,
                         target_sources::Vector{Int},
                         neighbor_map::Vector{Vector{Int}},
                         images::Vector{Image})
+    neighbors = catalog[neighbor_map[ts]]
+    if length(neighbors) > 100
+        msg = string("object at RA, Dec = $(entry.pos) has an excessive",
+                     "number ($(length(neighbors))) of neighbors")
+        Log.warn(msg)
+    end
+
     s = target_sources[ts]
     entry = catalog[s]
-    neighbors = catalog[neighbor_map[ts]]
+    cat_local = vcat([entry], neighbors)
+
+    patches = Model.get_sky_patches(images, cat_local)
+    load_active_pixels!(config, images, patches)
+
+    vp = DeterministicVI.init_sources([1], cat_local)
+    ea = DeterministicVI.ElboArgs(images, patches, [1])
 
     tic()
-    vs_opt = infer_source(config, images, neighbors, entry)
+    f_evals, max_f, max_x, nm_result = DeterministicVI.ElboMaximize.maximize!(ea, vp)
     Log.info("#$(ts) at ($(entry.pos[1]), $(entry.pos[2])): $(toq()) secs")
+
+    vs_opt = vp[1]
     return OptimizedSource(entry.pos[1], entry.pos[2], vs_opt)
 end
 
@@ -354,7 +518,6 @@ function one_node_single_infer(catalog::Vector{CatalogEntry},
                                target_sources::Vector{Int},
                                neighbor_map::Vector{Vector{Int}},
                                images::Vector{Image};
-                               infer_source_callback=infer_source,
                                config=Config())
     curr_source = 1
     last_source = length(target_sources)

@@ -1,9 +1,7 @@
 #!/usr/bin/env julia
 
-import Celeste.ParallelRun: one_node_joint_infer, infer_init, BoundingBox
+import Celeste.ParallelRun: one_node_joint_infer, infer_init, BoundingBox, find_neighbors
 import Celeste.SDSSIO: RunCamcolField, load_field_images, PlainFITSStrategy
-import Celeste.Infer: find_neighbors
-
 
 const datadir = joinpath(Pkg.dir("Celeste"), "test", "data")
 if ccall(:jl_generating_output, Cint, ()) == 0
