@@ -143,8 +143,7 @@ function load_bvn_mixtures!(
         for k in 1:psf_K
             pc = psf[k]
             mean_s = @SVector T[pc.xiBar[1] + m_pos[1], pc.xiBar[2] + m_pos[2]]
-            star_mcs[k, s] =
-              BvnComponent(mean_s, pc.tauBar, pc.alphaBar, false)
+            star_mcs[k, s] = BvnComponent(mean_s, pc.tauBar, pc.alphaBar, false)
         end
 
         # Convolve the galaxy representations with the PSF.
@@ -316,7 +315,7 @@ function accum_galaxy_pos!(bvn_derivs::BivariateNormalDerivatives{T},
                         fs1m.has_gradient, fs1m.has_hessian)
         transform_bvn_derivs!(
             bvn_derivs, gcc.sig_sf, wcs_jacobian, fs1m.has_hessian)
-            
+
         @aliasscope begin
             bvn_u_d = Const(bvn_derivs.bvn_u_d)
             bvn_s_d = Const(bvn_derivs.bvn_s_d)

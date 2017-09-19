@@ -20,11 +20,48 @@ struct SkyPatch
     radius_pix::Float64
 
     psf::Vector{PsfComponent}
+    grid_psf::Matrix{Float32}
     wcs_jacobian::Matrix{Float64}
     pixel_center::Vector{Float64}
 
     bitmap_offset::SVector{2, Int64}  # lower left corner index offset
     active_pixel_bitmap::Matrix{Bool}
+end
+
+
+function SkyPatch(img::Image, ce::CatalogEntry; radius_override_pix=NaN)
+    world_center = ce.pos
+    pixel_center = WCS.world_to_pix(img.wcs, world_center)
+    wcs_jacobian = pixel_world_jacobian(img.wcs, pixel_center)
+    radius_pix = choose_patch_radius(ce, img, width_scale=1.2)
+    @assert radius_pix <= 25
+    if !isnan(radius_override_pix)
+        radius_pix = radius_override_pix
+    end
+
+    hmin = max(0, floor(Int, pixel_center[1] - radius_pix - 1))
+    hmax = min(img.H - 1, ceil(Int, pixel_center[1] + radius_pix - 1))
+    wmin = max(0, floor(Int, pixel_center[2] - radius_pix - 1))
+    wmax = min(img.W - 1, ceil(Int, pixel_center[2] + radius_pix - 1))
+
+    # some light sources are so far from some images that they don't
+    # overlap at all
+    H2 = max(0, hmax - hmin + 1)
+    W2 = max(0, wmax - wmin + 1)
+
+    # all pixels are active by default
+    active_pixel_bitmap = trues(H2, W2)
+
+    grid_psf = Model.eval_psf(img.raw_psf_comp, pixel_center[1], pixel_center[2])
+
+    SkyPatch(world_center,
+             radius_pix,
+             img.psf,
+             grid_psf,
+             wcs_jacobian,
+             pixel_center,
+             SVector(hmin, wmin),
+             active_pixel_bitmap)
 end
 
 

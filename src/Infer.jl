@@ -79,40 +79,10 @@ function get_sky_patches(images::Vector{Image},
     S = length(catalog)
     patches = Matrix{SkyPatch}(S, N)
 
-    for n = 1:N
-        img = images[n]
-
-        for s=1:S
-            world_center = catalog[s].pos
-            pixel_center = WCS.world_to_pix(img.wcs, world_center)
-            wcs_jacobian = Model.pixel_world_jacobian(img.wcs, pixel_center)
-            radius_pix = Model.choose_patch_radius(catalog[s], img, width_scale=1.2)
-            @assert radius_pix <= 25
-            if !isnan(radius_override_pix)
-                radius_pix = radius_override_pix
-            end
-
-            hmin = max(0, floor(Int, pixel_center[1] - radius_pix - 1))
-            hmax = min(img.H - 1, ceil(Int, pixel_center[1] + radius_pix - 1))
-            wmin = max(0, floor(Int, pixel_center[2] - radius_pix - 1))
-            wmax = min(img.W - 1, ceil(Int, pixel_center[2] + radius_pix - 1))
-
-            # some light sources are so far from some images that they don't
-            # overlap at all
-            H2 = max(0, hmax - hmin + 1)
-            W2 = max(0, wmax - wmin + 1)
-
-            # all pixels are active by default
-            active_pixel_bitmap = trues(H2, W2)
-
-            patches[s, n] = SkyPatch(world_center,
-                                     radius_pix,
-                                     img.psf,
-                                     wcs_jacobian,
-                                     pixel_center,
-                                     SVector(hmin, wmin),
-                                     active_pixel_bitmap)
-        end
+    for n in 1:N, s in 1:S
+        patches[s, n] = SkyPatch(images[n],
+                                 catalog[s],
+                                 radius_override_pix=radius_override_pix)
     end
 
     patches
@@ -211,7 +181,5 @@ function is_pixel_in_patch(h::Int, w::Int, p::SkyPatch)
         return p.active_pixel_bitmap[hp, wp]
     end
 end
-
-
 
 end  # module
