@@ -316,36 +316,15 @@ end
 
 
 # ------
-# optimization result container
+# optimization
 
+# optimization result container
 struct OptimizedSource
     init_ra::Float64
     init_dec::Float64
     vs::Vector{Float64}
 end
 
-function serialize(s::Base.AbstractSerializer, os::OptimizedSource)
-    Base.serialize_type(s, typeof(os))
-    write(s.io, os.init_ra)
-    write(s.io, os.init_dec)
-    for i = 1:length(Celeste.Model.ids)
-        write(s.io, os.vs[i])
-    end
-end
-
-function deserialize(s::Base.AbstractSerializer, ::Type{OptimizedSource})
-    init_ra = read(s.io, Float64)::Float64
-    init_dec = read(s.io, Float64)::Float64
-    vs = zeros(Float64, length(Celeste.Model.ids))
-    for i = 1:length(Celeste.Model.ids)
-        vs[i] = read(s.io, Float64)
-    end
-    OptimizedSource(init_ra, init_dec, vs)
-end
-
-
-# ------
-# optimization
 
 """
 Optimize the `ts`th element of `target_sources`.
@@ -469,105 +448,6 @@ Like `get_overlapping_field_extents()`, but return a Vector of
 function get_overlapping_fields(query::BoundingBox, stagedir)
     fes = get_overlapping_field_extents(query, stagedir)
     [fe[1] for fe in fes]
-end
-
-
-"""
-Store the contents of the `field_extents.fits` file, so it doesn't
-have to be loaded repeatedly.
-"""
-struct FieldExtent
-    run::Int16
-    camcol::UInt8
-    field::Int16
-    ramin::Float64
-    ramax::Float64
-    decmin::Float64
-    decmax::Float64
-end
-
-
-"""
-Load `field_extents.fits` from `stagedir` and return a vector of
-`FieldExtent`s.
-"""
-function load_field_extents(strategy)
-    f = SDSSIO.readFITS(strategy, SDSSIO.FieldExtents())
-
-
-    hdu = f[2]::FITSIO.TableHDU
-
-    # read in the entire table.
-    all_run = read(hdu, "run")::Vector{Int16}
-    all_camcol = read(hdu, "camcol")::Vector{UInt8}
-    all_field = read(hdu, "field")::Vector{Int16}
-    all_ramin = read(hdu, "ramin")::Vector{Float64}
-    all_ramax = read(hdu, "ramax")::Vector{Float64}
-    all_decmin = read(hdu, "decmin")::Vector{Float64}
-    all_decmax = read(hdu, "decmax")::Vector{Float64}
-
-    close(f)
-
-    fes = Vector{FieldExtent}()
-    for i = 1:length(all_run)
-        fe = FieldExtent(all_run[i], all_camcol[i], all_field[i],
-                         all_ramin[i], all_ramax[i],
-                         all_decmin[i], all_decmax[i])
-        push!(fes, fe)
-    end
-
-    return fes
-end
-
-
-"""
-Use the provided `FieldExtent`s to return a list of RCFs that overlap
-the specified box.
-"""
-function get_overlapping_fields(query::BoundingBox, fes::Vector{FieldExtent})
-    # The ramin, ramax, etc is a bit unintuitive because we're looking
-    # for any overlap.
-    rcfs = Vector{RunCamcolField}()
-    for i in eachindex(fes)
-        if (fes[i].ramax > query.ramin &&
-                fes[i].ramin < query.ramax &&
-                fes[i].decmax > query.decmin &&
-                fes[i].decmin < query.decmax)
-            push!(rcfs, RunCamcolField(fes[i].run, fes[i].camcol, fes[i].field))
-        end
-    end
-
-    return rcfs
-end
-
-
-"""
-Use the provided `FieldExtent`s to return a list of RCFs that overlap
-all the provided boxes.
-"""
-function get_overlapping_fields(queries::Vector{Vector{BoundingBox}},
-                                fes::Vector{FieldExtent})
-    rcfs = Vector{RunCamcolField}()
-
-    for boxlist in queries
-        for query in boxlist
-            # The ramin, ramax, etc is a bit unintuitive because we're looking
-            # for any overlap.
-            for i in eachindex(fes)
-                if (fes[i].ramax > query.ramin &&
-                        fes[i].ramin < query.ramax &&
-                        fes[i].decmax > query.decmin &&
-                        fes[i].decmin < query.decmax)
-                    push!(rcfs, RunCamcolField(fes[i].run,
-                                               fes[i].camcol,
-                                               fes[i].field))
-                end
-            end
-        end
-        rcfs = unique(rcfs)
-    end
-
-    return rcfs
 end
 
 
