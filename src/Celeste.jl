@@ -18,7 +18,6 @@ include("BivariateNormals.jl")
 include("Coordinates.jl")
 
 include("Model.jl")
-include("Infer.jl")
 include("Transform.jl")
 include("PSF.jl")
 include("SDSSIO.jl")

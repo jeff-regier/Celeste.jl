@@ -5,7 +5,6 @@ using DataStructures
 import ..Log
 using ..Model
 import ..SDSSIO
-import ..Infer
 import ..SDSSIO: RunCamcolField
 import ..PSF
 
@@ -602,8 +601,8 @@ function init_elboargs(config::Config,
         cat_local = vcat([entry], neighbors)
         ids_local = vcat([entry_id], neighbor_ids)
 
-        patches = Infer.get_sky_patches(images, cat_local)
-        Infer.load_active_pixels!(config, images, patches)
+        patches = Model.get_sky_patches(images, cat_local)
+        ParallelRun.load_active_pixels!(config, images, patches)
         # Load vp with shared target source params, and also vp
         # that doesn't share target source params
         vp = Vector{Float64}[haskey(ts_vp, x) ?

@@ -1,6 +1,5 @@
 import JLD
 
-import Celeste.Infer
 import Celeste.ParallelRun: infer_init, BoundingBox,
     one_node_joint_infer, one_node_single_infer, detect_sources
 import Celeste.SensitiveFloats: SensitiveFloat
@@ -14,7 +13,7 @@ Helper function to load elbo args for a particular source
 """
 function load_ea_from_source(target_source, target_sources, catalog, images, all_vps)
     # Get neighbors of the source from which to load elbo args.
-    neighbor_map = Infer.find_neighbors([target_source], catalog, images)
+    neighbor_map = ParallelRun.find_neighbors([target_source], catalog, images)
 
     # Create a dictionary to the optimized parameters.
     target_source_variational_params = Dict{Int64, Array{Float64}}()
@@ -26,8 +25,8 @@ function load_ea_from_source(target_source, target_sources, catalog, images, all
     neighbors = catalog[neighbor_map[1]]
     entry = catalog[target_source]
     cat_local = vcat([entry], neighbors)
-    patches = Infer.get_sky_patches(images, cat_local)
-    Infer.load_active_pixels!(images, patches)
+    patches = Model.get_sky_patches(images, cat_local)
+    ParallelRun.load_active_pixels!(images, patches)
     ids_local = vcat([target_source], neighbor_map[1])
     vp = [haskey(target_source_variational_params, x) ?
           target_source_variational_params[x] :
@@ -107,12 +106,12 @@ function compute_obj_value(results,
     vp = [r.vs for r in results]
 
     # it may be better to pass `patches` as an argument to `compute_obj_value`.
-    patches = Infer.get_sky_patches(images, catalog[target_sources])
+    patches = Model.get_sky_patches(images, catalog[target_sources])
 
     # if we don't call `load_active_pixels!`, these patches will be different
     # than the patches we used for optimizing---and then the objective
     # function could also be slightly different
-    Infer.load_active_pixels!(images, patches)
+    ParallelRun.load_active_pixels!(images, patches)
 
     # this works since we're just generating patches for active_sources.
     # if instead you pass patches for all sources, then instead we'd used

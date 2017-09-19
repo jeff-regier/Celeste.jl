@@ -1,9 +1,8 @@
 #!/usr/bin/env julia
 
 import Celeste.ParallelRun: BoundingBox, get_overlapping_fields,
-                            one_node_joint_infer, infer_init
+                            one_node_joint_infer, infer_init, find_neighbors
 import Celeste.SDSSIO: RunCamcolField, load_field_images, PlainFITSStrategy
-import Celeste.Infer: find_neighbors
 
 
 const rcfs = [

@@ -12,7 +12,6 @@ using ..BivariateNormals: BivariateNormalDerivatives, BvnComponent,
 using ..Model
 using ..Model: SkyPatch, BvnBundle, populate_fsm!
 import ..Celeste: Const, @aliasscope, @unroll_loop
-import ..Infer
 using ..SensitiveFloats
 import ..Log
 using ..Transform
@@ -110,45 +109,5 @@ include("deterministic_vi/source_brightness.jl")
 include("deterministic_vi/elbo_objective.jl")
 include("deterministic_vi/ConstraintTransforms.jl")
 include("deterministic_vi/ElboMaximize.jl")
-
-
-"""
-Infers one light source. This routine is intended to be called in parallel,
-once per target light source.
-
-Arguments:
-    images: a collection of astronomical images
-    neighbors: the other light sources near `entry`
-    entry: the source to infer
-"""
-function infer_source(config::Config,
-                      images::Vector{Image},
-                      neighbors::Vector{CatalogEntry},
-                      entry::CatalogEntry)
-    if length(neighbors) > 100
-        msg = string("object at RA, Dec = $(entry.pos) has an excessive",
-                     "number ($(length(neighbors))) of neighbors")
-        Log.warn(msg)
-    end
-
-    # It's a bit inefficient to call the next 5 lines every time we optimize_f.
-    # But, as long as runtime is dominated by the call to maximize!, that
-    # isn't a big deal.
-    cat_local = vcat([entry], neighbors)
-    vp = init_sources([1], cat_local)
-    patches = Infer.get_sky_patches(images, cat_local)
-    Infer.load_active_pixels!(config, images, patches)
-
-    ea = ElboArgs(images, patches, [1])
-    f_evals, max_f, max_x, nm_result = ElboMaximize.maximize!(ea, vp)
-    return vp[1]
-end
-
-# legacy wrapper
-function infer_source(images::Vector{Image},
-                      neighbors::Vector{CatalogEntry},
-                      entry::CatalogEntry)
-    infer_source(Config(), images, neighbors, entry)
-end
 
 end

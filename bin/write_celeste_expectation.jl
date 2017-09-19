@@ -6,7 +6,6 @@ import JLD
 import Celeste.AccuracyBenchmark
 import Celeste.ArgumentParse
 import Celeste.DeterministicVI
-import Celeste.Infer
 import Celeste.Log
 import Celeste.Model
 import Celeste.ParallelRun
@@ -114,7 +113,7 @@ function fill_celeste_expectation!(
     images::Vector{Model.Image}, sources::Vector{ParallelRun.OptimizedSource}
 )
     catalog = [catalog_entry_from_variational_params(source.vs) for source in sources]
-    patches = Infer.get_sky_patches(images, catalog, radius_override_pix=25.0)
+    patches = Model.get_sky_patches(images, catalog, radius_override_pix=25.0)
     variational_params = Vector{Float64}[source.vs for source in sources]
 
     active_sources = [1]

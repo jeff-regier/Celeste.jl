@@ -7,7 +7,6 @@ import FITSIO
 
 import ..AccuracyBenchmark
 import ..Config
-import ..Infer
 
 const GALSIM_BENCHMARK_DIR = joinpath(Pkg.dir("Celeste"), "benchmark", "galsim")
 const LATEST_FITS_FILENAME_DIR = joinpath(GALSIM_BENCHMARK_DIR, "latest_filenames")
