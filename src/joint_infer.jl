@@ -492,7 +492,6 @@ function one_node_joint_infer(catalog, target_sources, neighbor_map, images;
                               batch_size::Int=7000,
                               within_batch_shuffling::Bool=true,
                               n_iters::Int=3,
-                              timing=InferTiming(),
                               config=Config())
     # Seed random number generator to ensure the same results per run.
     srand(42)
@@ -513,14 +512,12 @@ function one_node_joint_infer(catalog, target_sources, neighbor_map, images;
     ks = BoxKillSwitch()
 
     # Initialize elboargs in parallel
-    tic()
     thread_initialize_sources_assignment::Vector{Vector{Vector{Int64}}} = partition_equally(n_threads, n_sources)
 
     initialize_elboargs_sources!(config, ea_vec, vp_vec, cfg_vec, thread_initialize_sources_assignment,
                                  catalog, target_sources, neighbor_map, images,
                                  target_source_variational_params;
                                  termination_callback=ks)
-    timing.init_elbo = toq()
 
     #thread_sources_assignment = partition_box(n_threads, target_sources,
     #                                  neighbor_map;
@@ -532,8 +529,6 @@ function one_node_joint_infer(catalog, target_sources, neighbor_map, images;
                                                  batch_size=batch_size)
 
     # Process sources in parallel
-    tic()
-
     #process_sources!(images, ea_vec, vp_vec, cfg_vec,
     #                 thread_sources_assignment,
     #                 n_iters, within_batch_shuffling)
@@ -541,9 +536,6 @@ function one_node_joint_infer(catalog, target_sources, neighbor_map, images;
                              batched_connected_components,
                              n_iters, within_batch_shuffling;
                              kill_switch=ks)
-
-    timing.opt_srcs = toq()
-    timing.num_srcs = n_sources
 
     # Return add results to vector
     results = OptimizedSource[]

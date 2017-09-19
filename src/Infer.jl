@@ -2,10 +2,7 @@
 Routines for single-node inference that aren't specific
 to any particular method of inference (e.g MCMC, DeterministicVI),
 yet are also not about the statistical model (i.e., the Model
-module).
-Currently what's in here are routines that effectively
-truncate the Gaussians in the model.
-TODO: rename this module to something more meaningful
+module). We may want to merge this module with ParallelRun.jl.
 """
 module Infer
 
