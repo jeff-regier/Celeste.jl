@@ -973,7 +973,7 @@ end
 function score_uncertainty(uncertainty_df::DataFrame)
     mapreduce(vcat, groupby(uncertainty_df, :name)) do group_df
         abs_error_sds = abs.(group_df[:error] ./ group_df[:posterior_std_err])
-        abs_error_sds = abs_error_sds[!isna(abs_error_sds)]
+        abs_error_sds = abs_error_sds[!isna.(abs_error_sds)]
         DataFrame(
             field=group_df[1, :name],
             within_half_sd=mean(abs_error_sds .<= 1/2),

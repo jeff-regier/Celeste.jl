@@ -3,12 +3,17 @@ import JLD
 
 import Celeste: Config
 using Celeste.SDSSIO
+using Celeste.ParallelRun
 
-"""
-test infer with a single (run, camcol, field).
-This is basically just to make sure it runs at all.
-"""
-function test_infer_single()
+
+@testset "infer_box runs" begin
+    box = ParallelRun.BoundingBox(164.39, 164.41, 39.11, 39.13)
+    rcfs = [RunCamcolField(3900, 6, 269),]
+    ParallelRun.infer_box(box, datadir, datadir)
+end
+
+
+@testset "one_node_single_infer with a single (run, camcol, field)" begin
     # very small patch of sky that turns out to have 4 sources.
     # We checked that this patch is in the given field.
     box = ParallelRun.BoundingBox(164.39, 164.41, 39.11, 39.13)
@@ -19,7 +24,7 @@ function test_infer_single()
 end
 
 
-function test_load_active_pixels()
+@testset "load active pixels" begin
     ea, vp, catalog = gen_sample_star_dataset()
 
     # these images have 20 * 23 * 5 = 2300 pixels in total.
@@ -80,7 +85,7 @@ function test_load_active_pixels()
 end
 
 
-function test_patch_pixel_selection()
+@testset "active pixel selection" begin
     ea, vp, catalog = gen_two_body_dataset();
     patches = Infer.get_sky_patches(ea.images, catalog; radius_override_pix=5);
     config = Config()
@@ -123,7 +128,7 @@ function test_patch_pixel_selection()
 end
 
 
-@testset "test that we don't select a patch that is way too big" begin
+@testset "don't select a patch that is way too big" begin
     wd = pwd()
     cd(datadir)
     run(`make RUN=4114 CAMCOL=3 FIELD=127`)
@@ -143,8 +148,3 @@ end
     # http://skyserver.sdss.org/dr10/en/tools/explore/summary.aspx?id=0x112d1012607f050a
     @test length(neighbors) < 5
 end
-
-
-test_patch_pixel_selection()
-test_load_active_pixels()
-test_infer_single()
