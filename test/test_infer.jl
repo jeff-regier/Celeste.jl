@@ -7,7 +7,7 @@ using Celeste.ParallelRun
 
 
 @testset "infer_box runs" begin
-    box = ParallelRun.BoundingBox(164.39, 164.41, 39.11, 39.13)
+    box = ParallelRun.BoundingBox("164.39", "164.41", "39.11", "39.13")
     rcfs = [RunCamcolField(3900, 6, 269),]
     ParallelRun.infer_box(box, datadir, datadir)
 end
