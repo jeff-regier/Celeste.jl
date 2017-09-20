@@ -6,7 +6,7 @@ using FITSIO
     
     # use test image in SEP source directory
     sep_testdata_dir = joinpath(dirname(@__FILE__), "..", "deps", "src",
-                                "sep-1.0.1", "data")
+                                "sep-1.0.2", "data")
 
     data = read(FITS(joinpath(sep_testdata_dir, "image.fits"))[1])
     back_sextractor = read(FITS(joinpath(sep_testdata_dir, "back.fits"))[1])
