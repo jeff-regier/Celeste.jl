@@ -38,7 +38,7 @@ cd(wd)
 
 
 const sample_rcf = RunCamcolField(3900, 6, 269)
-const sample_images = load_field_images(PlainFITSStrategy(datadir),sample_rcf)
+const sample_images = load_field_images(PlainFITSStrategy(datadir), sample_rcf)
 
 
 """

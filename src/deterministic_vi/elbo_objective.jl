@@ -357,15 +357,13 @@ function add_pixel_term!{NumType <: Number}(
                 elbo_vars.inactive_pixel_counter[] += 1
             end
 
-            populate_fsm!(bvn_bundle.bvn_derivs,
-                          elbo_vars.fs0m,
-                          elbo_vars.fs1m,
-                          s,
-                          SVector{2,Float64}(h, w),
-                          is_active_source,
-                          p.wcs_jacobian,
-                          bvn_bundle.gal_mcs,
-                          bvn_bundle.star_mcs)
+            Model.star_light_density!(elbo_vars.fs0m, p, h, w, vp[s][ids.pos], is_active_source)
+            Model.populate_gal_fsm!(elbo_vars.fs1m,
+                                    bvn_bundle.bvn_derivs,
+                                    s, h, w,
+                                    is_active_source,
+                                    p.wcs_jacobian,
+                                    bvn_bundle.gal_mcs)
 
             accumulate_source_pixel_brightness!(ea, vp, elbo_vars,
                 sbs[s], ea.images[n].b, s, is_active_source)

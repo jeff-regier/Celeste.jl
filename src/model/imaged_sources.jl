@@ -55,6 +55,15 @@ function SkyPatch(img::Image, ce::CatalogEntry; radius_override_pix=NaN)
     active_pixel_bitmap = trues(H2, W2)
 
     grid_psf = Model.eval_psf(img.raw_psf_comp, pixel_center[1], pixel_center[2])
+    grid_psf[:, :] = max.(grid_psf, 0.0)
+    grid_psf += 1e-6
+    grid_psf /= sum(grid_psf)
+    # The following transformation is like softplus. Its inv always returns a
+    # positive value. Without this transformation, even if the psf over the
+    # grid_psf is positive, the iterpolation of grid with bicubic splines often
+    # has negative values.
+    grid_psf[:, :] = softpluslike.(grid_psf)
+
     itp_psf = interpolate(grid_psf, BSpline(Cubic(Line())), OnGrid())
 
     SkyPatch(world_center,

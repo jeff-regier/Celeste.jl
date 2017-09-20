@@ -192,21 +192,24 @@ Non-standard args:
     - x: The pixel location in the image
 """
 function populate_gal_fsm!(
-        bvn_derivs::BivariateNormalDerivatives{T},
         fs1m::SensitiveFloat{T},
+        bvn_derivs::BivariateNormalDerivatives{T},
         s::Int,
-        x::SVector{2,Float64},
+        h::Int64,
+        w::Int64,
         is_active_source::Bool,
         wcs_jacobian::Matrix{Float64},
         gal_mcs::Array{GalaxyCacheComponent{T}, 4}) where {T<:Number}
     SensitiveFloats.zero!(fs1m)
+    x = SVector{2,Float64}(h, w)
+
     for i = 1:2 # Galaxy types
         for j in 1:8 # Galaxy component
             # If i == 2 then there are only six galaxy components.
             if (i == 1) || (j <= 6)
                 for k = 1:size(gal_mcs, 1) # PSF component
                     accum_galaxy_pos!(
-                        bvn_derivs, fs1m,
+                        fs1m, bvn_derivs,
                         gal_mcs[k, j, i, s], x, wcs_jacobian,
                         is_active_source)
                 end
@@ -215,84 +218,33 @@ function populate_gal_fsm!(
     end
 end
 
-
-"""
-Populate fs0m and fs1m for source s in the a given pixel.
-
-Non-standard args:
-    - x: The pixel location in the image
-"""
-function populate_fsm!{T <: Number}(
-                    bvn_derivs::BivariateNormalDerivatives{T},
-                    fs0m::SensitiveFloat{T},
-                    fs1m::SensitiveFloat{T},
-                    s::Int,
-                    x::SVector{2,Float64},
-                    is_active_source::Bool,
-                    wcs_jacobian::Matrix{Float64},
-                    gal_mcs::Array{GalaxyCacheComponent{T}, 4},
-                    star_mcs::Array{BvnComponent{T}, 2})
-    SensitiveFloats.zero!(fs0m)
-    for k = 1:size(star_mcs, 1) # PSF component
-        accum_star_pos!(
-            bvn_derivs, fs0m,
-            star_mcs[k, s], x, wcs_jacobian, is_active_source)
-    end
-
-    populate_gal_fsm!(bvn_derivs, fs1m,
-                      s, x, is_active_source,
-                      wcs_jacobian, gal_mcs)
-end
+softpluslike(x) = 1000x > 1 ? 1000x - 1 : log(1000x)
+softpluslikeinv(y) = y < 0 ? 1e-3exp(y) : 1e-3(y + 1)
 
 
-"""
-Add the contributions of a star's bivariate normal term to the ELBO,
-by updating elbo_vars.fs0m in place.
+function star_light_density!(fs0m::SensitiveFloat{T},
+                             p::SkyPatch,
+                             h::Int,
+                             w::Int,
+                             pos::Vector,
+                             is_active_source::Bool) where {T <: Number}
+     f(local_pos::Vector) = begin
+         m_pos = Model.linear_world_to_pix(p.wcs_jacobian,
+                                           p.center,
+                                           p.pixel_center,
+                                           local_pos)
+         softpluslikeinv(p.itp_psf[h - m_pos[1] + 26, w - m_pos[2] + 26])
+     end
 
-Args:
-    - bvn_derivs: (formerly from elbo_vars)
-    - fs0m: sensitive floats populated by this method
-    - calculate_gradient: the and of is_active_source and formerly elbo_vars.calculate_gradient
-    - calculate_hessian: elbo_vars: Elbo intermediate values.
-    - s: The index of the current source in 1:S
-    - bmc: The component to be added
-    - x: An offset for the component in pixel coordinates (e.g. a pixel location)
-    - wcs_jacobian: The jacobian of the function pixel = F(world) at this location.
-"""
-function accum_star_pos!(bvn_derivs::BivariateNormalDerivatives{T},
-                         fs0m::SensitiveFloat{T},
-                         bmc::BvnComponent{T},
-                         x::SVector{2,Float64},
-                         wcs_jacobian::Array{Float64, 2},
-                         is_active_source::Bool) where {T<:Number}
-    eval_bvn_pdf!(bvn_derivs, bmc, x)
+     fs0m.v[] = f(pos)
 
-    if fs0m.has_gradient && is_active_source
-        get_bvn_derivs!(bvn_derivs, bmc, true, false)
-    end
+     if fs0m.has_gradient && is_active_source
+         ForwardDiff.gradient!(fs0m.d, f, pos)
+     end
 
-    fs0m.v[] += bvn_derivs.f_pre[1]
-
-    if fs0m.has_gradient && is_active_source
-        transform_bvn_ux_derivs!(bvn_derivs, wcs_jacobian, fs0m.has_hessian)
-        bvn_u_d = bvn_derivs.bvn_u_d
-        bvn_uu_h = bvn_derivs.bvn_uu_h
-
-        # Accumulate the derivatives.
-        for u_id in 1:2
-            fs0m.d[star_ids.pos[u_id]] += bvn_derivs.f_pre[1] * bvn_u_d[u_id]
-        end
-
-        if fs0m.has_hessian
-            # Hessian terms involving only the location parameters.
-            # TODO: redundant term
-            for u_id1 in 1:2, u_id2 in 1:2
-                fs0m.h[star_ids.pos[u_id1], star_ids.pos[u_id2]] +=
-                    bvn_derivs.f_pre[1] * (bvn_uu_h[u_id1, u_id2] +
-                    bvn_u_d[u_id1] * bvn_u_d[u_id2])
-            end
-        end
-    end
+     if fs0m.has_hessian && is_active_source
+         ForwardDiff.hessian!(fs0m.h, f, pos)
+     end
 end
 
 
@@ -300,8 +252,8 @@ end
 Add the contributions of a galaxy component term to the ELBO by
 updating fs1m in place.
 """
-function accum_galaxy_pos!(bvn_derivs::BivariateNormalDerivatives{T},
-                           fs1m::SensitiveFloat{T},
+function accum_galaxy_pos!(fs1m::SensitiveFloat{T},
+                           bvn_derivs::BivariateNormalDerivatives{T},
                            gcc::GalaxyCacheComponent{T},
                            x::SVector{2,Float64},
                            wcs_jacobian::Array{Float64, 2},
