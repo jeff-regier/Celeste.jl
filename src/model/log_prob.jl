@@ -2,6 +2,7 @@
 # parameters given pixel data
 using Distributions
 import ..SensitiveFloats: SensitiveFloat
+import JLD
 
 const eps_prob_a = 1e-6
 
@@ -183,40 +184,30 @@ function state_log_likelihood(is_star::Bool,                # source is star
             end
 
             # compute the unit-flux pixel values
-            hw = SVector{2,Float64}(h, w)
-
-            # compute the background rate for this pixel
-            background_rate = img.sky[h, w]
-            for s in 2:S  # excludes source #1
-                # determine if background source is star/gal; get fluxes
+            pixel_rate = img.sky[h, w]
+            for s in 1:S
                 params_s  = source_params[s]
-                s_is_star = params_s[lidx.is_star[1,1]] > .5
-                type_idx  = s_is_star ? 1 : 2
-                flux_s    = colors_to_fluxes(params_s[lidx.flux[type_idx]],
-                                             params_s[lidx.color[:,type_idx]])
-                populate_fsm!(bvn_derivs,
-                              fs0m, fs1m,
-                              s, hw,
-                              false,
-                              p.wcs_jacobian,
-                              gal_mcs, star_mcs)
-                rate_s = s_is_star ? fs0m.v[] : fs1m.v[]
-                rate_s *= flux_s[img.b]
-                background_rate += rate_s
+
+                star_light_density!(fs0m, p, h, w, params_s[lidx.pos], false)
+                populate_gal_fsm!(fs1m, bvn_derivs, s, h, w, false, p.wcs_jacobian, gal_mcs)
+
+                if s == 1
+                    this_rate  = is_star ? fs0m.v[] : fs1m.v[]
+                    pixel_rate += fluxes[img.b] * this_rate
+                else
+                    # determine if background source is star/gal; get fluxes
+                    s_is_star = params_s[lidx.is_star[1,1]] > .5
+                    type_idx  = s_is_star ? 1 : 2
+                    flux_s    = colors_to_fluxes(params_s[lidx.flux[type_idx]],
+                                                 params_s[lidx.color[:,type_idx]])
+                    rate_s = s_is_star ? fs0m.v[] : fs1m.v[]
+                    rate_s *= flux_s[img.b]
+                    pixel_rate += rate_s
+                end
             end
 
-            # this source's rate, add to background for total
-            populate_fsm!(bvn_derivs,
-                          fs0m, fs1m,
-                          1, hw,
-                          false,
-                          p.wcs_jacobian,
-                          gal_mcs, star_mcs)
-            this_rate  = is_star ? fs0m.v[] : fs1m.v[]
-            pixel_rate = fluxes[img.b] * this_rate + background_rate
-
             # multiply by image's gain for this pixel
-            rate     = pixel_rate * img.nelec_per_nmgy[h]
+            rate = pixel_rate * img.nelec_per_nmgy[h]
             pixel_ll = logpdf(Poisson(rate[1]), round(Int, img.pixels[h, w]))
             ll += pixel_ll
         end
