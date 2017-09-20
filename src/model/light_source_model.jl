@@ -1,6 +1,5 @@
 import JLD
 
-
 # The number of components in the color prior.
 const NUM_COLOR_COMPONENTS = 8
 
