@@ -17,3 +17,4 @@ TranscodingStreams
 CodecBzip2
 CodecZlib
 NearestNeighbors
+Interpolations

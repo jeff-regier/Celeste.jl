@@ -1,3 +1,5 @@
+using Interpolations
+
 # Routines for observations of light sources in particular images,
 # rather than for sources in the abstract, in physical units,
 # and rather than for images alone (that's image_model.jl).
@@ -20,7 +22,7 @@ struct SkyPatch
     radius_pix::Float64
 
     psf::Vector{PsfComponent}
-    grid_psf::Matrix{Float32}
+    itp_psf::AbstractInterpolation
     wcs_jacobian::Matrix{Float64}
     pixel_center::Vector{Float64}
 
@@ -53,11 +55,12 @@ function SkyPatch(img::Image, ce::CatalogEntry; radius_override_pix=NaN)
     active_pixel_bitmap = trues(H2, W2)
 
     grid_psf = Model.eval_psf(img.raw_psf_comp, pixel_center[1], pixel_center[2])
+    itp_psf = interpolate(grid_psf, BSpline(Cubic(Line())), OnGrid())
 
     SkyPatch(world_center,
              radius_pix,
              img.psf,
-             grid_psf,
+             itp_psf,
              wcs_jacobian,
              pixel_center,
              SVector(hmin, wmin),

@@ -122,5 +122,3 @@ function eval_psf(psf::RawPSF, x::Real, y::Real)
 
     return stamp
 end
-
-

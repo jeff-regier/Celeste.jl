@@ -3,7 +3,7 @@ module AccuracyBenchmark
 using DataFrames
 using Distributions
 import FITSIO
-import StaticArrays
+using StaticArrays
 import WCS
 
 import ..Config
@@ -510,6 +510,24 @@ function make_image(
         collect(1:width_px),
         ones(height_px),
     )
+
+    # The next code block generates an SDSS-style raw_psf with just one
+    # eigenimage. That eigenimage is obtained by rendering the Celeste PSF
+    # on a grid.
+    psf_dims = (51, 51)
+    rendered_psf = zeros(psf_dims...)
+    x = Vector{Float64}(2)
+    for pc in psf
+        bvn = MultivariateNormal(convert(Array, pc.xiBar), convert(Array, pc.tauBar))
+        for w in 1:psf_dims[2], h in 1:psf_dims[1]
+            x[1] = h - 26
+            x[2] = w - 26
+            rendered_psf[h, w] += pc.alphaBar * pdf(bvn, x)
+        end
+    end
+    rendered_psf = reshape(rendered_psf, (reduce(*, psf_dims), 1))
+    raw_psf = Model.RawPSF(rendered_psf, psf_dims[1], psf_dims[2], ones(1, 1, 1))
+
     Model.Image(
         height_px,
         width_px,
@@ -520,7 +538,7 @@ function make_image(
         0, 0, 0, # run, camcol, field
         sky_intensity,
         fill(nelec_per_nmgy, height_px),
-        Model.RawPSF(Matrix{Float64}(0, 0), 0, 0, Array{Float64,3}(0, 0, 0)),
+        raw_psf,
     )
 end
 
