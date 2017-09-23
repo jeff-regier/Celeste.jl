@@ -34,11 +34,11 @@ def star_position_2(test_case):
 
 @galsim_test_case
 def dim_star(test_case):
-    test_case.add_star().reference_band_flux_nmgy(20)
+    test_case.add_star().flux_r_nmgy(20)
 
 @galsim_test_case
 def bright_star(test_case):
-    test_case.add_star().reference_band_flux_nmgy(80)
+    test_case.add_star().flux_r_nmgy(80)
 
 @galsim_test_case
 def different_color_star(test_case):
@@ -46,21 +46,21 @@ def different_color_star(test_case):
 
 @galsim_test_case
 def star_with_noise(test_case):
-    test_case.add_star().offset_arcsec(-1, 1).reference_band_flux_nmgy(20)
+    test_case.add_star().offset_arcsec(-1, 1).flux_r_nmgy(20)
     test_case.sky_level_nmgy = 0.1
     test_case.include_noise = True
 
 @galsim_test_case
 def angle_and_axis_ratio_1(test_case):
-    test_case.add_galaxy().angle_deg(15).minor_major_axis_ratio(0.2)
+    test_case.add_galaxy().gal_angle_deg(15).axis_ratio(0.2)
 
 @galsim_test_case
 def angle_and_axis_ratio_2(test_case):
-    test_case.add_galaxy().angle_deg(160).minor_major_axis_ratio(0.4)
+    test_case.add_galaxy().gal_angle_deg(160).axis_ratio(0.4)
 
 @galsim_test_case
 def round_galaxy(test_case):
-    test_case.add_galaxy().minor_major_axis_ratio(1)
+    test_case.add_galaxy().axis_ratio(1)
 
 @galsim_test_case
 def small_galaxy(test_case):
@@ -72,19 +72,19 @@ def large_galaxy(test_case):
 
 @galsim_test_case
 def dim_galaxy(test_case):
-    test_case.add_galaxy().reference_band_flux_nmgy(5)
+    test_case.add_galaxy().flux_r_nmgy(5)
 
 @galsim_test_case
 def bright_galaxy(test_case):
-    test_case.add_galaxy().reference_band_flux_nmgy(20)
+    test_case.add_galaxy().flux_r_nmgy(20)
 
 @galsim_test_case
 def de_vaucouleurs_galaxy(test_case):
-    test_case.add_galaxy().de_vaucouleurs_mixture_weight(1)
+    test_case.add_galaxy().gal_frac_dev(1)
 
 @galsim_test_case
 def exp_dev_mixture_galaxy(test_case):
-    test_case.add_galaxy().de_vaucouleurs_mixture_weight(0.4)
+    test_case.add_galaxy().gal_frac_dev(0.4)
 
 @galsim_test_case
 def different_color_galaxy(test_case):
@@ -94,11 +94,11 @@ def different_color_galaxy(test_case):
 def galaxy_with_all(test_case):
     (test_case.add_galaxy()
          .offset_arcsec(0.3, -0.7)
-         .angle_deg(15)
-         .minor_major_axis_ratio(0.4)
+         .gal_angle_deg(15)
+         .axis_ratio(0.4)
          .half_light_radius_arcsec(2.5)
-         .reference_band_flux_nmgy(15)
-         .de_vaucouleurs_mixture_weight(0.4)
+         .flux_r_nmgy(15)
+         .gal_frac_dev(0.4)
          .flux_relative_to_reference_band([0.6, 0.2, 1, 1.1, 2])
     )
 
@@ -124,21 +124,21 @@ def overlapping_stars(test_case):
 
 @galsim_test_case
 def overlapping_galaxies(test_case):
-    test_case.add_galaxy().offset_arcsec(-2, -2).angle_deg(135).minor_major_axis_ratio(0.2)
-    test_case.add_galaxy().offset_arcsec(3, 3).angle_deg(35).minor_major_axis_ratio(0.5)
+    test_case.add_galaxy().offset_arcsec(-2, -2).gal_angle_deg(135).axis_ratio(0.2)
+    test_case.add_galaxy().offset_arcsec(3, 3).gal_angle_deg(35).axis_ratio(0.5)
 
 @galsim_test_case
 def overlapping_star_and_galaxy(test_case):
     test_case.add_star().offset_arcsec(-5, 0)
-    test_case.add_galaxy().offset_arcsec(2, 2).angle_deg(35).minor_major_axis_ratio(0.5)
+    test_case.add_galaxy().offset_arcsec(2, 2).gal_angle_deg(35).axis_ratio(0.5)
 
 @galsim_test_case
 def three_sources_two_overlap(test_case):
     test_case.add_star().offset_arcsec(-5, 5)
     (test_case.add_galaxy()
          .offset_arcsec(2, 5)
-         .angle_deg(35)
-         .minor_major_axis_ratio(0.2)
+         .gal_angle_deg(35)
+         .axis_ratio(0.2)
     )
     test_case.add_star().offset_arcsec(10, -10)
 

@@ -74,24 +74,24 @@ function catalog_to_data_frame_row(catalog_entry; objid="truth")
     df = DataFrame()
     fluxes = ce.is_star ? ce.star_fluxes : ce.gal_fluxes
     df[:objid]                          = [objid]
-    df[:right_ascension_deg]            = [ce.pos[1]]
-    df[:declination_deg]                = [ce.pos[2]]
+    df[:ra]            = [ce.pos[1]]
+    df[:dec]                = [ce.pos[2]]
     df[:is_saturated]                   = [false]
     df[:is_star]                        = [ce.is_star]
-    df[:de_vaucouleurs_mixture_weight]  = [ce.gal_frac_dev]
-    df[:minor_major_axis_ratio]         = [ce.gal_ab]
-    df[:half_light_radius_px]           = [ce.gal_scale]
-    df[:angle_deg]                      = [ce.gal_angle]
-    df[:reference_band_flux_nmgy]       = [fluxes[3]]
-    df[:log_reference_band_flux_stderr] = [NaN]
-    df[:color_log_ratio_ug]             = [log(fluxes[2]) - log(fluxes[1])]
-    df[:color_log_ratio_gr]             = [log(fluxes[3]) - log(fluxes[2])]
-    df[:color_log_ratio_ri]             = [log(fluxes[4]) - log(fluxes[3])]
-    df[:color_log_ratio_iz]             = [log(fluxes[5]) - log(fluxes[4])]
-    df[:color_log_ratio_ug_stderr]      = [NaN]
-    df[:color_log_ratio_gr_stderr]      = [NaN]
-    df[:color_log_ratio_ri_stderr]      = [NaN]
-    df[:color_log_ratio_iz_stderr]      = [NaN]
+    df[:gal_frac_dev]  = [ce.gal_frac_dev]
+    df[:gal_axis_ratio]         = [ce.gal_axis_ratio]
+    df[:gal_radius_px]           = [ce.gal_radius_px]
+    df[:gal_angle_deg]                      = [ce.gal_angle]
+    df[:flux_r_nmgy]       = [fluxes[3]]
+    df[:log_flux_r_stderr] = [NaN]
+    df[:color_ug]             = [log(fluxes[2]) - log(fluxes[1])]
+    df[:color_gr]             = [log(fluxes[3]) - log(fluxes[2])]
+    df[:color_ri]             = [log(fluxes[4]) - log(fluxes[3])]
+    df[:color_iz]             = [log(fluxes[5]) - log(fluxes[4])]
+    df[:color_ug_stderr]      = [NaN]
+    df[:color_gr_stderr]      = [NaN]
+    df[:color_ri_stderr]      = [NaN]
+    df[:color_iz_stderr]      = [NaN]
     return df
 end
 
@@ -99,18 +99,18 @@ function samples_to_data_frame_rows(chain; is_star=true)
     df = DataFrame()
 
     # reference band flux (+ log flux) and colors
-    df[:log_reference_band_flux]  = chain[:,3]
-    df[:reference_band_flux_nmgy] = exp.(chain[:,3])
-    df[:color_log_ratio_ug] = chain[:,2] .- chain[:,1]
-    df[:color_log_ratio_gr] = chain[:,3] .- chain[:,2]
-    df[:color_log_ratio_ri] = chain[:,4] .- chain[:,3]
-    df[:color_log_ratio_iz] = chain[:,5] .- chain[:,4]
+    df[:log_flux_r]  = chain[:,3]
+    df[:flux_r_nmgy] = exp.(chain[:,3])
+    df[:color_ug] = chain[:,2] .- chain[:,1]
+    df[:color_gr] = chain[:,3] .- chain[:,2]
+    df[:color_ri] = chain[:,4] .- chain[:,3]
+    df[:color_iz] = chain[:,5] .- chain[:,4]
 
     u_samps = [constrain_pos(chain[p,6:7]) for p in 1:size(chain, 1)]
     u_samps = transpose(hcat(u_samps...))
 
-    df[:right_ascension_deg] = u_samps[:,1]
-    df[:declination_deg]     = u_samps[:,2]
+    df[:ra] = u_samps[:,1]
+    df[:dec]     = u_samps[:,2]
 
     return df
 end
@@ -120,24 +120,24 @@ function samples_to_data_frame_row(sampdf; objid="mcmc")
     """ only for stars right now """
     df = DataFrame()
     df[:objid]                          = [objid]
-    df[:right_ascension_deg]            = [mean(sampdf[:right_ascension_deg])]
-    df[:declination_deg]                = [mean(sampdf[:declination_deg])]
+    df[:ra]            = [mean(sampdf[:ra])]
+    df[:dec]                = [mean(sampdf[:dec])]
     df[:is_saturated]                   = [false]
     df[:is_star]                        = [true]
-    df[:de_vaucouleurs_mixture_weight]  = [NaN]
-    df[:minor_major_axis_ratio]         = [NaN]
-    df[:half_light_radius_px]           = [NaN]
-    df[:angle_deg]                      = [NaN]
-    df[:reference_band_flux_nmgy]       = [mean(sampdf[:reference_band_flux_nmgy])]
-    df[:log_reference_band_flux_stderr] = [std(sampdf[:log_reference_band_flux])]
-    df[:color_log_ratio_ug]             = [mean(sampdf[:color_log_ratio_ug])]
-    df[:color_log_ratio_gr]             = [mean(sampdf[:color_log_ratio_gr])]
-    df[:color_log_ratio_ri]             = [mean(sampdf[:color_log_ratio_ri])]
-    df[:color_log_ratio_iz]             = [mean(sampdf[:color_log_ratio_iz])]
-    df[:color_log_ratio_ug_stderr]      = [std(sampdf[:color_log_ratio_ug])]
-    df[:color_log_ratio_gr_stderr]      = [std(sampdf[:color_log_ratio_gr])]
-    df[:color_log_ratio_ri_stderr]      = [std(sampdf[:color_log_ratio_ri])]
-    df[:color_log_ratio_iz_stderr]      = [std(sampdf[:color_log_ratio_iz])]
+    df[:gal_frac_dev]  = [NaN]
+    df[:gal_axis_ratio]         = [NaN]
+    df[:gal_radius_px]           = [NaN]
+    df[:gal_angle_deg]                      = [NaN]
+    df[:flux_r_nmgy]       = [mean(sampdf[:flux_r_nmgy])]
+    df[:log_flux_r_stderr] = [std(sampdf[:log_flux_r])]
+    df[:color_ug]             = [mean(sampdf[:color_ug])]
+    df[:color_gr]             = [mean(sampdf[:color_gr])]
+    df[:color_ri]             = [mean(sampdf[:color_ri])]
+    df[:color_iz]             = [mean(sampdf[:color_iz])]
+    df[:color_ug_stderr]      = [std(sampdf[:color_ug])]
+    df[:color_gr_stderr]      = [std(sampdf[:color_gr])]
+    df[:color_ri_stderr]      = [std(sampdf[:color_ri])]
+    df[:color_iz_stderr]      = [std(sampdf[:color_iz])]
  
     return df
 end
@@ -191,14 +191,14 @@ end
 function write_galaxy_unit_flux(img0::Image,
                                 pos::Array{Float64,1},
                                 gal_frac_dev::Float64,
-                                gal_ab::Float64,
+                                gal_axis_ratio::Float64,
                                 gal_angle::Float64,
-                                gal_scale::Float64,
+                                gal_radius_px::Float64,
                                 pixels::Matrix{Float64})
     iota = median(img0.nelec_per_nmgy)
-    gal_fracdevs = [gal_frac_dev, 1 - gal_frac_dev]
-    #XiXi = DeterministicVI.get_bvn_cov(ce.gal_ab, ce.gal_angle, ce.gal_scale)
-    XiXi = Model.get_bvn_cov(gal_ab, gal_angle, gal_scale)
+    gal_frac_devs = [gal_frac_dev, 1 - gal_frac_dev]
+    #XiXi = DeterministicVI.get_bvn_cov(ce.gal_axis_ratio, ce.gal_angle, ce.gal_radius_px)
+    XiXi = Model.get_bvn_cov(gal_axis_ratio, gal_angle, gal_radius_px)
 
     for i in 1:2
         for gproto in galaxy_prototypes[i]
@@ -206,7 +206,7 @@ function write_galaxy_unit_flux(img0::Image,
                 the_mean = SVector{2}(WCS.world_to_pix(img0.wcs, pos)) +
                            img0.psf[k].xiBar
                 the_cov = img0.psf[k].tauBar + gproto.nuBar * XiXi
-                intensity = iota * img0.psf[k].alphaBar * gal_fracdevs[i] *
+                intensity = iota * img0.psf[k].alphaBar * gal_frac_devs[i] *
                     gproto.etaBar
                 write_gaussian(the_mean, the_cov, intensity, pixels)
             end

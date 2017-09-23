@@ -154,10 +154,10 @@ function state_log_likelihood(is_star::Bool,                # source is star
     # load star/gal mixture components (make sure these reflect
     gdev, gaxis, gangle, gscale = gal_shape
     source_params[1][lidx.pos]       = position
-    source_params[1][lidx.gal_fracdev]   = gdev
-    source_params[1][lidx.gal_ab]  = gaxis
+    source_params[1][lidx.gal_frac_dev]   = gdev
+    source_params[1][lidx.gal_axis_ratio]  = gaxis
     source_params[1][lidx.gal_angle] = gangle
-    source_params[1][lidx.gal_scale] = gscale
+    source_params[1][lidx.gal_radius_px] = gscale
 
     # iterate over the pixels, summing pixel-specific poisson rates
     ll = 0.
@@ -233,9 +233,9 @@ struct GalaxyPrior
     brightness::LogNormal
     color_component::Categorical
     colors::Vector{MvNormal}
-    gal_scale::LogNormal
-    gal_ab::Beta
-    gal_fracdev::Beta
+    gal_radius_px::LogNormal
+    gal_axis_ratio::Beta
+    gal_frac_dev::Beta
 end
 
 
@@ -288,9 +288,9 @@ function shape_logprior(gal_shape::Vector{Float64}, prior::Prior)
     # position and gal_angle have uniform priors--we ignore them
     gdev, gaxis, gangle, gscale = gal_shape
     ll_shape = 0.
-    ll_shape += logpdf(prior.galaxy.gal_scale, gscale)
-    ll_shape += logpdf(prior.galaxy.gal_ab, gaxis)
-    ll_shape += logpdf(prior.galaxy.gal_fracdev, gdev)
+    ll_shape += logpdf(prior.galaxy.gal_radius_px, gscale)
+    ll_shape += logpdf(prior.galaxy.gal_axis_ratio, gaxis)
+    ll_shape += logpdf(prior.galaxy.gal_frac_dev, gdev)
     return ll_shape
 end
 
@@ -375,9 +375,9 @@ function init_galaxy_state(entry::CatalogEntry)
     #gdev, gaxis, gangle, gscale = gal_shape
     gal_shape = unconstrain_gal_shape([
                     clamp(entry.gal_frac_dev, eps_prob_a, 1.-eps_prob_a),
-                    clamp(entry.gal_ab, eps_prob_a, 1.-eps_prob_a),
+                    clamp(entry.gal_axis_ratio, eps_prob_a, 1.-eps_prob_a),
                     entry.gal_angle,
-                    clamp(entry.gal_scale, eps_prob_a, Inf)
+                    clamp(entry.gal_radius_px, eps_prob_a, Inf)
                     ])
     param_vec = [brightness; colors; entry.pos; gal_shape]
     return param_vec
@@ -390,9 +390,9 @@ function catalog_entry_to_latent_state_params(ce::CatalogEntry)
 
     # galaxy shape params
     ret[lidx.pos]       = ce.pos
-    ret[lidx.gal_fracdev]   = ce.gal_frac_dev
-    ret[lidx.gal_ab]  = ce.gal_ab
-    ret[lidx.gal_scale] = ce.gal_scale
+    ret[lidx.gal_frac_dev]   = ce.gal_frac_dev
+    ret[lidx.gal_axis_ratio]  = ce.gal_axis_ratio
+    ret[lidx.gal_radius_px] = ce.gal_radius_px
     ret[lidx.gal_angle] = ce.gal_angle
 
     # star, gal r flux
@@ -413,10 +413,10 @@ end
 
 
 function extract_galaxy_state(ls::Array{Float64, 1})
-    gal_shape = [ls[lidx.gal_fracdev]  ,
-                 ls[lidx.gal_ab] ,
+    gal_shape = [ls[lidx.gal_frac_dev]  ,
+                 ls[lidx.gal_axis_ratio] ,
                  ls[lidx.gal_angle],
-                 ls[lidx.gal_scale]]
+                 ls[lidx.gal_radius_px]]
     return [[ls[lidx.flux[2]]]; ls[lidx.color[:, 2]]; ls[lidx.pos];
             unconstrain_gal_shape(gal_shape)]
 end

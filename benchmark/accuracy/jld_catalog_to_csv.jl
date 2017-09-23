@@ -22,7 +22,7 @@ end
 data = vcat(data_rows...)
 
 if length(ARGS) == 1
-    csv_path = string(splitext(splitdir(ARGS[1])[2])[1], ".csv")
+    csv_path = string(splitext(ARGS[1])[1], ".csv")
 else
     csv_path = "celeste_catalog.csv"
 end

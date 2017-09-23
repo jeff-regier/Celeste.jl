@@ -10,10 +10,10 @@ const CELESTE_PRIOR_CATALOG_CSV = joinpath(OUTPUT_DIRECTORY, "celeste_prior_cata
 const COADD_CATALOG_FITS = joinpath(Pkg.dir("Celeste"), "test", "data", "coadd_for_4263_5_119.fit")
 
 GALAXY_ONLY_COLUMNS = [
-    :de_vaucouleurs_mixture_weight,
-    :minor_major_axis_ratio,
-    :half_light_radius_px,
-    :angle_deg,
+    :gal_frac_dev,
+    :gal_axis_ratio,
+    :gal_radius_px,
+    :gal_angle_deg,
 ]
 
 parser = Celeste.ArgumentParse.ArgumentParser()

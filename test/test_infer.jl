@@ -31,8 +31,7 @@ end
     # the star is bright but it doesn't cover the whole image.
     # it's hard to say exactly how many pixels should be active,
     # but not all of them, and not none of them.
-    config = Config()
-    config.min_radius_pix = 0
+    config = Config(0.0)
     ParallelRun.load_active_pixels!(config, ea.images, ea.patches)
 
     # most star light (>90%) should be recorded by the active pixels
@@ -74,8 +73,7 @@ end
 
     # only 2 pixels per image are within 0.6 pixels of the
     # source's center (10.9, 11.5)
-    config = Config()
-    config.min_radius_pix = 0.6
+    config = Config(0.6)
     ParallelRun.load_active_pixels!(config, ea.images, ea.patches)
 
     for n in 1:ea.N
@@ -88,8 +86,7 @@ end
 @testset "active pixel selection" begin
     ea, vp, catalog = gen_two_body_dataset();
     patches = Model.get_sky_patches(ea.images, catalog; radius_override_pix=5);
-    config = Config()
-    config.min_radius_pix = 5
+    config = Config(5.0)
     ParallelRun.load_active_pixels!(config, ea.images, patches, noise_fraction=Inf)
 
     for n in 1:ea.N

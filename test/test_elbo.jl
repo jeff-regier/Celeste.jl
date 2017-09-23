@@ -42,20 +42,20 @@ end
 
 
 @testset "test bvn cov" begin
-    gal_ab = .7
+    gal_axis_ratio = .7
     gal_angle = pi/5
-    gal_scale = 2.
+    gal_radius_px = 2.
 
-    manual_11 = gal_scale^2 * (1 + (gal_ab^2 - 1) * (sin(gal_angle))^2)
-    util_11 = DeterministicVI.get_bvn_cov(gal_ab, gal_angle, gal_scale)[1,1]
+    manual_11 = gal_radius_px^2 * (1 + (gal_axis_ratio^2 - 1) * (sin(gal_angle))^2)
+    util_11 = DeterministicVI.get_bvn_cov(gal_axis_ratio, gal_angle, gal_radius_px)[1,1]
     @test util_11 ≈ manual_11
 
-    manual_12 = gal_scale^2 * (1 - gal_ab^2) * (cos(gal_angle)sin(gal_angle))
-    util_12 = DeterministicVI.get_bvn_cov(gal_ab, gal_angle, gal_scale)[1,2]
+    manual_12 = gal_radius_px^2 * (1 - gal_axis_ratio^2) * (cos(gal_angle)sin(gal_angle))
+    util_12 = DeterministicVI.get_bvn_cov(gal_axis_ratio, gal_angle, gal_radius_px)[1,2]
     @test util_12 ≈ manual_12
 
-    manual_22 = gal_scale^2 * (1 + (gal_ab^2 - 1) * (cos(gal_angle))^2)
-    util_22 = DeterministicVI.get_bvn_cov(gal_ab, gal_angle, gal_scale)[2,2]
+    manual_22 = gal_radius_px^2 * (1 + (gal_axis_ratio^2 - 1) * (cos(gal_angle))^2)
+    util_22 = DeterministicVI.get_bvn_cov(gal_axis_ratio, gal_angle, gal_radius_px)[2,2]
     @test util_22 ≈ manual_22
 end
 
@@ -196,7 +196,7 @@ end
         @test best.v[] > bad_r1.v[]
     end
 
-    for n in [:gal_ab, :gal_angle, :gal_scale]
+    for n in [:gal_axis_ratio, :gal_angle, :gal_radius_px]
         for bad_scale in [.8, 1.2]
             vp_bad = deepcopy(vp)
             vp_bad[1][getfield(ids, n)] *= bad_scale

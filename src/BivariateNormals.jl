@@ -333,36 +333,36 @@ end
 """
 Args:
   - gal_angle: Phi in the notes
-  - gal_ab: Rho in the notes
-  - gal_scale: Lower case sigma in the notes
+  - gal_axis_ratio: Rho in the notes
+  - gal_radius_px: Lower case sigma in the notes
   - XiXi: The value of sigma.
 
 Note that nubar is not included.
 """
 function GalaxySigmaDerivs{NumType <: Number}(
-    gal_angle::NumType, gal_ab::NumType, gal_scale::NumType,
+    gal_angle::NumType, gal_axis_ratio::NumType, gal_radius_px::NumType,
     XiXi::SMatrix{2,2,NumType,4}, nuBar::Float64=1.0, calculate_tensor::Bool=true)
 
   cos_sin = cos(gal_angle)sin(gal_angle)
   sin_sq  = sin(gal_angle)^2
   cos_sq  = cos(gal_angle)^2
 
-  j = hcat(2 * gal_ab * gal_scale^2 * SVector{3,NumType}(sin_sq, -cos_sin, cos_sq),
-           gal_scale^2 * (gal_ab^2 - 1) * SVector{3,NumType}(2cos_sin, sin_sq - cos_sq, -2cos_sin),
-           2 * SVector{3,NumType}(XiXi[1], XiXi[2], XiXi[4]) / gal_scale)
+  j = hcat(2 * gal_axis_ratio * gal_radius_px^2 * SVector{3,NumType}(sin_sq, -cos_sin, cos_sq),
+           gal_radius_px^2 * (gal_axis_ratio^2 - 1) * SVector{3,NumType}(2cos_sin, sin_sq - cos_sq, -2cos_sin),
+           2 * SVector{3,NumType}(XiXi[1], XiXi[2], XiXi[4]) / gal_radius_px)
 
   if calculate_tensor
     # Second derivatives.
 
-    t = SArray{Tuple{3,3,3}, NumType, 3, 27}(sin_sq * 2 * gal_scale^2, -cos_sin * 2 * gal_scale^2, cos_sq * 2 * gal_scale^2,
-      2cos_sin * 2 * gal_scale^2 * gal_ab, (sin_sq - cos_sq) * 2 * gal_scale^2 * gal_ab, -2cos_sin * 2 * gal_scale^2 * gal_ab,
-      2 * j[1, 1]  / gal_scale, 2 * j[2, 1]  / gal_scale, 2 * j[3, 1]  / gal_scale,
-      2cos_sin * 2 * gal_scale^2 * gal_ab, (sin_sq - cos_sq) * 2 * gal_scale^2 * gal_ab, -2cos_sin * 2 * gal_scale^2 * gal_ab,
-      (cos_sq - sin_sq) * 2 * gal_scale^2 * (gal_ab^2 - 1), 2cos_sin * 2 * gal_scale^2 * (gal_ab^2 - 1), (sin_sq - cos_sq) * 2 * gal_scale^2 * (gal_ab^2 - 1),
-      2 * j[1, 2] / gal_scale, 2 * j[2, 2] / gal_scale, 2 * j[3, 2] / gal_scale,
-      2 * j[1, 1]  / gal_scale, 2 * j[2, 1]  / gal_scale, 2 * j[3, 1]  / gal_scale,
-      2 * j[1, 2] / gal_scale, 2 * j[2, 2] / gal_scale, 2 * j[3, 2] / gal_scale,
-      2 * XiXi[1 << (1 - 1)] / gal_scale^2, 2 * XiXi[1 << (2 - 1)] / gal_scale^2, 2 * XiXi[1 << (3 - 1)] / gal_scale^2)
+    t = SArray{Tuple{3,3,3}, NumType, 3, 27}(sin_sq * 2 * gal_radius_px^2, -cos_sin * 2 * gal_radius_px^2, cos_sq * 2 * gal_radius_px^2,
+      2cos_sin * 2 * gal_radius_px^2 * gal_axis_ratio, (sin_sq - cos_sq) * 2 * gal_radius_px^2 * gal_axis_ratio, -2cos_sin * 2 * gal_radius_px^2 * gal_axis_ratio,
+      2 * j[1, 1]  / gal_radius_px, 2 * j[2, 1]  / gal_radius_px, 2 * j[3, 1]  / gal_radius_px,
+      2cos_sin * 2 * gal_radius_px^2 * gal_axis_ratio, (sin_sq - cos_sq) * 2 * gal_radius_px^2 * gal_axis_ratio, -2cos_sin * 2 * gal_radius_px^2 * gal_axis_ratio,
+      (cos_sq - sin_sq) * 2 * gal_radius_px^2 * (gal_axis_ratio^2 - 1), 2cos_sin * 2 * gal_radius_px^2 * (gal_axis_ratio^2 - 1), (sin_sq - cos_sq) * 2 * gal_radius_px^2 * (gal_axis_ratio^2 - 1),
+      2 * j[1, 2] / gal_radius_px, 2 * j[2, 2] / gal_radius_px, 2 * j[3, 2] / gal_radius_px,
+      2 * j[1, 1]  / gal_radius_px, 2 * j[2, 1]  / gal_radius_px, 2 * j[3, 1]  / gal_radius_px,
+      2 * j[1, 2] / gal_radius_px, 2 * j[2, 2] / gal_radius_px, 2 * j[3, 2] / gal_radius_px,
+      2 * XiXi[1 << (1 - 1)] / gal_radius_px^2, 2 * XiXi[1 << (2 - 1)] / gal_radius_px^2, 2 * XiXi[1 << (3 - 1)] / gal_radius_px^2)
 
   else
     t = @SArray zeros(NumType, 3, 3, 3)

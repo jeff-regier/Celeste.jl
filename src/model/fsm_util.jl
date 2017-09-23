@@ -3,65 +3,65 @@
 The convolution of a one galaxy component with one PSF component.
 It also contains the derivatives of sigma with respect to the shape parameters.
 It does not contain the derivatives with respect to other parameters
-(pos and gal_fracdev) because they have easy expressions in terms of other known
+(pos and gal_frac_dev) because they have easy expressions in terms of other known
 quantities.
 
 Args:
- - gal_fracdev_dir: "Theta direction": this is 1 or -1, depending on whether
-     increasing gal_fracdev increases the weight of this GalaxyCacheComponent
+ - gal_frac_dev_dir: "Theta direction": this is 1 or -1, depending on whether
+     increasing gal_frac_dev increases the weight of this GalaxyCacheComponent
      (1) or decreases it (-1).
- - gal_fracdev_i: The weight given to this type of galaxy for this celestial object.
-     This is either gal_fracdev or (1 - gal_fracdev).
+ - gal_frac_dev_i: The weight given to this type of galaxy for this celestial object.
+     This is either gal_frac_dev or (1 - gal_frac_dev).
  - gc: The galaxy component to be convolved
  - pc: The psf component to be convolved
  - pos: The location of the celestial object in pixel coordinates as a 2x1 vector
- - gal_ab: The ratio of the galaxy minor axis to major axis (0 < gal_ab <= 1)
- - gal_scale: The scale of the galaxy major axis
+ - gal_axis_ratio: The ratio of the galaxy minor axis to major axis (0 < gal_axis_ratio <= 1)
+ - gal_radius_px: The scale of the galaxy major axis
 
 Attributes:
- - gal_fracdev_dir: Same as input
- - gal_fracdev_i: Same as input
+ - gal_frac_dev_dir: Same as input
+ - gal_frac_dev_i: Same as input
  - bmc: A BvnComponent with the convolution.
  - dSigma: A 3x3 matrix containing the derivates of
      [Sigma11, Sigma12, Sigma22] (in the rows) with respect to
-     [gal_ab, gal_angle, gal_scale] (in the columns)
+     [gal_axis_ratio, gal_angle, gal_radius_px] (in the columns)
 """
 struct GalaxyCacheComponent{T<:Number}
-    gal_fracdev_dir::Float64
-    gal_fracdev_i::T
+    gal_frac_dev_dir::Float64
+    gal_frac_dev_i::T
     bmc::BvnComponent{T}
     sig_sf::GalaxySigmaDerivs{T}
-    # [Sigma11, Sigma12, Sigma22] x [gal_ab, gal_angle, gal_scale]
+    # [Sigma11, Sigma12, Sigma22] x [gal_axis_ratio, gal_angle, gal_radius_px]
 end
 
 function GalaxyCacheComponent(
-        gal_fracdev_dir::Float64,
-        gal_fracdev_i::T,
+        gal_frac_dev_dir::Float64,
+        gal_frac_dev_i::T,
         gc::GalaxyComponent,
         pc::PsfComponent,
         pos::Vector{T},
-        gal_ab::T,
+        gal_axis_ratio::T,
         gal_angle::T,
-        gal_scale::T,
+        gal_radius_px::T,
         calculate_gradient::Bool,
         calculate_hessian::Bool) where {T<:Number}
 
-    XiXi = get_bvn_cov(gal_ab, gal_angle, gal_scale)
+    XiXi = get_bvn_cov(gal_axis_ratio, gal_angle, gal_radius_px)
     mean_s = @SVector T[pc.xiBar[1] + pos[1], pc.xiBar[2] + pos[2]]
     var_s = pc.tauBar + gc.nuBar * XiXi
-    weight = pc.alphaBar * gc.etaBar  # excludes gal_fracdev
+    weight = pc.alphaBar * gc.etaBar  # excludes gal_frac_dev
 
     # d siginv / dsigma is only necessary for the Hessian.
     bmc = BvnComponent(mean_s, var_s, weight, calculate_gradient && calculate_hessian)
 
     if calculate_gradient
-        sig_sf = GalaxySigmaDerivs(gal_angle, gal_ab, gal_scale, XiXi,
+        sig_sf = GalaxySigmaDerivs(gal_angle, gal_axis_ratio, gal_radius_px, XiXi,
                                    gc.nuBar, calculate_hessian)
     else
         sig_sf = GalaxySigmaDerivs(T)
     end
 
-    GalaxyCacheComponent(gal_fracdev_dir, gal_fracdev_i, bmc, sig_sf)
+    GalaxyCacheComponent(gal_frac_dev_dir, gal_frac_dev_i, bmc, sig_sf)
 end
 
 
@@ -148,16 +148,16 @@ function load_bvn_mixtures!(
 
         # Convolve the galaxy representations with the PSF.
         for i = 1:2 # i indexes dev vs exp galaxy types.
-            gal_fracdev_dir = (i == 1) ? 1. : -1.
-            gal_fracdev_i = (i == 1) ? sp[lidx.gal_fracdev] : 1. - sp[lidx.gal_fracdev]
+            gal_frac_dev_dir = (i == 1) ? 1. : -1.
+            gal_frac_dev_i = (i == 1) ? sp[lidx.gal_frac_dev] : 1. - sp[lidx.gal_frac_dev]
 
             # Galaxies of type 1 have 8 components, and type 2 have 6 components.
             for j in 1:ifelse(i == 1, 8, 6)
                 for k = 1:psf_K
                     gal_mcs[k, j, i, s] = GalaxyCacheComponent(
-                        gal_fracdev_dir, gal_fracdev_i, galaxy_prototypes[i][j], psf[k],
+                        gal_frac_dev_dir, gal_frac_dev_i, galaxy_prototypes[i][j], psf[k],
                         m_pos,
-                        sp[lidx.gal_ab], sp[lidx.gal_angle], sp[lidx.gal_scale],
+                        sp[lidx.gal_axis_ratio], sp[lidx.gal_angle], sp[lidx.gal_radius_px],
                         calculate_gradient && (s in active_sources),
                         calculate_hessian)
                 end
@@ -259,7 +259,7 @@ function accum_galaxy_pos!(fs1m::SensitiveFloat{T},
                            wcs_jacobian::Array{Float64, 2},
                            is_active_source::Bool) where {T<:Number}
     eval_bvn_pdf!(bvn_derivs, gcc.bmc, x)
-    f = bvn_derivs.f_pre[1] * gcc.gal_fracdev_i
+    f = bvn_derivs.f_pre[1] * gcc.gal_frac_dev_i
     fs1m.v[] += f
 
     if fs1m.has_gradient && is_active_source
@@ -282,10 +282,10 @@ function accum_galaxy_pos!(fs1m::SensitiveFloat{T},
                 fs1m.d[gal_shape_alignment[gal_id]] += f * bvn_s_d[gal_id]
             end
 
-            # The gal_fracdev derivative. gal_fracdev just scales the entire component.
+            # The gal_frac_dev derivative. gal_frac_dev just scales the entire component.
             # The direction is positive or negative depending on whether this
             # is an exp or dev component.
-            @inbounds fs1m.d[gal_ids.gal_fracdev] += gcc.gal_fracdev_dir * bvn_derivs_f_pre[1]
+            @inbounds fs1m.d[gal_ids.gal_frac_dev] += gcc.gal_frac_dev_dir * bvn_derivs_f_pre[1]
 
             if fs1m.has_hessian
                 # The Hessians:
@@ -326,18 +326,18 @@ function accum_galaxy_pos!(fs1m::SensitiveFloat{T},
                   end
                 end
 
-                # Do the gal_fracdev hessian terms.
-                devi = gal_ids.gal_fracdev
+                # Do the gal_frac_dev hessian terms.
+                devi = gal_ids.gal_frac_dev
                 @inbounds for u_id in 1:2
                     ui = gal_ids.pos[u_id]
                     fs1m.h[ui, devi] +=
-                        bvn_derivs_f_pre[1] * gcc.gal_fracdev_dir * bvn_u_d[u_id]
+                        bvn_derivs_f_pre[1] * gcc.gal_frac_dev_dir * bvn_u_d[u_id]
                     fs1m.h[devi, ui] = fs1m.h[ui, devi]
                 end
                 @inbounds for shape_id in 1:length(gal_shape_ids)
                     si = gal_shape_alignment[shape_id]
                     fs1m.h[si, devi] +=
-                        bvn_derivs_f_pre[1] * gcc.gal_fracdev_dir * bvn_s_d[shape_id]
+                        bvn_derivs_f_pre[1] * gcc.gal_frac_dev_dir * bvn_s_d[shape_id]
                     fs1m.h[devi, si] = fs1m.h[si, devi]
                 end
             end # if calculate hessian

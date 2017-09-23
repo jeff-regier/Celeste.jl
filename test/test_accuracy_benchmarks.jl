@@ -74,8 +74,8 @@ end
 
 @testset "variational params -> data frame -> catalog entry conversion" begin
     variational_params = DeterministicVI.generic_init_source([1.0, 2.0])
-    variational_params[Model.ids.gal_ab] = 0.5
-    variational_params[Model.ids.gal_scale] = 10.0
+    variational_params[Model.ids.gal_axis_ratio] = 0.5
+    variational_params[Model.ids.gal_radius_px] = 10.0
     variational_params[Model.ids.gal_angle] = -pi / 4
     variational_params[Model.ids.flux_loc[2]] = log(20.0)
     variational_params[Model.ids.is_star[1]] = 0.01
@@ -84,13 +84,13 @@ end
     data = AccuracyBenchmark.variational_parameters_to_data_frame_row(
         variational_params)
     # we'll just check a few particularly troublesome parameters :)
-    @test isapprox(data[1, :half_light_radius_px], 10 * sqrt(0.5))
-    @test isapprox(data[1, :angle_deg], 135.0)
-    @test isapprox(data[1, :reference_band_flux_nmgy], 20.0)
+    @test isapprox(data[1, :gal_radius_px], 10 * sqrt(0.5))
+    @test isapprox(data[1, :gal_angle_deg], 135.0)
+    @test isapprox(data[1, :flux_r_nmgy], 20.0)
 
     data[1, :is_star] = false
     catalog_entry = AccuracyBenchmark.make_catalog_entry(first(eachrow(data)))
-    @test isapprox(catalog_entry.gal_scale, 10.0)
+    @test isapprox(catalog_entry.gal_radius_px, 10.0)
     @test isapprox(catalog_entry.gal_angle, 3 * pi / 4)
     @test isapprox(catalog_entry.gal_fluxes[3], 20.0)
 end
@@ -123,41 +123,41 @@ end
         (
             DataFrame(
                 is_saturated=false,
-                half_light_radius_px=10.0,
-                de_vaucouleurs_mixture_weight=0.99,
-                minor_major_axis_ratio=0.8,
+                gal_radius_px=10.0,
+                gal_frac_dev=0.99,
+                gal_axis_ratio=0.8,
             ),
             DataFrame(
                 is_saturated=false,
-                minor_major_axis_ratio=0.5,
-                angle_deg=10.0,
-                declination_deg=0.0,
+                gal_axis_ratio=0.5,
+                gal_angle_deg=10.0,
+                dec=0.0,
             )
         )
     end
 
     truth, error = make_data()
 
-    function check_row(column_name=:minor_major_axis_ratio)
+    function check_row(column_name=:gal_axis_ratio)
         AccuracyBenchmark.is_good_row(first(eachrow(truth)), first(eachrow(error)), column_name)
     end
 
     @test check_row()
 
     truth, error = make_data()
-    error[1, :minor_major_axis_ratio] = NaN
+    error[1, :gal_axis_ratio] = NaN
     @test !check_row()
 
     truth, error = make_data()
-    error[1, :minor_major_axis_ratio] = NA
+    error[1, :gal_axis_ratio] = NA
     @test !check_row()
 
     truth, error = make_data()
-    truth[1, :half_light_radius_px] = NA
+    truth[1, :gal_radius_px] = NA
     @test check_row()
 
     truth, error = make_data()
-    truth[1, :half_light_radius_px] = 25.0
+    truth[1, :gal_radius_px] = 25.0
     @test !check_row()
 
     truth, error = make_data()
@@ -169,30 +169,30 @@ end
     @test !check_row()
 
     truth, error = make_data()
-    truth[1, :de_vaucouleurs_mixture_weight] = 0.5
+    truth[1, :gal_frac_dev] = 0.5
     @test !check_row()
-    @test check_row(:declination_deg)
+    @test check_row(:dec)
 
     truth, error = make_data()
-    @test !check_row(:angle_deg)
-    truth[1, :minor_major_axis_ratio] = 0.2
-    @test check_row(:angle_deg)
+    @test !check_row(:gal_angle_deg)
+    truth[1, :gal_axis_ratio] = 0.2
+    @test check_row(:gal_angle_deg)
 end
 
 
 @testset "match catalogs" begin
     ra = [0.0, 1.0, 2.0, 3.0]
     dec = [50.0, 51.0, 52.0, 53.0]
-    truth = DataFrame(Any[ra, dec], [:right_ascension_deg, :declination_deg])
+    truth = DataFrame(Any[ra, dec], [:ra, :dec])
 
     off = 0.2 / 3600.0
     ra1 = [0.0 + off, 1.0 - off, 5.0, 3.0 + off, 4.0]
     dec1 = [50.0 - off, 51.0 + off, 60.0, 53.0 - off, 50.0]
-    pred1 = DataFrame(Any[ra1, dec1], [:right_ascension_deg, :declination_deg])
+    pred1 = DataFrame(Any[ra1, dec1], [:ra, :dec])
 
     ra2 = [3.0 - off, 0.0 - off, 7.0, 5.0, 4.0]
     dec2 = [53.0 + off, 50.0 + off, 51.0, 60.0, 50.0]
-    pred2 = DataFrame(Any[ra2, dec2], [:right_ascension_deg, :declination_deg])
+    pred2 = DataFrame(Any[ra2, dec2], [:ra, :dec])
 
     truth_matched, predictions_matched =
         AccuracyBenchmark.match_catalogs(truth, [pred1, pred2])
@@ -202,10 +202,10 @@ end
     for pred in predictions_matched
         @test nrow(pred) == 2
     end
-    @test truth_matched[:right_ascension_deg] == [0.0, 3.0]
-    @test truth_matched[:declination_deg] == [50.0, 53.0]
-    @test predictions_matched[1][:right_ascension_deg] == [0.0 + off, 3.0 + off]
-    @test predictions_matched[1][:declination_deg] == [50.0 - off, 53.0 - off]
-    @test predictions_matched[2][:right_ascension_deg] == [0.0 - off, 3.0 - off]
-    @test predictions_matched[2][:declination_deg] == [50.0 + off, 53.0 + off]
+    @test truth_matched[:ra] == [0.0, 3.0]
+    @test truth_matched[:dec] == [50.0, 53.0]
+    @test predictions_matched[1][:ra] == [0.0 + off, 3.0 + off]
+    @test predictions_matched[1][:dec] == [50.0 - off, 53.0 - off]
+    @test predictions_matched[2][:ra] == [0.0 - off, 3.0 - off]
+    @test predictions_matched[2][:dec] == [50.0 + off, 53.0 + off]
 end

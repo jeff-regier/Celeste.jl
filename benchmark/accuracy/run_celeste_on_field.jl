@@ -117,10 +117,10 @@ jld_filename = joinpath(
     OUTPUT_DIRECTORY,
     @sprintf(
         "celeste-%.4f-%.4f-%.4f-%.4f.jld",
-        minimum(results_df[:right_ascension_deg]),
-        maximum(results_df[:right_ascension_deg]),
-        minimum(results_df[:declination_deg]),
-        maximum(results_df[:declination_deg]),
+        minimum(results_df[:ra]),
+        maximum(results_df[:ra]),
+        minimum(results_df[:dec]),
+        maximum(results_df[:dec]),
     )
 )
 println("Writing $(jld_filename)...")

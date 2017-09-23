@@ -115,7 +115,7 @@ function choose_patch_radius(ce::CatalogEntry,
     # The galaxy scale is the point with half the light -- if the light
     # were entirely in a univariate normal, this would be at 0.67 standard
     # deviations.  We are being a bit conservative here.
-    obj_width = ce.is_star ? 0.0 : width_scale * ce.gal_scale / 0.67
+    obj_width = ce.is_star ? 0.0 : width_scale * ce.gal_radius_px / 0.67
     obj_width += psf_width
 
     flux = ce.is_star ? ce.star_fluxes[img.b] : ce.gal_fluxes[img.b]

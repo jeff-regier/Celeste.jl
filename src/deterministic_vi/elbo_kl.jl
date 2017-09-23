@@ -128,9 +128,9 @@ end
 
 
 function source_e_log_prob(vs)
-    x = vs[ids.gal_scale]
-    μ = prior.gal_scale_mean
-    σ² = prior.gal_scale_var
+    x = vs[ids.gal_radius_px]
+    μ = prior.gal_radius_px_mean
+    σ² = prior.gal_radius_px_var
     kl = -0.5 * (log(2pi) + log(σ²) + (x - μ)^2 / σ²)
     assert(!isnan(kl))
     return kl

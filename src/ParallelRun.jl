@@ -262,7 +262,7 @@ function detect_sources(images::Vector{SDSSIO.RawImage})
             gal_fluxes = fill(NaN, NUM_BANDS)
             gal_fluxes[image.b] = sep_catalog.flux[i]
 
-            gal_ab = sep_catalog.a[i] / sep_catalog.b[i]
+            gal_axis_ratio = sep_catalog.a[i] / sep_catalog.b[i]
 
             # SEP angle is CCW from +x axis and in [-pi/2, pi/2].
             # Add offset of x axis from N to make angle CCW from N
@@ -271,7 +271,7 @@ function detect_sources(images::Vector{SDSSIO.RawImage})
             # A 2-d symmetric gaussian has CDF(r) =  1 - exp(-(r/sigma)^2/2)
             # The half-light radius is then r = sigma * sqrt(2 ln(2))
             sigma = sqrt(sep_catalog.a[i] * sep_catalog.b[i])
-            gal_scale = sigma * sqrt(2. * log(2.))
+            gal_radius_px = sigma * sqrt(2. * log(2.))
 
             pos = worldcoords[:, i]
             im_catalog[i] = CatalogEntry(pos,
@@ -279,9 +279,9 @@ function detect_sources(images::Vector{SDSSIO.RawImage})
                                          Float64[],  # will replace below
                                          gal_fluxes,
                                          0.5,  # gal_frac_dev
-                                         gal_ab,
+                                         gal_axis_ratio,
                                          gal_angle,
-                                         gal_scale)
+                                         gal_radius_px)
 
             # get object extent in degrees from bounding box in pixels
             xmin = sep_catalog.xmin[i]
