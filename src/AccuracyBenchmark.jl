@@ -47,7 +47,6 @@ CATALOG_COLUMNS = Set([
     :gal_axis_ratio,
     :gal_radius_px,
     :gal_angle_deg,
-    :is_saturated,
 ])
 
 STDERR_COLUMNS = Set([
@@ -203,7 +202,6 @@ function load_coadd_catalog(fits_filename)
     result[:objid] = [string(objid) for objid in raw_df[:objid]]
     result[:ra] = raw_df[:ra]
     result[:dec] = raw_df[:dec]
-    result[:is_saturated] = (raw_df[:is_saturated] .!= 0)
     result[:is_star] = is_star
 
     flux_r = mag_to_flux.(mag_r, 3)
@@ -235,6 +233,8 @@ function load_coadd_catalog(fits_filename)
     raw_phi = dev_or_exp(:devphi_r, :expphi_r)
     result[:gal_angle_deg] = canonical_angle.(raw_phi)
 
+    is_saturated = raw_df[:is_saturated] .!= 0
+    result = result[.!is_saturated, :]
     bad_rows = [x in BAD_COADD_OBJID for x in result[:, :objid]]
     result = result[.!bad_rows, :]
 
@@ -294,8 +294,9 @@ function load_primary(rcf::SDSSIO.RunCamcolField, stagedir::String)
     raw_phi = dev_or_exp(:phi_dev, :phi_exp)
     result[:gal_angle_deg] = canonical_angle.(raw_phi)
 
-    # primary is better at flagging oversaturated sources than coadd
-    result[:is_saturated] = flux_to_mag.(raw_df[:psfflux_r], 3) .< 16
+    # primary is better at indicating oversaturation than coadd
+    is_saturated = flux_to_mag.(raw_df[:psfflux_r], 3) .< 16
+    result = result[.!is_saturated, :]
 
     return result
 end
@@ -329,7 +330,6 @@ function variational_parameters_to_data_frame_row(variational_params::Vector{Flo
     result = DataFrame()
     result[:ra] = variational_params[ids.pos[1]]
     result[:dec] = variational_params[ids.pos[2]]
-    result[:is_saturated] = false
     result[:is_star] = variational_params[ids.is_star[1, 1]]
     result[:gal_frac_dev] = variational_params[ids.gal_frac_dev]
     result[:gal_axis_ratio] = variational_params[ids.gal_axis_ratio]
@@ -421,7 +421,6 @@ function draw_source_params(prior)
         gal_axis_ratio=gal_axis_ratio,
         gal_radius_px=gal_radius_px,
         gal_angle_deg=gal_angle_deg,
-        is_saturated=false,
     )
 end
 
@@ -801,6 +800,11 @@ function degrees_to_diff(a, b)
     min.(angle_between, 180 - angle_between)
 end
 
+# When a dataframe column only has NA values it gets an NAtype rather
+# than a Float64 type, and abs no longer works
+import Base.abs
+abs(x::DataArrays.DataArray{DataArrays.NAtype,1}) = NA
+
 """
 Given two results data frame, one containing ground truth (i.e Coadd)
 and one containing predictions (i.e., either Primary of Celeste),
@@ -809,9 +813,7 @@ compute an a data frame containing each prediction's error.
 Let's call the return type of this function an \"error data frame\".
 """
 function get_error_df(truth::DataFrame, predicted::DataFrame)
-    errors = DataFrame(
-        is_saturated=predicted[:is_saturated],
-    )
+    errors = DataFrame()
 
     predicted_galaxy = predicted[:is_star] .< .5
     true_galaxy = truth[:is_star] .< .5
@@ -850,8 +852,6 @@ function is_good_row(truth_row::DataFrameRow, error_row::DataFrameRow, column_na
     if isna(error_row[column_name]) || isnan(error_row[column_name])
         return false
     elseif !isna(truth_row[:gal_radius_px]) && truth_row[:gal_radius_px] > 20
-        return false
-    elseif truth_row[:is_saturated] || error_row[:is_saturated]
         return false
     end
 

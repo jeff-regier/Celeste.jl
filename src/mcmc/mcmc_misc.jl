@@ -76,7 +76,6 @@ function catalog_to_data_frame_row(catalog_entry; objid="truth")
     df[:objid]                          = [objid]
     df[:ra]            = [ce.pos[1]]
     df[:dec]                = [ce.pos[2]]
-    df[:is_saturated]                   = [false]
     df[:is_star]                        = [ce.is_star]
     df[:gal_frac_dev]  = [ce.gal_frac_dev]
     df[:gal_axis_ratio]         = [ce.gal_axis_ratio]
@@ -122,7 +121,6 @@ function samples_to_data_frame_row(sampdf; objid="mcmc")
     df[:objid]                          = [objid]
     df[:ra]            = [mean(sampdf[:ra])]
     df[:dec]                = [mean(sampdf[:dec])]
-    df[:is_saturated]                   = [false]
     df[:is_star]                        = [true]
     df[:gal_frac_dev]  = [NaN]
     df[:gal_axis_ratio]         = [NaN]
@@ -138,7 +136,7 @@ function samples_to_data_frame_row(sampdf; objid="mcmc")
     df[:color_gr_stderr]      = [std(sampdf[:color_gr])]
     df[:color_ri_stderr]      = [std(sampdf[:color_ri])]
     df[:color_iz_stderr]      = [std(sampdf[:color_iz])]
- 
+
     return df
 end
 
@@ -242,7 +240,7 @@ end
 
 
 """
-Potential Scale Reduction Factor --- Followed the formula from the 
+Potential Scale Reduction Factor --- Followed the formula from the
 following website:
 http://blog.stata.com/2016/05/26/gelman-rubin-convergence-diagnostic-using-multiple-chains/
 """
@@ -272,7 +270,7 @@ end
 
 
 """
-Convert `chains` (list of sample arrays), `logprobs` (list of 
+Convert `chains` (list of sample arrays), `logprobs` (list of
 log-likelihood traces) and `colnames` (list of parameter names for chains)
 into a DataFrame object --- for saving and plotting
 """
@@ -292,5 +290,3 @@ function chains_to_dataframe(chains, logprobs, colnames)
     sdf[:chain] = chain_id
     return sdf
 end
-
-

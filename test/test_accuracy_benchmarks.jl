@@ -122,13 +122,11 @@ end
     function make_data()
         (
             DataFrame(
-                is_saturated=false,
                 gal_radius_px=10.0,
                 gal_frac_dev=0.99,
                 gal_axis_ratio=0.8,
             ),
             DataFrame(
-                is_saturated=false,
                 gal_axis_ratio=0.5,
                 gal_angle_deg=10.0,
                 dec=0.0,
@@ -158,14 +156,6 @@ end
 
     truth, error = make_data()
     truth[1, :gal_radius_px] = 25.0
-    @test !check_row()
-
-    truth, error = make_data()
-    truth[1, :is_saturated] = true
-    @test !check_row()
-
-    truth, error = make_data()
-    error[1, :is_saturated] = true
     @test !check_row()
 
     truth, error = make_data()

@@ -2,8 +2,7 @@ __precompile__()
 
 module Celeste
 
-# import this before StaticArrays has a chance to load, to
-# workaround a bug
+# import this before StaticArrays has a chance to load, to workaround a bug
 import ForwardDiff
 
 include("aliasscopes.jl")
