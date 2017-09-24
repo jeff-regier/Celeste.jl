@@ -1,6 +1,12 @@
 #!/usr/bin/env julia
 
-import Celeste
+# This script sometimes (but not always) crashes Julia v0.6.0, first triggering the warning:
+#     WARNING: An error occurred during inference. Type inference is now partially disabled.
+#     Base.MethodError(f=typeof(Core.Inference.convert)(), args=(Base.AssertionError, "invalid age range update"), world=0x0000000000000ac2)
+# The issue resembles
+#     https://github.com/JuliaLang/julia/issues/23200
+#     https://github.com/JuliaLang/julia/issues/22355
+
 import Celeste.AccuracyBenchmark
 import Celeste.GalsimBenchmark
 
@@ -33,4 +39,8 @@ score_df = AccuracyBenchmark.score_predictions(
     truth_catalog,
     [single_predictions, joint_predictions],
 )
-println(repr(score_df))
+
+println("\n\n=========================\n")
+println("overall scores:\n")
+display(score_df)
+println()
