@@ -20,8 +20,6 @@ ArgumentParse.add_argument(
 )
 parsed_args = ArgumentParse.parse_args(parser, ARGS)
 
-srand(12345)
-
 catalog_data = AccuracyBenchmark.read_catalog(parsed_args["catalog_csv"])
 catalog_entries = [
     AccuracyBenchmark.make_catalog_entry(row)

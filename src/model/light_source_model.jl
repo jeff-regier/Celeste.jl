@@ -90,8 +90,7 @@ end
 function load_prior()
     # set a = [.99, .01] if stars are underrepresented
     # due to the greater flexibility of the galaxy model
-    #is_star = [0.28, 0.72]
-    is_star = [0.099, 0.001]
+    is_star = [0.28, 0.72]
     k = Matrix{Float64}(NUM_COLOR_COMPONENTS, NUM_SOURCE_TYPES)
     color_mean = Array{Float64}(NUM_BANDS - 1, NUM_COLOR_COMPONENTS, NUM_SOURCE_TYPES)
     color_cov = Array{Float64}(NUM_BANDS - 1, NUM_BANDS - 1, NUM_COLOR_COMPONENTS, NUM_SOURCE_TYPES)

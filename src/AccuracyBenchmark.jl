@@ -360,7 +360,14 @@ end
 Convert Celeste results to a dataframe.
 """
 function celeste_to_df(results::Vector{ParallelRun.OptimizedSource})
-    rows = [variational_parameters_to_data_frame_row(result.vs) for result in results]
+    rows = []
+    for result in results
+        row = variational_parameters_to_data_frame_row(result.vs)
+        if result.is_sky_bad
+            row[:flux_r_nmgy] = NaN
+        end
+        push!(rows, row)
+    end
     vcat(rows...)
 end
 

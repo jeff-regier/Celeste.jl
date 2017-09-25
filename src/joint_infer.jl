@@ -544,9 +544,8 @@ function one_node_joint_infer(catalog, target_sources, neighbor_map, images;
     else
         for i = 1:n_sources
             entry = catalog[target_sources[i]]
-            result = OptimizedSource(entry.pos[1],
-                                     entry.pos[2],
-                                     vp_vec[i][1])
+            is_sky_bad = bad_sky(entry, images)
+            result = OptimizedSource(entry.pos[1], entry.pos[2], vp_vec[i][1], is_sky_bad)
             push!(results, result)
         end
     end

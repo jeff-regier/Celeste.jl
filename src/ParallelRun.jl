@@ -471,6 +471,39 @@ struct OptimizedSource
     init_ra::Float64
     init_dec::Float64
     vs::Vector{Float64}
+    is_sky_bad::Bool
+end
+
+
+# The sky intensity does not appear to match the true background intensity
+# for some light sources. This function flags light sources whose infered
+# brightness may be inaccurate because the background intensity estimates
+# are off.
+function bad_sky(ce, images)
+    # The 'i' band is a pretty bright one, so I used it here.
+    img_index = findfirst(img -> img.b == 4, images)
+    if img_index < 0
+        return false
+    end
+
+    img = images[img_index]
+    p = Model.SkyPatch(img, ce)
+
+    h = p.bitmap_offset[1] + round(Int, p.radius_pix)
+    w = p.bitmap_offset[2] + round(Int, p.radius_pix)
+    claimed_sky = img.sky[h, w] * img.nelec_per_nmgy[h]
+
+    # the "super" patch below contains the original patch as well as a lot of
+    # background
+    sp = Model.SkyPatch(img, ce, radius_override_pix=50)
+    H2, W2 = size(sp.active_pixel_bitmap)
+    h_range = (sp.bitmap_offset[1] + 1):(sp.bitmap_offset[1] + H2)
+    w_range = (sp.bitmap_offset[2] + 1):(sp.bitmap_offset[2] + W2)
+    observed_sky = median(filter(!isnan, img.pixels[h_range, w_range]))
+
+    # A 5 photon-per-pixel disparity can really add up if the light sources
+    # covers a lot of pixels.
+    return (claimed_sky + 5) < observed_sky
 end
 
 
@@ -506,7 +539,8 @@ function process_source(config::Config,
     Log.info("#$(ts) at ($(entry.pos[1]), $(entry.pos[2])): $(toq()) secs")
 
     vs_opt = vp[1]
-    return OptimizedSource(entry.pos[1], entry.pos[2], vs_opt)
+    is_sky_bad = bad_sky(entry, images)
+    return OptimizedSource(entry.pos[1], entry.pos[2], vs_opt, is_sky_bad)
 end
 
 
