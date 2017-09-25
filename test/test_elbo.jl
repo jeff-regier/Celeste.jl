@@ -128,6 +128,7 @@ end
 
 @testset "star truth is most likely" begin
     ea, vp, catalog = true_star_init()
+
     best = DeterministicVI.elbo_likelihood(ea, vp)
 
     for bad_a in [.3, .5, .9]

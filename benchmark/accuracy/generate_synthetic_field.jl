@@ -21,19 +21,25 @@ ArgumentParse.add_argument(
 parsed_args = ArgumentParse.parse_args(parser, ARGS)
 
 catalog_data = AccuracyBenchmark.read_catalog(parsed_args["catalog_csv"])
+
+no_na_cols = :flux_r_nmgy, :color_ug, :color_gr, :color_ri, :color_iz
+for col in no_na_cols
+    catalog_data = catalog_data[.!isna.(catalog_data[col]), :]
+end
+
 catalog_entries = [
     AccuracyBenchmark.make_catalog_entry(row)
     for row in eachrow(catalog_data)
 ]
-template_images = AccuracyBenchmark.make_template_images(
+images = AccuracyBenchmark.make_template_images(
     catalog_data,
     PSF_SIGMA_PX,
     BAND_SKY_LEVEL_NMGY,
     BAND_NELEC_PER_NMGY,
 )
-generated_images = Synthetic.gen_blob(template_images, catalog_entries)
+Synthetic.gen_images!(images, catalog_entries)
 
 catalog_label = splitext(basename(parsed_args["catalog_csv"]))[1]
 output_filename = joinpath(OUTPUT_DIRECTORY, @sprintf("%s_synthetic.fits", catalog_label))
-AccuracyBenchmark.save_images_to_fits(output_filename, generated_images)
+AccuracyBenchmark.save_images_to_fits(output_filename, images)
 AccuracyBenchmark.append_hash_to_file(output_filename)
