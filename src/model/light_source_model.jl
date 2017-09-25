@@ -13,9 +13,9 @@ mutable struct CatalogEntry
     star_fluxes::Vector{Float64}
     gal_fluxes::Vector{Float64}
     gal_frac_dev::Float64
-    gal_ab::Float64
+    gal_axis_ratio::Float64
     gal_angle::Float64
-    gal_scale::Float64
+    gal_radius_px::Float64
 end
 
 
@@ -82,16 +82,16 @@ struct PriorParams
     k::Matrix{Float64}
     color_mean::Array{Float64, 3}
     color_cov::Array{Float64, 4}
-    gal_scale_mean::Float64
-    gal_scale_var::Float64
+    gal_radius_px_mean::Float64
+    gal_radius_px_var::Float64
 end
 
 
 function load_prior()
-    # set a = [.99, .01] if stars are underrepresented
+    # set is_star = [.99, .01] if stars are underrepresented
     # due to the greater flexibility of the galaxy model
     #is_star = [0.28, 0.72]
-    is_star = [0.099, 0.001]
+    is_star = [0.99, 0.01]
     k = Matrix{Float64}(NUM_COLOR_COMPONENTS, NUM_SOURCE_TYPES)
     color_mean = Array{Float64}(NUM_BANDS - 1, NUM_COLOR_COMPONENTS, NUM_SOURCE_TYPES)
     color_cov = Array{Float64}(NUM_BANDS - 1, NUM_BANDS - 1, NUM_COLOR_COMPONENTS, NUM_SOURCE_TYPES)
@@ -123,10 +123,10 @@ function load_prior()
     # log normal prior parameters (location, scale) on galaxy scale.
     # determined by fitting a univariate log normal to primary's
     # output the region of stripe 82 we use for validation
-    gal_scale_mean = 0.5015693
-    gal_scale_var = 0.8590007^2
+    gal_radius_px_mean = 0.5015693
+    gal_radius_px_var = 0.8590007^2
 
-    PriorParams(is_star, flux_mean, flux_var, k, color_mean, color_cov, gal_scale_mean, gal_scale_var)
+    PriorParams(is_star, flux_mean, flux_var, k, color_mean, color_cov, gal_radius_px_mean, gal_radius_px_var)
 end
 
 

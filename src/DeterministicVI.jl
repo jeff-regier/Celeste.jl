@@ -42,10 +42,10 @@ function generic_init_source(init_pos::Vector{Float64})
     ret[ids.pos] = init_pos
     ret[ids.flux_loc] = log(2.0)
     ret[ids.flux_scale] = 1e-3
-    ret[ids.gal_fracdev] = 0.5
-    ret[ids.gal_ab] = 0.5
+    ret[ids.gal_frac_dev] = 0.5
+    ret[ids.gal_axis_ratio] = 0.5
     ret[ids.gal_angle] = 0.0
-    ret[ids.gal_scale] = 1.0
+    ret[ids.gal_radius_px] = 1.0
     ret[ids.k] = 1.0 / size(ids.k, 1)
     ret[ids.color_mean] = 0.0
     ret[ids.color_var] =  1e-2
@@ -56,7 +56,7 @@ end
 """
 Return VariationalParams instance initialized form a catalog entry
 """
-function catalog_init_source(ce::CatalogEntry; max_gal_scale=Inf)
+function catalog_init_source(ce::CatalogEntry; max_gal_radius_px=Inf)
     # TODO: sync this up with the transform bounds
     ret = generic_init_source(ce.pos)
 
@@ -81,11 +81,11 @@ function catalog_init_source(ce::CatalogEntry; max_gal_scale=Inf)
     ret[ids.color_mean[:, 1]] = get_colors(ce.star_fluxes)
     ret[ids.color_mean[:, 2]] = get_colors(ce.gal_fluxes)
 
-    ret[ids.gal_fracdev] = min(max(ce.gal_frac_dev, 0.015), 0.985)
+    ret[ids.gal_frac_dev] = min(max(ce.gal_frac_dev, 0.015), 0.985)
 
-    ret[ids.gal_ab] = ce.is_star ? .8 : min(max(ce.gal_ab, 0.015), 0.985)
+    ret[ids.gal_axis_ratio] = ce.is_star ? .8 : min(max(ce.gal_axis_ratio, 0.015), 0.985)
     ret[ids.gal_angle] = ce.gal_angle
-    ret[ids.gal_scale] = ce.is_star ? 0.2 : min(max_gal_scale, max(ce.gal_scale, 0.2))
+    ret[ids.gal_radius_px] = ce.is_star ? 0.2 : min(max_gal_radius_px, max(ce.gal_radius_px, 0.2))
 
     ret
 end

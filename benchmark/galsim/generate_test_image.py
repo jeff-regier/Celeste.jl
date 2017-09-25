@@ -34,20 +34,20 @@ DEFAULT_GALAXY_RELATIVE_INTENSITIES = [
 ]
 
 class WorldCoordinate(object):
-    def __init__(self, right_ascension_deg, declination_deg):
-        self.right_ascension_deg = right_ascension_deg
-        self.declination_deg = declination_deg
+    def __init__(self, ra, dec):
+        self.ra = ra
+        self.dec = dec
 
     def as_galsim_position(self):
         return galsim.PositionD(
-            self.right_ascension_deg,
-            self.declination_deg,
+            self.ra,
+            self.dec,
         )
 
     def add(self, right_ascension_offset_deg, declination_offset_deg):
         return WorldCoordinate(
-            self.right_ascension_deg + right_ascension_offset_deg,
-            self.declination_deg + declination_offset_deg,
+            self.ra + right_ascension_offset_deg,
+            self.dec + declination_offset_deg,
         )
 
 class ImageParameters(object):
@@ -69,8 +69,8 @@ class ImageParameters(object):
         return self.world_origin.add(height_deg / 2., width_deg / 2.)
 
 class AbsolutePosition(object):
-    def __init__(self, right_ascension_deg, declination_deg):
-        self._position = WorldCoordinate(right_ascension_deg, declination_deg)
+    def __init__(self, ra, dec):
+        self._position = WorldCoordinate(ra, dec)
 
     def get_position(self, image_parameters):
         return self._position
@@ -81,15 +81,15 @@ class OffsetFromCenterPosition(object):
 
     def get_position(self, image_parameters):
         return image_parameters.get_image_center_world_coordinates().add(
-            self._offset.right_ascension_deg,
-            self._offset.declination_deg,
+            self._offset.ra,
+            self._offset.dec,
         )
 
 # fields and logic shared between stars and galaxies
 class CommonFields(object):
     def __init__(self):
         self.position = OffsetFromCenterPosition(0, 0) # or an AbsolutePosition
-        self.reference_band_flux_nmgy = 40
+        self.flux_r_nmgy = 40
         # relative flux in each band defines "color" of light sources
         self._flux_relative_to_reference_band = DEFAULT_GALAXY_RELATIVE_INTENSITIES
 
@@ -99,8 +99,8 @@ class CommonFields(object):
             declination_offset_arcsec / ARCSEC_PER_DEGREE,
         )
 
-    def set_world_coordinates_deg(self, right_ascension_deg, declination_deg):
-        self.position = AbsolutePosition(right_ascension_deg, declination_deg)
+    def set_world_coordinates_deg(self, ra, dec):
+        self.position = AbsolutePosition(ra, dec)
 
     def get_world_offset(self, image_parameters):
         """Get offset from image center, in world coordinates (degrees)
@@ -111,7 +111,7 @@ class CommonFields(object):
         """
         image_center = image_parameters.get_image_center_world_coordinates()
         world_position = self.position.get_position(image_parameters)
-        return world_position.add(-image_center.right_ascension_deg, -image_center.declination_deg)
+        return world_position.add(-image_center.ra, -image_center.dec)
 
     def set_flux_relative_to_reference_band(self, relative_flux):
         assert len(relative_flux) == 5
@@ -120,15 +120,15 @@ class CommonFields(object):
 
     def get_flux_nmgy(self, band_index):
         return (
-            self.reference_band_flux_nmgy * self._flux_relative_to_reference_band[band_index]
+            self.flux_r_nmgy * self._flux_relative_to_reference_band[band_index]
         )
 
     def add_header_fields(self, header, index_str, image_parameters, star_or_galaxy):
         position = self.position.get_position(image_parameters)
-        header['CLRA' + index_str] = (position.right_ascension_deg, 'Center right ascension, deg')
-        header['CLDEC' + index_str] = (position.declination_deg, 'Center declination, deg')
+        header['CLRA' + index_str] = (position.ra, 'Center right ascension, deg')
+        header['CLDEC' + index_str] = (position.dec, 'Center declination, deg')
         header['CLFLX' + index_str] = (
-            self.reference_band_flux_nmgy,
+            self.flux_r_nmgy,
             'reference (=3) band brightness (nMgy)',
         )
         header['CLC12' + index_str] = (
@@ -166,12 +166,12 @@ class Star(LightSource):
         self._common_fields.set_offset_from_center_arcsec(x, y)
         return self
 
-    def world_coordinates_deg(self, right_ascension_deg, declination_deg):
-        self._common_fields.set_world_coordinates_deg(right_ascension_deg, declination_deg)
+    def world_coordinates_deg(self, ra, dec):
+        self._common_fields.set_world_coordinates_deg(ra, dec)
         return self
 
-    def reference_band_flux_nmgy(self, flux):
-        self._common_fields.reference_band_flux_nmgy = flux
+    def flux_r_nmgy(self, flux):
+        self._common_fields.flux_r_nmgy = flux
         return self
 
     def flux_relative_to_reference_band(self, relative_flux):
@@ -194,50 +194,50 @@ class Star(LightSource):
 class Galaxy(LightSource):
     def __init__(self):
         self._common_fields = CommonFields()
-        self._common_fields.reference_band_flux_nmgy = 10
-        self._angle_deg = 0
-        self._minor_major_axis_ratio = 0.4
+        self._common_fields.flux_r_nmgy = 10
+        self._gal_angle_deg = 0
+        self._axis_ratio = 0.4
         self._half_light_radius_arcsec = 1.5
-        self._de_vaucouleurs_mixture_weight = 0.0
+        self._gal_frac_dev = 0.0
 
     def offset_arcsec(self, x, y):
         self._common_fields.set_offset_from_center_arcsec(x, y)
         return self
 
-    def world_coordinates_deg(self, right_ascension_deg, declination_deg):
-        self._common_fields.set_world_coordinates_deg(right_ascension_deg, declination_deg)
+    def world_coordinates_deg(self, ra, dec):
+        self._common_fields.set_world_coordinates_deg(ra, dec)
         return self
 
-    def reference_band_flux_nmgy(self, flux):
-        self._common_fields.reference_band_flux_nmgy = flux
+    def flux_r_nmgy(self, flux):
+        self._common_fields.flux_r_nmgy = flux
         return self
 
     def flux_relative_to_reference_band(self, relative_flux):
         self._common_fields.set_flux_relative_to_reference_band(relative_flux)
         return self
 
-    def angle_deg(self, angle):
-        self._angle_deg = angle
+    def gal_angle_deg(self, angle):
+        self._gal_angle_deg = angle
         return self
 
-    def minor_major_axis_ratio(self, ratio):
-        self._minor_major_axis_ratio = ratio
+    def axis_ratio(self, ratio):
+        self._axis_ratio = ratio
         return self
 
     def half_light_radius_arcsec(self, radius):
         self._half_light_radius_arcsec = radius
         return self
 
-    def de_vaucouleurs_mixture_weight(self, weight):
-        self._de_vaucouleurs_mixture_weight = weight
+    def gal_frac_dev(self, weight):
+        self._gal_frac_dev = weight
         return self
 
     def get_galsim_light_source(self, band_index, psf_sigma_degrees, image_parameters):
         def apply_shear_and_shift(galaxy):
             return (
                 galaxy.shear(
-                    q=self._minor_major_axis_ratio,
-                    beta=(90. - self._angle_deg) * galsim.degrees,
+                    q=self._axis_ratio,
+                    beta=(90. - self._gal_angle_deg) * galsim.degrees,
                 )
                 .shift(self._common_fields.get_world_offset(image_parameters).as_galsim_position())
             )
@@ -250,13 +250,13 @@ class Galaxy(LightSource):
         exponential_profile = apply_shear_and_shift(
             galsim.Exponential(
                 half_light_radius=half_light_radius_deg,
-                flux=flux_nelec * (1 - self._de_vaucouleurs_mixture_weight),
+                flux=flux_nelec * (1 - self._gal_frac_dev),
             )
         )
         de_vaucouleurs_profile = apply_shear_and_shift(
             galsim.DeVaucouleurs(
                 half_light_radius=half_light_radius_deg,
-                flux=flux_nelec * self._de_vaucouleurs_mixture_weight,
+                flux=flux_nelec * self._gal_frac_dev,
             )
         )
         galaxy = exponential_profile + de_vaucouleurs_profile
@@ -265,8 +265,8 @@ class Galaxy(LightSource):
 
     def add_header_fields(self, header, index_str, image_parameters):
         self._common_fields.add_header_fields(header, index_str, image_parameters, 'galaxy')
-        header['CLANG' + index_str] = (self._angle_deg, 'maj axis angle (deg from +dec -> +ra)')
-        header['CLRTO' + index_str] = (self._minor_major_axis_ratio, 'minor/major axis ratio')
+        header['CLANG' + index_str] = (self._gal_angle_deg, 'maj axis angle (deg from +dec -> +ra)')
+        header['CLRTO' + index_str] = (self._axis_ratio, 'minor/major axis ratio')
         header['CLRDA' + index_str] = (
             self._half_light_radius_arcsec,
             'half-light radius (arcsec)',
@@ -276,7 +276,7 @@ class Galaxy(LightSource):
             'half-light radius (pixels)',
         )
         header['CLDEV' + index_str] = (
-            self._de_vaucouleurs_mixture_weight,
+            self._gal_frac_dev,
             'de Vaucouleurs mixture weight',
         )
 
@@ -298,8 +298,8 @@ class GalSimTestCase(object):
     def set_resolution(self, arcsec_per_pixel):
         self.image_parameters.arcsec_per_pixel = arcsec_per_pixel
 
-    def set_world_origin(self, right_ascension_deg, declination_deg):
-        self.image_parameters.world_origin = WorldCoordinate(right_ascension_deg, declination_deg)
+    def set_world_origin(self, ra, dec):
+        self.image_parameters.world_origin = WorldCoordinate(ra, dec)
 
     def set_band_nelec_per_nmgy(self, band_nelec_per_nmgy):
         self.image_parameters.band_nelec_per_nmgy = band_nelec_per_nmgy

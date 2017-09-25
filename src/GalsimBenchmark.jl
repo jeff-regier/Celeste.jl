@@ -1,5 +1,3 @@
-__precompile__()
-
 module GalsimBenchmark
 
 using DataFrames
@@ -35,18 +33,18 @@ function extract_catalog_from_header(header::FITSIO.FITSHeader)
         end
         DataFrame(
             objid=@sprintf("%s_%03d", header["CLDESCR"], source_index),
-            right_ascension_deg=source_field("CLRA"),
-            declination_deg=source_field("CLDEC"),
+            ra=source_field("CLRA"),
+            dec=source_field("CLDEC"),
             is_star=(source_field("CLTYP") == "star" ? 1 : 0),
-            reference_band_flux_nmgy=convert(Float64, source_field("CLFLX")),
-            color_log_ratio_ug=log(source_field("CLC12")),
-            color_log_ratio_gr=log(source_field("CLC23")),
-            color_log_ratio_ri=log(source_field("CLC34")),
-            color_log_ratio_iz=log(source_field("CLC45")),
-            de_vaucouleurs_mixture_weight=source_field("CLDEV"),
-            minor_major_axis_ratio=source_field("CLRTO"),
-            half_light_radius_px=source_field("CLRDP"),
-            angle_deg=source_field("CLANG"),
+            flux_r_nmgy=convert(Float64, source_field("CLFLX")),
+            color_ug=log(source_field("CLC12")),
+            color_gr=log(source_field("CLC23")),
+            color_ri=log(source_field("CLC34")),
+            color_iz=log(source_field("CLC45")),
+            gal_frac_dev=source_field("CLDEV"),
+            gal_axis_ratio=source_field("CLRTO"),
+            gal_radius_px=source_field("CLRDP"),
+            gal_angle_deg=source_field("CLANG"),
         )
     end
 end
@@ -95,8 +93,7 @@ function run_benchmarks(; test_case_names=String[], joint_inference=false)
         truth_catalog_df = extract_catalog_from_header(header)
         catalog_entries = AccuracyBenchmark.make_initialization_catalog(truth_catalog_df, false)
         target_sources = collect(1:num_sources)
-        config = Config()
-        config.min_radius_pix = ACTIVE_PIXELS_MIN_RADIUS_PX
+        config = Config(ACTIVE_PIXELS_MIN_RADIUS_PX)
         results = AccuracyBenchmark.run_celeste(
             config,
             catalog_entries,

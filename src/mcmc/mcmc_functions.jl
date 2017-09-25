@@ -83,7 +83,7 @@ function make_gal_loglike(imgs::Array{Image},
         pos   = constrain_pos(unc_pos)
         shape = Model.constrain_gal_shape(ushape)
 
-        gal_frac_dev, gal_ab, gal_angle, gal_scale =
+        gal_frac_dev, gal_axis_ratio, gal_angle, gal_radius_px =
             Model.constrain_gal_shape(ushape)
 
         ll = 0.
@@ -96,7 +96,7 @@ function make_gal_loglike(imgs::Array{Image},
             # create and cache unit flux src image
             src_pixels = [0. for h=1:img.H, w=1:img.W]
             write_galaxy_unit_flux(img, pos, gal_frac_dev,
-                               gal_ab, gal_angle, gal_scale, src_pixels)
+                               gal_axis_ratio, gal_angle, gal_radius_px, src_pixels)
 
             # compute model image
             rates = sky_pixels .+ exp(lnfluxes[img.b])*src_pixels
@@ -155,9 +155,9 @@ function make_single_image_logflux_loglike(img0::Image,
                                            pos::Array{Float64, 1};
                                            is_star               = true,
                                            gal_frac_dev::Float64 = .5,
-                                           gal_ab::Float64       = .7,
+                                           gal_axis_ratio::Float64       = .7,
                                            gal_angle::Float64    = .79,
-                                           gal_scale::Float64    = 4.)
+                                           gal_radius_px::Float64    = 4.)
     # sky pixel intensity
     epsilon    = img0.sky[1, 1]
     iota       = img0.nelec_per_nmgy[1]
@@ -169,7 +169,7 @@ function make_single_image_logflux_loglike(img0::Image,
         write_star_unit_flux(img0, pos, src_pixels)
     else
         write_galaxy_unit_flux(img0, pos, gal_frac_dev,
-                               gal_ab, gal_angle, gal_scale, src_pixels)
+                               gal_axis_ratio, gal_angle, gal_radius_px, src_pixels)
     end
 
     # create log like handle and return
@@ -199,9 +199,9 @@ function make_logflux_loglike(imgs::Array{Image},
                               pos::Array{Float64, 1};
                               is_star = true,
                               gal_frac_dev::Float64 = .5,
-                              gal_ab::Float64       = .7,
+                              gal_axis_ratio::Float64       = .7,
                               gal_angle::Float64    = .79,
-                              gal_scale::Float64    = 4.)
+                              gal_radius_px::Float64    = 4.)
 
     # create per image scalar log flux function (caches unit flux pixel image)
     if is_star
@@ -212,9 +212,9 @@ function make_logflux_loglike(imgs::Array{Image},
         scalar_funs = [make_single_image_logflux_loglike(img, pos;
                           is_star=false,
                           gal_frac_dev=gal_frac_dev,
-                          gal_ab=gal_ab,
+                          gal_axis_ratio=gal_axis_ratio,
                           gal_angle=gal_angle,
-                          gal_scale=gal_scale)
+                          gal_radius_px=gal_radius_px)
                        for img in imgs]
     end
 

@@ -64,8 +64,8 @@ end
 function write_galaxy(img0::Image, ce::CatalogEntry, pixels::Matrix{Float64};
                       expectation=false)
     iota = median(img0.nelec_per_nmgy)
-    gal_fracdevs = [ce.gal_frac_dev, 1 - ce.gal_frac_dev]
-    XiXi = Model.get_bvn_cov(ce.gal_ab, ce.gal_angle, ce.gal_scale)
+    gal_frac_devs = [ce.gal_frac_dev, 1 - ce.gal_frac_dev]
+    XiXi = Model.get_bvn_cov(ce.gal_axis_ratio, ce.gal_angle, ce.gal_radius_px)
 
     for i in 1:2
         for gproto in galaxy_prototypes[i]
@@ -74,7 +74,7 @@ function write_galaxy(img0::Image, ce::CatalogEntry, pixels::Matrix{Float64};
                            img0.psf[k].xiBar
                 the_cov = img0.psf[k].tauBar + gproto.nuBar * XiXi
                 intensity = ce.gal_fluxes[img0.b] * iota *
-                    img0.psf[k].alphaBar * gal_fracdevs[i] * gproto.etaBar
+                    img0.psf[k].alphaBar * gal_frac_devs[i] * gproto.etaBar
                 write_gaussian(the_mean, the_cov, intensity, pixels,
                     expectation=expectation)
             end

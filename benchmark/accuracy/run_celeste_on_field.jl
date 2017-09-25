@@ -7,6 +7,7 @@ import Celeste.ArgumentParse
 import Celeste: Config
 import Celeste.ParallelRun
 import Celeste.SDSSIO
+import Celeste.Log
 
 const OUTPUT_DIRECTORY = joinpath(splitdir(Base.source_path())[1], "output")
 
@@ -64,8 +65,6 @@ ArgumentParse.add_argument(
 )
 parsed_args = ArgumentParse.parse_args(parser, ARGS)
 
-srand(12345)
-
 if haskey(parsed_args, "image-fits")
     extensions = AccuracyBenchmark.read_fits(parsed_args["image-fits"])
     images = AccuracyBenchmark.make_images(extensions)
@@ -110,21 +109,6 @@ results = AccuracyBenchmark.run_celeste(
     use_joint_inference=parsed_args["joint"],
 )
 results_df = AccuracyBenchmark.celeste_to_df(results)
-
-# save results in both JLD and CSV format
-
-jld_filename = joinpath(
-    OUTPUT_DIRECTORY,
-    @sprintf(
-        "celeste-%.4f-%.4f-%.4f-%.4f.jld",
-        minimum(results_df[:right_ascension_deg]),
-        maximum(results_df[:right_ascension_deg]),
-        minimum(results_df[:declination_deg]),
-        maximum(results_df[:declination_deg]),
-    )
-)
-println("Writing $(jld_filename)...")
-JLD.save(jld_filename, "results", results)
 
 csv_filename = joinpath(OUTPUT_DIRECTORY, @sprintf("%s_predictions.csv", catalog_label))
 AccuracyBenchmark.write_catalog(csv_filename, results_df)

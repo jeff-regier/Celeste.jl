@@ -83,10 +83,10 @@ function perturb_params(vp)
         vs[ids.pos[2]] -= .7
         vs[ids.flux_loc] -= log(10)
         vs[ids.flux_scale] *= 25.
-        vs[ids.gal_fracdev] += 0.05
-        vs[ids.gal_ab] += 0.05
+        vs[ids.gal_frac_dev] += 0.05
+        vs[ids.gal_axis_ratio] += 0.05
         vs[ids.gal_angle] += pi/10
-        vs[ids.gal_scale] *= 1.2
+        vs[ids.gal_radius_px] *= 1.2
         vs[ids.color_mean] += 0.5
         vs[ids.color_var] =  1e-1
     end

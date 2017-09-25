@@ -13,9 +13,9 @@ function verify_sample_galaxy(vs, pos)
     @test isapprox(vs[ids.pos[1]], pos[1], atol=0.1)
     @test isapprox(vs[ids.pos[2]], pos[2], atol=0.1)
 
-    @test isapprox(vs[ids.gal_ab] , 0.7, atol=0.05)
-    @test isapprox(vs[ids.gal_fracdev]  , 0.1, atol=0.08)
-    @test isapprox(vs[ids.gal_scale], 4.0, atol=0.2)
+    @test isapprox(vs[ids.gal_axis_ratio] , 0.7, atol=0.05)
+    @test isapprox(vs[ids.gal_frac_dev]  , 0.1, atol=0.08)
+    @test isapprox(vs[ids.gal_radius_px], 4.0, atol=0.2)
 
     phi_hat = vs[ids.gal_angle]
     phi_hat -= floor(phi_hat / pi) * pi

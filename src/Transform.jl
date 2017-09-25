@@ -29,10 +29,10 @@ const FreeVariationalParams{NumType <: Number} = Vector{Vector{NumType}}
 
 struct CanonicalParams <: ParamSet
     pos::Vector{Int}
-    gal_fracdev::Int
-    gal_ab::Int
+    gal_frac_dev::Int
+    gal_axis_ratio::Int
     gal_angle::Int
-    gal_scale::Int
+    gal_radius_px::Int
     flux_loc::Vector{Int}
     flux_scale::Vector{Int}
     color_mean::Matrix{Int}
@@ -53,10 +53,10 @@ Base.length(::Type{CanonicalParams}) = 6 + 3*NUM_SOURCE_TYPES + 2*(NUM_BANDS-1)*
 
 struct UnconstrainedParams <: ParamSet
     pos::Vector{Int}
-    gal_fracdev::Int
-    gal_ab::Int
+    gal_frac_dev::Int
+    gal_axis_ratio::Int
     gal_angle::Int
-    gal_scale::Int
+    gal_radius_px::Int
     flux_loc::Vector{Int}
     flux_scale::Vector{Int}
     color_mean::Matrix{Int}
@@ -756,10 +756,10 @@ function get_mp_transform{NumType <: Number}(
             bounds[si][:color_mean][ind] = ParamBox(-10., 10., 1.0)
             bounds[si][:color_var][ind] = ParamBox(1e-4, 1., 1.0)
         end
-        bounds[si][:gal_fracdev] = ParamBox[ ParamBox(1e-2, 1 - 1e-2, 1.0) ]
-        bounds[si][:gal_ab] = ParamBox[ ParamBox(1e-2, 1 - 1e-2, 1.0) ]
+        bounds[si][:gal_frac_dev] = ParamBox[ ParamBox(1e-2, 1 - 1e-2, 1.0) ]
+        bounds[si][:gal_axis_ratio] = ParamBox[ ParamBox(1e-2, 1 - 1e-2, 1.0) ]
         bounds[si][:gal_angle] = ParamBox[ ParamBox(-10.0, 10.0, 1.0) ]
-        bounds[si][:gal_scale] = ParamBox[ ParamBox(0.1, 70., 1.0) ]
+        bounds[si][:gal_radius_px] = ParamBox[ ParamBox(0.1, 70., 1.0) ]
 
         bounds[si][:a] = Vector{SimplexBox}(1)
         bounds[si][:a][1] = SimplexBox(0.005, 1.0, 2)

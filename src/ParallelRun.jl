@@ -262,7 +262,7 @@ function detect_sources(images::Vector{SDSSIO.RawImage})
             gal_fluxes = fill(NaN, NUM_BANDS)
             gal_fluxes[image.b] = sep_catalog.flux[i]
 
-            gal_ab = sep_catalog.a[i] / sep_catalog.b[i]
+            gal_axis_ratio = sep_catalog.a[i] / sep_catalog.b[i]
 
             # SEP angle is CCW from +x axis and in [-pi/2, pi/2].
             # Add offset of x axis from N to make angle CCW from N
@@ -271,7 +271,7 @@ function detect_sources(images::Vector{SDSSIO.RawImage})
             # A 2-d symmetric gaussian has CDF(r) =  1 - exp(-(r/sigma)^2/2)
             # The half-light radius is then r = sigma * sqrt(2 ln(2))
             sigma = sqrt(sep_catalog.a[i] * sep_catalog.b[i])
-            gal_scale = sigma * sqrt(2. * log(2.))
+            gal_radius_px = sigma * sqrt(2. * log(2.))
 
             pos = worldcoords[:, i]
             im_catalog[i] = CatalogEntry(pos,
@@ -279,9 +279,9 @@ function detect_sources(images::Vector{SDSSIO.RawImage})
                                          Float64[],  # will replace below
                                          gal_fluxes,
                                          0.5,  # gal_frac_dev
-                                         gal_ab,
+                                         gal_axis_ratio,
                                          gal_angle,
-                                         gal_scale)
+                                         gal_radius_px)
 
             # get object extent in degrees from bounding box in pixels
             xmin = sep_catalog.xmin[i]
@@ -471,6 +471,39 @@ struct OptimizedSource
     init_ra::Float64
     init_dec::Float64
     vs::Vector{Float64}
+    is_sky_bad::Bool
+end
+
+
+# The sky intensity does not appear to match the true background intensity
+# for some light sources. This function flags light sources whose infered
+# brightness may be inaccurate because the background intensity estimates
+# are off.
+function bad_sky(ce, images)
+    # The 'i' band is a pretty bright one, so I used it here.
+    img_index = findfirst(img -> img.b == 4, images)
+    if img_index < 0
+        return false
+    end
+
+    img = images[img_index]
+    p = Model.SkyPatch(img, ce)
+
+    h = p.bitmap_offset[1] + round(Int, p.radius_pix)
+    w = p.bitmap_offset[2] + round(Int, p.radius_pix)
+    claimed_sky = img.sky[h, w] * img.nelec_per_nmgy[h]
+
+    # the "super" patch below contains the original patch as well as a lot of
+    # background
+    sp = Model.SkyPatch(img, ce, radius_override_pix=50)
+    H2, W2 = size(sp.active_pixel_bitmap)
+    h_range = (sp.bitmap_offset[1] + 1):(sp.bitmap_offset[1] + H2)
+    w_range = (sp.bitmap_offset[2] + 1):(sp.bitmap_offset[2] + W2)
+    observed_sky = median(filter(!isnan, img.pixels[h_range, w_range]))
+
+    # A 5 photon-per-pixel disparity can really add up if the light sources
+    # covers a lot of pixels.
+    return (claimed_sky + 5) < observed_sky
 end
 
 
@@ -506,7 +539,8 @@ function process_source(config::Config,
     Log.info("#$(ts) at ($(entry.pos[1]), $(entry.pos[2])): $(toq()) secs")
 
     vs_opt = vp[1]
-    return OptimizedSource(entry.pos[1], entry.pos[2], vs_opt)
+    is_sky_bad = bad_sky(entry, images)
+    return OptimizedSource(entry.pos[1], entry.pos[2], vs_opt, is_sky_bad)
 end
 
 
