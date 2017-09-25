@@ -18,11 +18,11 @@ function generate_single_star_data(; lnr=7.7251)
     catalog[1].star_fluxes = new_fluxes
 
     # cache fluxes location, etc
-    ce0    = deepcopy(catalog[1])
-    images = deepcopy(ea.images)
+    ce0 = deepcopy(catalog[1])
+    dat_images = deepcopy(ea.images)
 
     # make mod/dat images
-    dat_images = Synthetic.gen_blob(images, catalog; expectation=false);
+    Synthetic.gen_images!(dat_images, catalog; expectation=false);
 
     # make sure ea images data reflects dat images for vb fitting
     for b in 1:5

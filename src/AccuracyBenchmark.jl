@@ -124,7 +124,7 @@ const ASINH_SOFTENING_PARAMETERS = [
 
 function mag_to_flux(mags::AbstractFloat, band_index::Int)
     b = ASINH_SOFTENING_PARAMETERS[band_index]
-    1e9 * 2 * b * sinh(-log(10) / 2.5 * mags - log(b))
+     1e9 * 2 * b * sinh(-log(10) / 2.5 * mags - log(b))
 end
 
 function flux_to_mag(flux_nmgy::AbstractFloat, band_index::Int)
