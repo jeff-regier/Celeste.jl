@@ -2,7 +2,7 @@ using BinDeps
 
 @BinDeps.setup
 
-version = "1.0.1"
+version = "1.0.2"
 url = "https://github.com/kbarbary/sep/archive/v$(version).tar.gz"
 
 libsep = library_dependency("libsep")

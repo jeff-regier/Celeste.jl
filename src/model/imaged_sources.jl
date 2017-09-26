@@ -1,3 +1,5 @@
+using Interpolations
+
 # Routines for observations of light sources in particular images,
 # rather than for sources in the abstract, in physical units,
 # and rather than for images alone (that's image_model.jl).
@@ -20,11 +22,75 @@ struct SkyPatch
     radius_pix::Float64
 
     psf::Vector{PsfComponent}
+    itp_psf::AbstractInterpolation
     wcs_jacobian::Matrix{Float64}
     pixel_center::Vector{Float64}
 
     bitmap_offset::SVector{2, Int64}  # lower left corner index offset
     active_pixel_bitmap::Matrix{Bool}
+end
+
+
+function SkyPatch(img::Image, ce::CatalogEntry; radius_override_pix=NaN)
+    world_center = ce.pos
+    pixel_center = WCS.world_to_pix(img.wcs, world_center)
+    wcs_jacobian = pixel_world_jacobian(img.wcs, pixel_center)
+    radius_pix = choose_patch_radius(ce, img, width_scale=1.2)
+    @assert radius_pix <= 25
+    if !isnan(radius_override_pix)
+        radius_pix = radius_override_pix
+    end
+
+    hmin = max(0, floor(Int, pixel_center[1] - radius_pix - 1))
+    hmax = min(img.H - 1, ceil(Int, pixel_center[1] + radius_pix - 1))
+    wmin = max(0, floor(Int, pixel_center[2] - radius_pix - 1))
+    wmax = min(img.W - 1, ceil(Int, pixel_center[2] + radius_pix - 1))
+
+    # some light sources are so far from some images that they don't
+    # overlap at all
+    H2 = max(0, hmax - hmin + 1)
+    W2 = max(0, wmax - wmin + 1)
+
+    # all pixels are active by default
+    active_pixel_bitmap = trues(H2, W2)
+
+    grid_psf = Model.eval_psf(img.raw_psf_comp, pixel_center[1], pixel_center[2])
+    grid_psf[:, :] = max.(grid_psf, 0.0)
+    grid_psf += 1e-6
+    grid_psf /= sum(grid_psf)
+    # The following transformation is like softplus. Its inv always returns a
+    # positive value. Without this transformation, even if the psf over the
+    # grid_psf is positive, the iterpolation of grid with bicubic splines often
+    # has negative values.
+    grid_psf[:, :] = softpluslike.(grid_psf)
+
+    itp_psf = interpolate(grid_psf, BSpline(Cubic(Line())), OnGrid())
+
+    SkyPatch(world_center,
+             radius_pix,
+             img.psf,
+             itp_psf,
+             wcs_jacobian,
+             pixel_center,
+             SVector(hmin, wmin),
+             active_pixel_bitmap)
+end
+
+
+function get_sky_patches(images::Vector{Image},
+                         catalog::Vector{CatalogEntry};
+                         radius_override_pix=NaN)
+    N = length(images)
+    S = length(catalog)
+    patches = Matrix{SkyPatch}(S, N)
+
+    for n in 1:N, s in 1:S
+        patches[s, n] = SkyPatch(images[n],
+                                 catalog[s],
+                                 radius_override_pix=radius_override_pix)
+    end
+
+    patches
 end
 
 
@@ -49,7 +115,7 @@ function choose_patch_radius(ce::CatalogEntry,
     # The galaxy scale is the point with half the light -- if the light
     # were entirely in a univariate normal, this would be at 0.67 standard
     # deviations.  We are being a bit conservative here.
-    obj_width = ce.is_star ? 0.0 : width_scale * ce.gal_scale / 0.67
+    obj_width = ce.is_star ? 0.0 : width_scale * ce.gal_radius_px / 0.67
     obj_width += psf_width
 
     flux = ce.is_star ? ce.star_fluxes[img.b] : ce.gal_fluxes[img.b]

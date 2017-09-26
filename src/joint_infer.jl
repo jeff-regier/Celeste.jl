@@ -5,7 +5,6 @@ using DataStructures
 import ..Log
 using ..Model
 import ..SDSSIO
-import ..Infer
 import ..SDSSIO: RunCamcolField
 import ..PSF
 
@@ -232,9 +231,7 @@ function partition_cyclades(n_threads, target_sources, neighbor_map; batch_size=
     # Load balance the connected components within each batch into thread_sources_assignment.
     for (cur_batch, cur_batch_component) in enumerate(components)
         # Priority queue for load balancing.
-        pqueue = PriorityQueue([i for i=1:n_threads],
-                               [0 for i=1:n_threads],
-                               Base.Order.Forward)
+        pqueue = PriorityQueue(Base.Order.Forward, (i, 0) for i=1:n_threads)
 
         # Assign non-conflicting group of sources to different threads
         for (component_group_id, sources_of_component) in cur_batch_component
@@ -471,7 +468,7 @@ end
 
 
 """
-Like one_node_infer, uses multiple threads on one node to fit the Celeste
+Uses multiple threads on one node to fit the Celeste
 model over numerous iterations.
 
 catalog - the catalog of light sources
@@ -489,12 +486,12 @@ Returns:
 
 - Vector of OptimizedSource results
 """
-function one_node_joint_infer(config::Config, catalog, target_sources, neighbor_map, images;
+function one_node_joint_infer(catalog, target_sources, neighbor_map, images;
                               cyclades_partition::Bool=true,
                               batch_size::Int=7000,
                               within_batch_shuffling::Bool=true,
                               n_iters::Int=3,
-                              timing=InferTiming())
+                              config=Config())
     # Seed random number generator to ensure the same results per run.
     srand(42)
 
@@ -514,14 +511,12 @@ function one_node_joint_infer(config::Config, catalog, target_sources, neighbor_
     ks = BoxKillSwitch()
 
     # Initialize elboargs in parallel
-    tic()
     thread_initialize_sources_assignment::Vector{Vector{Vector{Int64}}} = partition_equally(n_threads, n_sources)
 
     initialize_elboargs_sources!(config, ea_vec, vp_vec, cfg_vec, thread_initialize_sources_assignment,
                                  catalog, target_sources, neighbor_map, images,
                                  target_source_variational_params;
                                  termination_callback=ks)
-    timing.init_elbo = toq()
 
     #thread_sources_assignment = partition_box(n_threads, target_sources,
     #                                  neighbor_map;
@@ -533,8 +528,6 @@ function one_node_joint_infer(config::Config, catalog, target_sources, neighbor_
                                                  batch_size=batch_size)
 
     # Process sources in parallel
-    tic()
-
     #process_sources!(images, ea_vec, vp_vec, cfg_vec,
     #                 thread_sources_assignment,
     #                 n_iters, within_batch_shuffling)
@@ -542,9 +535,6 @@ function one_node_joint_infer(config::Config, catalog, target_sources, neighbor_
                              batched_connected_components,
                              n_iters, within_batch_shuffling;
                              kill_switch=ks)
-
-    timing.opt_srcs = toq()
-    timing.num_srcs = n_sources
 
     # Return add results to vector
     results = OptimizedSource[]
@@ -554,11 +544,8 @@ function one_node_joint_infer(config::Config, catalog, target_sources, neighbor_
     else
         for i = 1:n_sources
             entry = catalog[target_sources[i]]
-            result = OptimizedSource(entry.thing_id,
-                                     entry.objid,
-                                     entry.pos[1],
-                                     entry.pos[2],
-                                     vp_vec[i][1])
+            is_sky_bad = bad_sky(entry, images)
+            result = OptimizedSource(entry.pos[1], entry.pos[2], vp_vec[i][1], is_sky_bad)
             push!(results, result)
         end
     end
@@ -566,27 +553,6 @@ function one_node_joint_infer(config::Config, catalog, target_sources, neighbor_
     show_pixels_processed()
 
     results
-end
-
-# legacy wrapper
-function one_node_joint_infer(catalog, target_sources, neighbor_map, images;
-                              cyclades_partition::Bool=true,
-                              batch_size::Int=7000,
-                              within_batch_shuffling::Bool=true,
-                              n_iters::Int=3,
-                              timing=InferTiming())
-    one_node_joint_infer(
-        Config(),
-        catalog,
-        target_sources,
-        neighbor_map,
-        images,
-        cyclades_partition=cyclades_partition,
-        batch_size=batch_size,
-        within_batch_shuffling=within_batch_shuffling,
-        n_iters=n_iters,
-        timing=timing
-    )
 end
 
 function initialize_elboargs_sources!(config::Config, ea_vec, vp_vec, cfg_vec,
@@ -634,8 +600,8 @@ function init_elboargs(config::Config,
         cat_local = vcat([entry], neighbors)
         ids_local = vcat([entry_id], neighbor_ids)
 
-        patches = Infer.get_sky_patches(images, cat_local)
-        Infer.load_active_pixels!(config, images, patches)
+        patches = Model.get_sky_patches(images, cat_local)
+        ParallelRun.load_active_pixels!(config, images, patches)
         # Load vp with shared target source params, and also vp
         # that doesn't share target source params
         vp = Vector{Float64}[haskey(ts_vp, x) ?

@@ -7,30 +7,15 @@ using Celeste.DeterministicVI: ElboArgs
 using Celeste.DeterministicVI.ElboMaximize: ElboConfig, maximize!, elbo_optim_options
 using Optim
 
-function verify_sample_star(vs, pos)
-    @test vs[ids.is_star[2]] <= 0.01
-
-    @test isapprox(vs[ids.pos[1]], pos[1], atol=0.1)
-    @test isapprox(vs[ids.pos[2]], pos[2], atol=0.1)
-
-    brightness_hat = exp(vs[ids.flux_loc[1]] + 0.5 * vs[ids.flux_scale[1]])
-    @test isapprox(brightness_hat / sample_star_fluxes[3], 1.0, atol=0.01)
-
-    true_colors = log.(sample_star_fluxes[2:5] ./ sample_star_fluxes[1:4])
-    for b in 1:4
-        @test isapprox(vs[ids.color_mean[b, 1]], true_colors[b], atol=0.2)
-    end
-end
-
 function verify_sample_galaxy(vs, pos)
     @test vs[ids.is_star[2]] >= 0.99
 
     @test isapprox(vs[ids.pos[1]], pos[1], atol=0.1)
     @test isapprox(vs[ids.pos[2]], pos[2], atol=0.1)
 
-    @test isapprox(vs[ids.gal_ab] , 0.7, atol=0.05)
-    @test isapprox(vs[ids.gal_fracdev]  , 0.1, atol=0.08)
-    @test isapprox(vs[ids.gal_scale], 4.0, atol=0.2)
+    @test isapprox(vs[ids.gal_axis_ratio] , 0.7, atol=0.05)
+    @test isapprox(vs[ids.gal_frac_dev]  , 0.1, atol=0.08)
+    @test isapprox(vs[ids.gal_radius_px], 4.0, atol=0.2)
 
     phi_hat = vs[ids.gal_angle]
     phi_hat -= floor(phi_hat / pi) * pi
@@ -48,22 +33,7 @@ function verify_sample_galaxy(vs, pos)
     end
 end
 
-
 #########################################################
-
-function test_star_optimization()
-    ea, vp, catalog = gen_sample_star_dataset();
-
-    # Newton's method converges on a small galaxy unless we start with
-    # a high star probability.
-    vp[1][ids.is_star] = [0.8, 0.2]
-
-    cfg = ElboConfig(ea, vp; loc_width=1.0)
-    maximize!(ea, vp, cfg)
-
-    verify_sample_star(vp[1], [10.1, 12.2])
-end
-
 
 function test_single_source_optimization()
     ea, vp, catalog = gen_three_body_dataset();
@@ -100,18 +70,6 @@ function test_full_elbo_optimization()
 end
 
 
-function test_termination_callback()
-    ea, vp, catalog = gen_sample_galaxy_dataset(; include_kl = false);
-    terminated = false
-    callback = x -> (terminated = x.iteration >= 3; return terminated)
-    cfg = ElboConfig(ea, vp; termination_callback = callback)
-    _, _, _, result = maximize!(ea, vp, cfg)
-    return terminated && Optim.iterations(result) == 3
-end
-
-
-test_star_optimization()
 test_single_source_optimization()
 test_full_elbo_optimization()
 test_galaxy_optimization()
-test_termination_callback()

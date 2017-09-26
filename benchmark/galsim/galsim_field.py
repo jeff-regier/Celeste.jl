@@ -18,10 +18,10 @@ BAND_NELEC_PER_NMGY = [146.9, 838.1, 829.8, 597.2, 129.8]
 class MissingFieldError(Exception): pass
 
 def set_image_dimensions(test_case, catalog_rows):
-    min_ra_deg = min(float(row['right_ascension_deg']) for row in catalog_rows)
-    max_ra_deg = max(float(row['right_ascension_deg']) for row in catalog_rows)
-    min_dec_deg = min(float(row['declination_deg']) for row in catalog_rows)
-    max_dec_deg = max(float(row['declination_deg']) for row in catalog_rows)
+    min_ra_deg = min(float(row['ra']) for row in catalog_rows)
+    max_ra_deg = max(float(row['ra']) for row in catalog_rows)
+    min_dec_deg = min(float(row['dec']) for row in catalog_rows)
+    max_dec_deg = max(float(row['dec']) for row in catalog_rows)
 
     height_arcsec = (max_ra_deg - min_ra_deg) * ARCSEC_PER_DEGREE + 2 * FIELD_EXPAND_ARCSEC
     width_arcsec = (max_dec_deg - min_dec_deg) * ARCSEC_PER_DEGREE + 2 * FIELD_EXPAND_ARCSEC
@@ -54,11 +54,11 @@ def generate_field(test_case, catalog_csv):
                 raise MissingFieldError()
 
         try:
-            color_log_ratios = [
-                field('color_log_ratio_ug'),
-                field('color_log_ratio_gr'),
-                field('color_log_ratio_ri'),
-                field('color_log_ratio_iz'),
+            colors = [
+                field('color_ug'),
+                field('color_gr'),
+                field('color_ri'),
+                field('color_iz'),
             ]
         except MissingFieldError:
             continue # just skip sources with missing colors
@@ -68,19 +68,19 @@ def generate_field(test_case, catalog_csv):
         else:
             source = (
                 test_case.add_galaxy()
-                .half_light_radius_arcsec(field('half_light_radius_px') * test_case.get_resolution())
-                .angle_deg(field('angle_deg'))
-                .minor_major_axis_ratio(field('minor_major_axis_ratio'))
-                .de_vaucouleurs_mixture_weight(field('de_vaucouleurs_mixture_weight'))
+                .half_light_radius_arcsec(field('gal_radius_px') * test_case.get_resolution())
+                .gal_angle_deg(field('gal_angle_deg'))
+                .axis_ratio(field('axis_ratio'))
+                .gal_frac_dev(field('gal_frac_dev'))
             )
-        source.world_coordinates_deg(field('right_ascension_deg'), field('declination_deg'))
-        source.reference_band_flux_nmgy(field('reference_band_flux_nmgy'))
+        source.world_coordinates_deg(field('ra'), field('dec'))
+        source.flux_r_nmgy(field('flux_r_nmgy'))
         source.flux_relative_to_reference_band([
-            math.exp(-color_log_ratios[0] - color_log_ratios[1]),
-            math.exp(-color_log_ratios[1]),
+            math.exp(-colors[0] - colors[1]),
+            math.exp(-colors[1]),
             1,
-            math.exp(color_log_ratios[2]),
-            math.exp(color_log_ratios[2] + color_log_ratios[3]),
+            math.exp(colors[2]),
+            math.exp(colors[2] + colors[3]),
         ])
 
     test_case.include_noise = True

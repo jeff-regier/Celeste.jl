@@ -2,8 +2,7 @@ __precompile__()
 
 module Celeste
 
-# import this before StaticArrays has a chance to load, to
-# workaround a bug
+# import this before StaticArrays has a chance to load, to workaround a bug
 import ForwardDiff
 
 include("aliasscopes.jl")
@@ -13,11 +12,11 @@ include("config.jl")
 include("Log.jl")
 
 include("SensitiveFloats.jl")
+include("BivariateNormals.jl")
 
 include("Coordinates.jl")
 
 include("Model.jl")
-include("Infer.jl")
 include("Transform.jl")
 include("PSF.jl")
 include("SDSSIO.jl")

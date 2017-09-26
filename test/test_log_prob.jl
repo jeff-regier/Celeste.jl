@@ -117,11 +117,11 @@ function test_that_gal_truth_is_most_likely_log_prob()
 
     # perturb galaxy shape parameters
     gdev, gab, gangle, gscale = shape
-    for bad_shapgal_scale in [.5, .8, 1.2, 1.3]
+    for bad_shapgal_radius_px in [.5, .8, 1.2, 1.3]
         # generate a random direction in param space
         r = randn(length(shape))
         r = r / sqrt(sum(r.*r))
-        bad_shape = shape + bad_shapgal_scale * r
+        bad_shape = shape + bad_shapgal_radius_px * r
 
         bad_state = deepcopy(gal_state)
         bad_state[8:11] = bad_shape

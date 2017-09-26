@@ -6,10 +6,10 @@
 #
 # The variable names are:
 # pos       = Location in world coordinates. Right ascension and declination
-# gal_fracdev   = Weight given to a galaxy of type 1 (formerly theta)
-# gal_ab  = Galaxy minor/major ratio (formerly rho)
+# gal_frac_dev   = Weight given to a galaxy of type 1 (formerly theta)
+# gal_axis_ratio  = Galaxy minor/major ratio (formerly rho)
 # gal_angle = Galaxy angle (formerly phi), in radians north of east
-# gal_scale = Galaxy scale (sigma). gal_scale times sqrt(gal_ab) gives the half-light radius in pixel
+# gal_radius_px = Galaxy scale (sigma). gal_radius_px times sqrt(gal_axis_ratio) gives the half-light radius in pixel
 #           coords.
 # For flux_loc, flux_scale, color_mean and color_var, the first row is stars, and the second is galaxies.
 # flux_loc      = NUM_SOURCE_TYPESx1 lognormal mean parameter for r_s, the brightness/total flux of the object, in nMgy.
@@ -38,9 +38,9 @@ getids(::Type{StarPosParams}) = star_ids
 length(::Type{StarPosParams}) = 2
 
 struct GalaxyShapeParams <: ParamSet
-    gal_ab::Int
+    gal_axis_ratio::Int
     gal_angle::Int
-    gal_scale::Int
+    gal_radius_px::Int
     GalaxyShapeParams() = new(1, 2, 3)
 end
 const gal_shape_ids = GalaxyShapeParams()
@@ -49,10 +49,10 @@ length(::Type{GalaxyShapeParams}) = 3
 
 struct GalaxyPosParams <: ParamSet
     pos::Vector{Int}
-    gal_fracdev::Int
-    gal_ab::Int
+    gal_frac_dev::Int
+    gal_axis_ratio::Int
     gal_angle::Int
-    gal_scale::Int
+    gal_radius_px::Int
     GalaxyPosParams() = new([1, 2], 3, 4, 5, 6)
 end
 const gal_ids = GalaxyPosParams()
@@ -75,10 +75,10 @@ length(::Type{BrightnessParams}) = 2 + 2 * (NUM_BANDS-1)
 
 struct CanonicalParams <: ParamSet
     pos::Vector{Int}
-    gal_fracdev::Int
-    gal_ab::Int
+    gal_frac_dev::Int
+    gal_axis_ratio::Int
     gal_angle::Int
-    gal_scale::Int
+    gal_radius_px::Int
     flux_loc::Vector{Int}
     flux_scale::Vector{Int}
     color_mean::Matrix{Int}
@@ -87,10 +87,10 @@ struct CanonicalParams <: ParamSet
     k::Matrix{Int}
     function CanonicalParams()
         new([1, 2], # pos
-            3, # gal_fracdev
-            4, # gal_ab
+            3, # gal_frac_dev
+            4, # gal_axis_ratio
             5, # gal_angle
-            6, # gal_scale
+            6, # gal_radius_px
             collect(7:(7+NUM_SOURCE_TYPES-1)),  # flux_loc
             collect((7+NUM_SOURCE_TYPES):(7+2NUM_SOURCE_TYPES-1)), # flux_scale
             reshape((7+2NUM_SOURCE_TYPES):(7+2NUM_SOURCE_TYPES+(NUM_BANDS-1)*NUM_SOURCE_TYPES-1), (NUM_BANDS-1, NUM_SOURCE_TYPES)),  # color_mean
@@ -109,10 +109,10 @@ length(::Type{CanonicalParams}) = 6 + 3*NUM_SOURCE_TYPES + 2*(NUM_BANDS-1)*NUM_S
 
 struct LatentStateIndexes <: ParamSet
     pos::Vector{Int}
-    gal_fracdev::Int
-    gal_ab::Int
+    gal_frac_dev::Int
+    gal_axis_ratio::Int
     gal_angle::Int
-    gal_scale::Int
+    gal_radius_px::Int
     flux::Vector{Int}
     color::Matrix{Int}
     is_star::Matrix{Int}
@@ -133,9 +133,9 @@ length(::Type{LatentStateIndexes}) = 22 #6 + 3*NUM_SOURCE_TYPES + 2*(NUM_BANDS-1
 # Parameters for a representation of the PSF
 struct PsfParams <: ParamSet
     mu::UnitRange{Int}
-    gal_ab::Int
+    gal_axis_ratio::Int
     gal_angle::Int
-    gal_scale::Int
+    gal_radius_px::Int
     weight::Int
 
     function PsfParams()
@@ -152,14 +152,14 @@ length{T<:ParamSet}(::T) = length(T)
 #TODO: build these from ue_align, etc., here.
 align(::StarPosParams, ids) = ids.pos
 align(::GalaxyPosParams, ids) =
-   [ids.pos; ids.gal_fracdev; ids.gal_ab; ids.gal_angle; ids.gal_scale]
+   [ids.pos; ids.gal_frac_dev; ids.gal_axis_ratio; ids.gal_angle; ids.gal_radius_px]
 align(::CanonicalParams, _ids) = collect(1:length(CanonicalParams))
 align(::GalaxyShapeParams, gal_ids) =
-  [gal_ids.gal_ab; gal_ids.gal_angle; gal_ids.gal_scale]
+  [gal_ids.gal_axis_ratio; gal_ids.gal_angle; gal_ids.gal_radius_px]
 
 # The shape and brightness parameters for stars and galaxies respectively.
 const shape_standard_alignment = (ids.pos,
-   [ids.pos; ids.gal_fracdev; ids.gal_ab; ids.gal_angle; ids.gal_scale])
+   [ids.pos; ids.gal_frac_dev; ids.gal_axis_ratio; ids.gal_angle; ids.gal_radius_px])
 bright_ids(i) = [ids.flux_loc[i]; ids.flux_scale[i]; ids.color_mean[:, i]; ids.color_var[:, i]]
 const brightness_standard_alignment = (bright_ids(1), bright_ids(2))
 

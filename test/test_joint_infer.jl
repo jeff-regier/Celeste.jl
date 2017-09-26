@@ -1,7 +1,6 @@
 import JLD
 
-import Celeste.Infer
-import Celeste.ParallelRun: infer_init, one_node_infer, BoundingBox,
+import Celeste.ParallelRun: infer_init, BoundingBox,
     one_node_joint_infer, one_node_single_infer, detect_sources
 import Celeste.SensitiveFloats: SensitiveFloat
 import Celeste.DeterministicVI.ElboMaximize
@@ -14,7 +13,7 @@ Helper function to load elbo args for a particular source
 """
 function load_ea_from_source(target_source, target_sources, catalog, images, all_vps)
     # Get neighbors of the source from which to load elbo args.
-    neighbor_map = Infer.find_neighbors([target_source], catalog, images)
+    neighbor_map = ParallelRun.find_neighbors([target_source], catalog, images)
 
     # Create a dictionary to the optimized parameters.
     target_source_variational_params = Dict{Int64, Array{Float64}}()
@@ -26,8 +25,8 @@ function load_ea_from_source(target_source, target_sources, catalog, images, all
     neighbors = catalog[neighbor_map[1]]
     entry = catalog[target_source]
     cat_local = vcat([entry], neighbors)
-    patches = Infer.get_sky_patches(images, cat_local)
-    Infer.load_active_pixels!(images, patches)
+    patches = Model.get_sky_patches(images, cat_local)
+    ParallelRun.load_active_pixels!(images, patches)
     ids_local = vcat([target_source], neighbor_map[1])
     vp = [haskey(target_source_variational_params, x) ?
           target_source_variational_params[x] :
@@ -107,12 +106,12 @@ function compute_obj_value(results,
     vp = [r.vs for r in results]
 
     # it may be better to pass `patches` as an argument to `compute_obj_value`.
-    patches = Infer.get_sky_patches(images, catalog[target_sources])
+    patches = Model.get_sky_patches(images, catalog[target_sources])
 
     # if we don't call `load_active_pixels!`, these patches will be different
     # than the patches we used for optimizing---and then the objective
     # function could also be slightly different
-    Infer.load_active_pixels!(images, patches)
+    ParallelRun.load_active_pixels!(images, patches)
 
     # this works since we're just generating patches for active_sources.
     # if instead you pass patches for all sources, then instead we'd used
@@ -156,9 +155,7 @@ function test_detect_sources()
     # Get raw images
     strategy = SDSSIO.PlainFITSStrategy(datadir)
     raw_images = SDSSIO.load_raw_images(strategy, [rcf])
-    catalog, source_rcfs, source_idxs, source_radii = detect_sources(raw_images)
-
-    @test all(source_rcfs .== rcf)
+    catalog, source_radii = detect_sources(raw_images)
 
     ra = [ce.pos[1] for ce in catalog]
     dec = [ce.pos[2] for ce in catalog]
@@ -176,6 +173,8 @@ test_improve_stripe_82_obj_value
 function test_improve_stripe_82_obj_value()
     println("Testing that joint_infer improves score on stripe 82...")
     (rcfs, datadir, target_sources, catalog, images) = load_stripe_82_data()
+
+    ctni = ParallelRun.infer_init(rcfs, strategy; box=box)
 
     # Single inference obj value
     infer_single(ctni...) = one_node_single_infer(ctni...)
@@ -495,17 +494,18 @@ if test_long_running
 
     # Test that we reach a higher objective with more iterations. This is a bit slow.
     test_one_node_joint_infer_obj_overlapping()
+
+    test_same_one_node_infer_twice()
+    test_different_result_with_different_iter()
+    test_same_result_with_diff_batch_sizes()
+
+    # Run this multiple times, since the cyclades algorithm shuffles the elements
+    # before batching them up.
+    for i=1:20
+        test_cyclades_partitioning()
+    end
+
+    test_one_node_joint_infer()
 end
 
 test_detect_sources()
-test_same_one_node_infer_twice()
-test_different_result_with_different_iter()
-test_same_result_with_diff_batch_sizes()
-
-# Run this multiple times, since the cyclades algorithm shuffles the elements
-# before batching them up.
-for i=1:20
-    test_cyclades_partitioning()
-end
-
-test_one_node_joint_infer()

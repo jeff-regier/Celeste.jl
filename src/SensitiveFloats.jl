@@ -1,7 +1,6 @@
 module SensitiveFloats
 
 export SensitiveFloat,
-       clear!,
        multiply_sfs!,
        add_scaled_sfs!,
        combine_sfs!,
@@ -82,8 +81,8 @@ function zero!{T}(m::Array{T})
     end
 end
 
-function clear!{NumType <: Number}(sf::SensitiveFloat{NumType})
-    sf.v[] = zero(NumType)
+function zero!(sf::SensitiveFloat{T}) where {T<:Number}
+    sf.v[] = zero(T)
 
     if sf.has_gradient
         zero!(sf.d)

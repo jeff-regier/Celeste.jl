@@ -32,9 +32,9 @@ function calculate_G_s!{NumType <: Number}(
 
     # we'd like to get rid of these calls to `fill!`
     if is_active_source
-        clear!(E_G_s)
-        clear!(E_G2_s)
-        clear!(var_G_s)
+        SensitiveFloats.zero!(E_G_s)
+        SensitiveFloats.zero!(E_G2_s)
+        SensitiveFloats.zero!(var_G_s)
     else
         E_G_s.v[] = 0.0
         E_G2_s.v[] = 0.0
@@ -337,8 +337,8 @@ function add_pixel_term!{NumType <: Number}(
                     elbo_vars::ElboIntermediateVariables = ElboIntermediateVariables(NumType, ea.Sa))
     img = ea.images[n]
 
-    clear!(elbo_vars.E_G)
-    clear!(elbo_vars.var_G)
+    SensitiveFloats.zero!(elbo_vars.E_G)
+    SensitiveFloats.zero!(elbo_vars.var_G)
 
     for s in 1:ea.S
         p = ea.patches[s,n]
@@ -357,15 +357,13 @@ function add_pixel_term!{NumType <: Number}(
                 elbo_vars.inactive_pixel_counter[] += 1
             end
 
-            populate_fsm!(bvn_bundle.bvn_derivs,
-                          elbo_vars.fs0m,
-                          elbo_vars.fs1m,
-                          s,
-                          SVector{2,Float64}(h, w),
-                          is_active_source,
-                          p.wcs_jacobian,
-                          bvn_bundle.gal_mcs,
-                          bvn_bundle.star_mcs)
+            Model.star_light_density!(elbo_vars.fs0m, p, h, w, vp[s][ids.pos], is_active_source)
+            Model.populate_gal_fsm!(elbo_vars.fs1m,
+                                    bvn_bundle.bvn_derivs,
+                                    s, h, w,
+                                    is_active_source,
+                                    p.wcs_jacobian,
+                                    bvn_bundle.gal_mcs)
 
             accumulate_source_pixel_brightness!(ea, vp, elbo_vars,
                 sbs[s], ea.images[n].b, s, is_active_source)
@@ -404,8 +402,8 @@ function elbo_likelihood{T}(ea::ElboArgs,
                             vp::VariationalParams{T},
                             elbo_vars::ElboIntermediateVariables = ElboIntermediateVariables(T, ea.Sa),
                             bvn_bundle::BvnBundle{T} = BvnBundle{T}(ea.psf_K, ea.S))
-    clear!(elbo_vars)
-    clear!(bvn_bundle)
+    zero!(elbo_vars)
+    Model.zero!(bvn_bundle)
 
     # this call loops over light sources (but not images)
     sbs = load_source_brightnesses(ea, vp)

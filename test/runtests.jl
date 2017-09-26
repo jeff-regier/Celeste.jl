@@ -7,9 +7,8 @@ using StaticArrays
 
 using Celeste: Model, DeterministicVI
 
-import Celeste: Infer, DeterministicVI, ParallelRun
+import Celeste: DeterministicVI, ParallelRun
 import Celeste: PSF, SDSSIO, SensitiveFloats, Transform
-import Celeste.SensitiveFloats.clear!
 import Celeste.SDSSIO: RunCamcolField
 
 include(joinpath(Pkg.dir("Celeste"), "test", "SampleData.jl"))

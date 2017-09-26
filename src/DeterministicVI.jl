@@ -6,22 +6,20 @@ module DeterministicVI
 using Base.Threads: threadid, nthreads
 
 import ..Config
+using ..BivariateNormals: BivariateNormalDerivatives, BvnComponent,
+                          GalaxySigmaDerivs, get_bvn_cov, eval_bvn_pdf!,
+                          get_bvn_derivs!, transform_bvn_derivs!
 using ..Model
-import ..Model: BivariateNormalDerivatives, BvnComponent, GalaxyCacheComponent,
-                BvnBundle, GalaxySigmaDerivs, SkyPatch,
-                get_bvn_cov, eval_bvn_pdf!, get_bvn_derivs!,
-                transform_bvn_derivs!, populate_fsm!
+using ..Model: SkyPatch, BvnBundle
 import ..Celeste: Const, @aliasscope, @unroll_loop
-import ..Infer
 using ..SensitiveFloats
-import ..SensitiveFloats.clear!
 import ..Log
 using ..Transform
 import DataFrames
 import Optim
 import ForwardDiff.Dual
 using StaticArrays
-import Base.convert
+import Base: convert
 
 export ElboArgs, generic_init_source, catalog_init_source, init_sources,
        VariationalParams, elbo, ElboIntermediateVariables
@@ -44,10 +42,10 @@ function generic_init_source(init_pos::Vector{Float64})
     ret[ids.pos] = init_pos
     ret[ids.flux_loc] = log(2.0)
     ret[ids.flux_scale] = 1e-3
-    ret[ids.gal_fracdev] = 0.5
-    ret[ids.gal_ab] = 0.5
+    ret[ids.gal_frac_dev] = 0.5
+    ret[ids.gal_axis_ratio] = 0.5
     ret[ids.gal_angle] = 0.0
-    ret[ids.gal_scale] = 1.0
+    ret[ids.gal_radius_px] = 1.0
     ret[ids.k] = 1.0 / size(ids.k, 1)
     ret[ids.color_mean] = 0.0
     ret[ids.color_var] =  1e-2
@@ -58,7 +56,7 @@ end
 """
 Return VariationalParams instance initialized form a catalog entry
 """
-function catalog_init_source(ce::CatalogEntry; max_gal_scale=Inf)
+function catalog_init_source(ce::CatalogEntry; max_gal_radius_px=Inf)
     # TODO: sync this up with the transform bounds
     ret = generic_init_source(ce.pos)
 
@@ -83,11 +81,11 @@ function catalog_init_source(ce::CatalogEntry; max_gal_scale=Inf)
     ret[ids.color_mean[:, 1]] = get_colors(ce.star_fluxes)
     ret[ids.color_mean[:, 2]] = get_colors(ce.gal_fluxes)
 
-    ret[ids.gal_fracdev] = min(max(ce.gal_frac_dev, 0.015), 0.985)
+    ret[ids.gal_frac_dev] = min(max(ce.gal_frac_dev, 0.015), 0.985)
 
-    ret[ids.gal_ab] = ce.is_star ? .8 : min(max(ce.gal_ab, 0.015), 0.985)
+    ret[ids.gal_axis_ratio] = ce.is_star ? .8 : min(max(ce.gal_axis_ratio, 0.015), 0.985)
     ret[ids.gal_angle] = ce.gal_angle
-    ret[ids.gal_scale] = ce.is_star ? 0.2 : min(max_gal_scale, max(ce.gal_scale, 0.2))
+    ret[ids.gal_radius_px] = ce.is_star ? 0.2 : min(max_gal_radius_px, max(ce.gal_radius_px, 0.2))
 
     ret
 end
@@ -111,45 +109,5 @@ include("deterministic_vi/source_brightness.jl")
 include("deterministic_vi/elbo_objective.jl")
 include("deterministic_vi/ConstraintTransforms.jl")
 include("deterministic_vi/ElboMaximize.jl")
-
-
-"""
-Infers one light source. This routine is intended to be called in parallel,
-once per target light source.
-
-Arguments:
-    images: a collection of astronomical images
-    neighbors: the other light sources near `entry`
-    entry: the source to infer
-"""
-function infer_source(config::Config,
-                      images::Vector{Image},
-                      neighbors::Vector{CatalogEntry},
-                      entry::CatalogEntry)
-    if length(neighbors) > 100
-        msg = string("objid $(entry.objid) [ra: $(entry.pos)] has an excessive",
-                     "number ($(length(neighbors))) of neighbors")
-        Log.warn(msg)
-    end
-
-    # It's a bit inefficient to call the next 5 lines every time we optimize_f.
-    # But, as long as runtime is dominated by the call to maximize!, that
-    # isn't a big deal.
-    cat_local = vcat([entry], neighbors)
-    vp = init_sources([1], cat_local)
-    patches = Infer.get_sky_patches(images, cat_local)
-    Infer.load_active_pixels!(config, images, patches)
-
-    ea = ElboArgs(images, patches, [1])
-    f_evals, max_f, max_x, nm_result = ElboMaximize.maximize!(ea, vp)
-    return vp[1]
-end
-
-# legacy wrapper
-function infer_source(images::Vector{Image},
-                      neighbors::Vector{CatalogEntry},
-                      entry::CatalogEntry)
-    infer_source(Config(), images, neighbors, entry)
-end
 
 end

@@ -3,15 +3,15 @@ module AccuracyBenchmark
 using DataFrames
 using Distributions
 import FITSIO
-import StaticArrays
+using StaticArrays
 import WCS
 
 import ..Config
 import ..DeterministicVI
-import ..Infer
 import ..Model
 import ..ParallelRun
 import ..SDSSIO
+using ..Coordinates: angular_separation, match_coordinates
 
 const ARCSEC_PER_DEGREE = 3600
 const SDSS_ARCSEC_PER_PIXEL = 0.396
@@ -26,10 +26,6 @@ struct MatchException <: Exception
     msg::String
 end
 
-struct ObjectsMissingFromGroundTruth <: Exception
-    missing_objids::Vector{String}
-end
-
 struct MissingColumnsError <: Exception
     missing_columns::Vector{Symbol}
 end
@@ -39,28 +35,43 @@ end
 ################################################################################
 
 CATALOG_COLUMNS = Set([
-    :objid,
-    :right_ascension_deg,
-    :declination_deg,
+    :ra,
+    :dec,
     :is_star,
-    :reference_band_flux_nmgy,
-    :color_log_ratio_ug,
-    :color_log_ratio_gr,
-    :color_log_ratio_ri,
-    :color_log_ratio_iz,
-    :de_vaucouleurs_mixture_weight,
-    :minor_major_axis_ratio,
-    :half_light_radius_px,
-    :angle_deg,
-    :is_saturated,
+    :flux_r_nmgy,
+    :color_ug,
+    :color_gr,
+    :color_ri,
+    :color_iz,
+    :gal_frac_dev,
+    :gal_axis_ratio,
+    :gal_radius_px,
+    :gal_angle_deg,
 ])
 
 STDERR_COLUMNS = Set([
-    :log_reference_band_flux_stderr,
-    :color_log_ratio_ug_stderr,
-    :color_log_ratio_gr_stderr,
-    :color_log_ratio_ri_stderr,
-    :color_log_ratio_iz_stderr,
+    :log_flux_r_stderr,
+    :color_ug_stderr,
+    :color_gr_stderr,
+    :color_ri_stderr,
+    :color_iz_stderr,
+])
+
+BAD_COADD_OBJID = Set([
+    # this object is actually multiple objects,
+    # see http://legacysurvey.org/viewer/jpeg-cutout/?ra=0.5636&dec=0.4445&zoom=16&layer=decals-dr3
+    8647474692482203853,
+
+    # bright neighbor not accounted for,
+    # see http://skyserver.sdss.org/dr10/en/tools/chart/navi.aspx?ra=0.551730166101009&dec=0.48085411481715&scale=0.2
+    8647474692482203816,
+
+    #  possibly a quasar; update: decals labels this light source a galaxy!
+    # see http://legacysurvey.org/viewer?ra=0.5531&dec=0.4530&zoom=16&layer=decals-dr3&sources
+    8647474692482204612,
+
+    # Qusar: http://skyserver.sdss.org/dr10/en/get/SpecById.ashx?id=435863481728657408
+    8647474692482204147,
 ])
 
 function assert_columns_are_present(catalog_df::DataFrame, required_columns::Set{Symbol})
@@ -74,7 +85,6 @@ function read_catalog(csv_file::String)
     @printf("Reading '%s'...\n", csv_file)
     catalog_df = readtable(csv_file)
     assert_columns_are_present(catalog_df, CATALOG_COLUMNS)
-    catalog_df[:objid] = String[string(objid) for objid in catalog_df[:objid]]
     catalog_df
 end
 
@@ -93,6 +103,7 @@ function append_hash_to_file(filename::String)
     new_filename = @sprintf("%s_%s%s", base, hash_string, extension)
     @printf("Renaming %s -> %s\n", filename, new_filename)
     mv(filename, new_filename, remove_destination=true)
+    new_filename
 end
 
 ################################################################################
@@ -133,7 +144,7 @@ function color_from_mags(mags1::AbstractFloat, band1::Int, mags2::AbstractFloat,
     color_from_fluxes(mag_to_flux(mags1, band1), mag_to_flux(mags2, band2))
 end
 
-canonical_angle(angle_deg) = angle_deg - floor(angle_deg / 180) * 180
+canonical_angle(gal_angle_deg) = gal_angle_deg - floor(gal_angle_deg / 180) * 180
 
 STRIPE_82_CATALOG_KEYS = [
     :objid, :rerun, :run, :camcol, :field, :flags,
@@ -189,20 +200,20 @@ function load_coadd_catalog(fits_filename)
 
     result = DataFrame()
     result[:objid] = [string(objid) for objid in raw_df[:objid]]
-    result[:right_ascension_deg] = raw_df[:ra]
-    result[:declination_deg] = raw_df[:dec]
-    result[:is_saturated] = (raw_df[:is_saturated] .!= 0)
+    result[:ra] = raw_df[:ra]
+    result[:dec] = raw_df[:dec]
     result[:is_star] = is_star
 
-    result[:reference_band_flux_nmgy] = mag_to_flux.(mag_r, 3)
+    flux_r = mag_to_flux.(mag_r, 3)
+    result[:flux_r_nmgy] = ifelse.(flux_r .> 0, flux_r, NaN)
 
-    result[:color_log_ratio_ug] = color_from_mags.(mag_u, 1, mag_g, 2)
-    result[:color_log_ratio_gr] = color_from_mags.(mag_g, 2, mag_r, 3)
-    result[:color_log_ratio_ri] = color_from_mags.(mag_r, 3, mag_i, 4)
-    result[:color_log_ratio_iz] = color_from_mags.(mag_i, 4, mag_z, 5)
+    result[:color_ug] = color_from_mags.(mag_u, 1, mag_g, 2)
+    result[:color_gr] = color_from_mags.(mag_g, 2, mag_r, 3)
+    result[:color_ri] = color_from_mags.(mag_r, 3, mag_i, 4)
+    result[:color_iz] = color_from_mags.(mag_i, 4, mag_z, 5)
 
     # gal shape -- fracdev
-    result[:de_vaucouleurs_mixture_weight] = raw_df[:fracdev_r]
+    result[:gal_frac_dev] = raw_df[:fracdev_r]
 
     # Note that the SDSS photo pipeline doesn't constrain the de Vaucouleur
     # profile parameters and exponential disk parameters (A/B, angle, scale)
@@ -211,16 +222,21 @@ function load_coadd_catalog(fits_filename)
     # to the dominant component. Later, we limit comparison to objects with
     # fracdev close to 0 or 1 to ensure that we're comparing apples to apples.
 
-    result[:minor_major_axis_ratio] = dev_or_exp(:devab_r, :expab_r)
+    result[:gal_axis_ratio] = dev_or_exp(:devab_r, :expab_r)
 
     # gal effective radius (re)
     re_arcsec = dev_or_exp(:devrad_r, :exprad_r)
     re_pixel = re_arcsec ./ SDSS_ARCSEC_PER_PIXEL
-    result[:half_light_radius_px] = convert(Vector{Float64}, re_pixel)
+    result[:gal_radius_px] = convert(Vector{Float64}, re_pixel)
 
     # gal angle (degrees)
     raw_phi = dev_or_exp(:devphi_r, :expphi_r)
-    result[:angle_deg] = canonical_angle.(raw_phi)
+    result[:gal_angle_deg] = canonical_angle.(raw_phi)
+
+    is_saturated = raw_df[:is_saturated] .!= 0
+    result = result[.!is_saturated, :]
+    bad_rows = [x in BAD_COADD_OBJID for x in result[:, :objid]]
+    result = result[.!bad_rows, :]
 
     return result
 end
@@ -255,40 +271,41 @@ function load_primary(rcf::SDSSIO.RunCamcolField, stagedir::String)
 
     result = DataFrame()
     result[:objid] = raw_df[:objid]
-    result[:right_ascension_deg] = raw_df[:ra]
-    result[:declination_deg] = raw_df[:dec]
+    result[:ra] = raw_df[:ra]
+    result[:dec] = raw_df[:dec]
     result[:is_star] = raw_df[:is_star]
 
-    result[:reference_band_flux_nmgy] = flux_r
+    result[:flux_r_nmgy] = flux_r
 
-    result[:color_log_ratio_ug] = color_from_fluxes.(flux_u, flux_g)
-    result[:color_log_ratio_gr] = color_from_fluxes.(flux_g, flux_r)
-    result[:color_log_ratio_ri] = color_from_fluxes.(flux_r, flux_i)
-    result[:color_log_ratio_iz] = color_from_fluxes.(flux_i, flux_z)
+    result[:color_ug] = color_from_fluxes.(flux_u, flux_g)
+    result[:color_gr] = color_from_fluxes.(flux_g, flux_r)
+    result[:color_ri] = color_from_fluxes.(flux_r, flux_i)
+    result[:color_iz] = color_from_fluxes.(flux_i, flux_z)
 
-    result[:de_vaucouleurs_mixture_weight] = raw_df[:frac_dev]
-    result[:minor_major_axis_ratio] = dev_or_exp(:ab_dev, :ab_exp)
+    result[:gal_frac_dev] = raw_df[:frac_dev]
+    result[:gal_axis_ratio] = dev_or_exp(:ab_dev, :ab_exp)
 
     # gal effective radius (re)
     re_arcsec = dev_or_exp(:theta_dev, :theta_exp)
     re_pixel = re_arcsec ./ SDSS_ARCSEC_PER_PIXEL
-    result[:half_light_radius_px] = convert(Vector{Float64}, re_pixel)
+    result[:gal_radius_px] = convert(Vector{Float64}, re_pixel)
 
     # gal angle (degrees)
     raw_phi = dev_or_exp(:phi_dev, :phi_exp)
-    result[:angle_deg] = canonical_angle.(raw_phi)
+    result[:gal_angle_deg] = canonical_angle.(raw_phi)
 
-    # primary is better at flagging oversaturated sources than coadd
-    result[:is_saturated] = flux_to_mag.(raw_df[:psfflux_r], 3) .< 16
+    # primary is better at indicating oversaturation than coadd
+    is_saturated = flux_to_mag.(raw_df[:psfflux_r], 3) .< 16
+    result = result[.!is_saturated, :]
 
     return result
 end
 
-function fluxes_from_colors(reference_band_flux_nmgy::Float64, color_log_ratios::DataVector{Float64})
-    @assert length(color_log_ratios) == 4
-    color_ratios = exp.(color_log_ratios)
+function fluxes_from_colors(flux_r_nmgy::Float64, colors::DataVector{Float64})
+    @assert length(colors) == 4
+    color_ratios = exp.(colors)
     fluxes = DataArray(Float64, 5)
-    fluxes[3] = reference_band_flux_nmgy
+    fluxes[3] = flux_r_nmgy
     fluxes[4] = fluxes[3] * color_ratios[3]
     fluxes[5] = fluxes[4] * color_ratios[4]
     fluxes[2] = fluxes[3] / color_ratios[2]
@@ -296,8 +313,8 @@ function fluxes_from_colors(reference_band_flux_nmgy::Float64, color_log_ratios:
     fluxes
 end
 
-function fluxes_from_colors(reference_band_flux_nmgy::Float64, color_log_ratios::Vector{Float64})
-    fluxes = fluxes_from_colors(reference_band_flux_nmgy, DataArray{Float64}(color_log_ratios))
+function fluxes_from_colors(flux_r_nmgy::Float64, colors::Vector{Float64})
+    fluxes = fluxes_from_colors(flux_r_nmgy, DataArray{Float64}(colors))
     convert(Vector{Float64}, fluxes)
 end
 
@@ -308,34 +325,32 @@ function get_median_fluxes(variational_params::Vector{Float64}, source_type::Int
     )
 end
 
-function variational_parameters_to_data_frame_row(objid::String, variational_params::Vector{Float64})
+function variational_parameters_to_data_frame_row(variational_params::Vector{Float64})
     ids = Model.ids
     result = DataFrame()
-    result[:objid] = objid
-    result[:right_ascension_deg] = variational_params[ids.pos[1]]
-    result[:declination_deg] = variational_params[ids.pos[2]]
-    result[:is_saturated] = false
+    result[:ra] = variational_params[ids.pos[1]]
+    result[:dec] = variational_params[ids.pos[2]]
     result[:is_star] = variational_params[ids.is_star[1, 1]]
-    result[:de_vaucouleurs_mixture_weight] = variational_params[ids.gal_fracdev]
-    result[:minor_major_axis_ratio] = variational_params[ids.gal_ab]
-    result[:half_light_radius_px] = (
-        variational_params[ids.gal_scale] * sqrt(variational_params[ids.gal_ab])
+    result[:gal_frac_dev] = variational_params[ids.gal_frac_dev]
+    result[:gal_axis_ratio] = variational_params[ids.gal_axis_ratio]
+    result[:gal_radius_px] = (
+        variational_params[ids.gal_radius_px] * sqrt(variational_params[ids.gal_axis_ratio])
     )
-    result[:angle_deg] = canonical_angle(180 / pi * variational_params[ids.gal_angle])
+    result[:gal_angle_deg] = canonical_angle(180 / pi * variational_params[ids.gal_angle])
 
     star_galaxy_index = (result[1, :is_star] > 0.5 ? 1 : 2)
     fluxes = get_median_fluxes(variational_params, star_galaxy_index)
-    result[:reference_band_flux_nmgy] = fluxes[3]
-    result[:color_log_ratio_ug] = color_from_fluxes(fluxes[1], fluxes[2])
-    result[:color_log_ratio_gr] = color_from_fluxes(fluxes[2], fluxes[3])
-    result[:color_log_ratio_ri] = color_from_fluxes(fluxes[3], fluxes[4])
-    result[:color_log_ratio_iz] = color_from_fluxes(fluxes[4], fluxes[5])
+    result[:flux_r_nmgy] = fluxes[3]
+    result[:color_ug] = color_from_fluxes(fluxes[1], fluxes[2])
+    result[:color_gr] = color_from_fluxes(fluxes[2], fluxes[3])
+    result[:color_ri] = color_from_fluxes(fluxes[3], fluxes[4])
+    result[:color_iz] = color_from_fluxes(fluxes[4], fluxes[5])
 
-    result[:log_reference_band_flux_stderr] = sqrt(variational_params[ids.flux_scale[star_galaxy_index]])
-    result[:color_log_ratio_ug_stderr] = sqrt(variational_params[ids.color_var[1, star_galaxy_index]])
-    result[:color_log_ratio_gr_stderr] = sqrt(variational_params[ids.color_var[2, star_galaxy_index]])
-    result[:color_log_ratio_ri_stderr] = sqrt(variational_params[ids.color_var[3, star_galaxy_index]])
-    result[:color_log_ratio_iz_stderr] = sqrt(variational_params[ids.color_var[4, star_galaxy_index]])
+    result[:log_flux_r_stderr] = sqrt(variational_params[ids.flux_scale[star_galaxy_index]])
+    result[:color_ug_stderr] = sqrt(variational_params[ids.color_var[1, star_galaxy_index]])
+    result[:color_gr_stderr] = sqrt(variational_params[ids.color_var[2, star_galaxy_index]])
+    result[:color_ri_stderr] = sqrt(variational_params[ids.color_var[3, star_galaxy_index]])
+    result[:color_iz_stderr] = sqrt(variational_params[ids.color_var[4, star_galaxy_index]])
 
     result
 end
@@ -345,7 +360,14 @@ end
 Convert Celeste results to a dataframe.
 """
 function celeste_to_df(results::Vector{ParallelRun.OptimizedSource})
-    rows = [variational_parameters_to_data_frame_row(result.objid, result.vs) for result in results]
+    rows = []
+    for result in results
+        row = variational_parameters_to_data_frame_row(result.vs)
+        if result.is_sky_bad
+            row[:flux_r_nmgy] = NaN
+        end
+        push!(rows, row)
+    end
     vcat(rows...)
 end
 
@@ -360,10 +382,10 @@ const PRIOR_PROBABILITY_OF_STAR = 0.28
 """
 Draw a random source from the Celeste prior, returning a 1-row data frame.
 """
-function draw_source_params(prior, object_id)
+function draw_source_params(prior)
     is_star = (rand(Bernoulli(PRIOR_PROBABILITY_OF_STAR)) == 1)
     source_type_index = is_star ? 1 : 2
-    reference_band_flux_nmgy = exp(rand(
+    flux_r_nmgy = exp(rand(
         Normal(prior.flux_mean[source_type_index], sqrt(prior.flux_var[source_type_index]))
     ))
 
@@ -373,41 +395,39 @@ function draw_source_params(prior, object_id)
         MvNormal(prior.color_mean[:, k, source_type_index], prior.color_cov[:, :, k, source_type_index])
         for k in 1:NUM_COLOR_COMPONENTS
     ]
-    color_log_ratios = rand(MixtureModel(color_components, color_mixture_weights))
+    colors = rand(MixtureModel(color_components, color_mixture_weights))
 
     if !is_star
-        half_light_radius_px = exp(rand(
-            Normal(prior.flux_mean[source_type_index], sqrt(prior.flux_var[source_type_index]))
+        gal_radius_px = exp(rand(
+            Normal(prior.gal_radius_px_mean, sqrt(prior.gal_radius_px_var))
         ))
-        angle_deg = rand(Uniform(0, 180))
-        minor_major_axis_ratio = rand(Beta(2, 2))
-        de_vaucouleurs_mixture_weight = rand(Beta(0.5, 0.5))
+        gal_angle_deg = rand(Uniform(0, 180))
+        gal_axis_ratio = rand(Beta(2, 2))
+        gal_frac_dev = rand(Beta(0.5, 0.5))
     else
-        half_light_radius_px = -1
-        angle_deg = -1
-        minor_major_axis_ratio = -1
-        de_vaucouleurs_mixture_weight = -1
+        gal_radius_px = -1
+        gal_angle_deg = -1
+        gal_axis_ratio = -1
+        gal_frac_dev = -1
     end
 
     # Use approximate size of SDSS field in degrees
-    right_ascension_deg = rand(Uniform(0, 0.14))
-    declination_deg = rand(Uniform(0, 0.22))
+    ra = rand(Uniform(0, 0.14))
+    dec = rand(Uniform(0, 0.22))
 
     DataFrame(
-        objid=object_id,
-        right_ascension_deg=right_ascension_deg,
-        declination_deg=declination_deg,
+        ra=ra,
+        dec=dec,
         is_star=is_star,
-        reference_band_flux_nmgy=reference_band_flux_nmgy,
-        color_log_ratio_ug=color_log_ratios[1],
-        color_log_ratio_gr=color_log_ratios[2],
-        color_log_ratio_ri=color_log_ratios[3],
-        color_log_ratio_iz=color_log_ratios[4],
-        de_vaucouleurs_mixture_weight=de_vaucouleurs_mixture_weight,
-        minor_major_axis_ratio=minor_major_axis_ratio,
-        half_light_radius_px=half_light_radius_px,
-        angle_deg=angle_deg,
-        is_saturated=false,
+        flux_r_nmgy=flux_r_nmgy,
+        color_ug=colors[1],
+        color_gr=colors[2],
+        color_ri=colors[3],
+        color_iz=colors[4],
+        gal_frac_dev=gal_frac_dev,
+        gal_axis_ratio=gal_axis_ratio,
+        gal_radius_px=gal_radius_px,
+        gal_angle_deg=gal_angle_deg,
     )
 end
 
@@ -418,7 +438,7 @@ function generate_catalog_from_celeste_prior(num_sources::Int64, seed::Int64)
     srand(seed)
     prior = Model.load_prior()
     vcat(
-        [draw_source_params(prior, string(index)) for index in 1:num_sources]...
+        [draw_source_params(prior) for index in 1:num_sources]...
     )
 end
 
@@ -517,6 +537,24 @@ function make_image(
         collect(1:width_px),
         ones(height_px),
     )
+
+    # The next code block generates an SDSS-style raw_psf with just one
+    # eigenimage. That eigenimage is obtained by rendering the Celeste PSF
+    # on a grid.
+    psf_dims = (51, 51)
+    rendered_psf = zeros(psf_dims...)
+    x = Vector{Float64}(2)
+    for pc in psf
+        bvn = MultivariateNormal(convert(Array, pc.xiBar), convert(Array, pc.tauBar))
+        for w in 1:psf_dims[2], h in 1:psf_dims[1]
+            x[1] = h - 26
+            x[2] = w - 26
+            rendered_psf[h, w] += pc.alphaBar * pdf(bvn, x)
+        end
+    end
+    rendered_psf = reshape(rendered_psf, (reduce(*, psf_dims), 1))
+    raw_psf = Model.RawPSF(rendered_psf, psf_dims[1], psf_dims[2], ones(1, 1, 1))
+
     Model.Image(
         height_px,
         width_px,
@@ -527,7 +565,7 @@ function make_image(
         0, 0, 0, # run, camcol, field
         sky_intensity,
         fill(nelec_per_nmgy, height_px),
-        Model.RawPSF(Matrix{Float64}(0, 0), 0, 0, Array{Float64,3}(0, 0, 0)),
+        raw_psf,
     )
 end
 
@@ -551,34 +589,31 @@ function typical_band_fluxes(is_star::Bool)
     source_type_index = is_star ? 1 : 2
     prior_parameters::Model.PriorParams = Model.load_prior()
     # this is the mode. brightness is log normal.
-    reference_band_flux = exp(
+    flux_r = exp(
         prior_parameters.flux_mean[source_type_index] - prior_parameters.flux_var[source_type_index]
     )
     # Band relative intensities are a mixture of lognormals. Which mixture component has the most
     # weight?
     dominant_component = indmax(prior_parameters.k[:, source_type_index])
     # What are the most typical log relative intensities for that component?
-    color_log_ratios = (
+    colors = (
         prior_parameters.color_mean[:, dominant_component, source_type_index]
         - diag(prior_parameters.color_cov[:, :, dominant_component, source_type_index])
     )
-    fluxes_from_colors(reference_band_flux, color_log_ratios)
+    fluxes_from_colors(flux_r, colors)
 end
 
-function make_catalog_entry(
-    x_position_world_coords::Float64, y_position_world_coords::Float64, objid::String
-)
+function make_catalog_entry(x_position_world_coords::Float64,
+                            y_position_world_coords::Float64)
     Model.CatalogEntry(
         [x_position_world_coords, y_position_world_coords],
         false, # is_star
         typical_band_fluxes(true),
         typical_band_fluxes(false),
         0.1, # gal_frac_dev
-        0.7, # gal_ab
+        0.7, # gal_axis_ratio
         pi / 4, # gal_angle
-        4., # gal_scale
-        objid, # objid
-        0, # thing_id
+        4., # gal_radius_px
     )
 end
 
@@ -587,27 +622,25 @@ ensure_small_flux(value) = (isna(value) || value <= 0) ? 1e-6 : value
 na_to_default(value, default) = isna(value) ? default : value
 
 function make_catalog_entry(row::DataFrameRow)
-    color_log_ratios = DataArray{Float64}(DataArray(Any[
-        row[:color_log_ratio_ug],
-        row[:color_log_ratio_gr],
-        row[:color_log_ratio_ri],
-        row[:color_log_ratio_iz],
+    colors = DataArray{Float64}(DataArray(Any[
+        row[:color_ug],
+        row[:color_gr],
+        row[:color_ri],
+        row[:color_iz],
     ]))
-    fluxes = fluxes_from_colors(row[:reference_band_flux_nmgy], color_log_ratios)
+    fluxes = fluxes_from_colors(row[:flux_r_nmgy], colors)
     fluxes = convert(Vector{Float64}, ensure_small_flux.(fluxes))
-    minor_major_axis_ratio = na_to_default(row[:minor_major_axis_ratio], 0.8)
+    gal_axis_ratio = na_to_default(row[:gal_axis_ratio], 0.8)
     Model.CatalogEntry(
-        [row[:right_ascension_deg], row[:declination_deg]],
+        [row[:ra], row[:dec]],
         row[:is_star] > 0.5,
         fluxes,
         fluxes,
-        na_to_default(row[:de_vaucouleurs_mixture_weight], 0.5),
-        minor_major_axis_ratio,
-        na_to_default(row[:angle_deg], 0.) / 180.0 * pi,
-        na_to_default(row[:half_light_radius_px] / sqrt(minor_major_axis_ratio), 2.),
-        row[:objid],
-        0, # thing_id
-    )
+        na_to_default(row[:gal_frac_dev], 0.5),
+        gal_axis_ratio,
+        na_to_default(row[:gal_angle_deg], 0.) / 180.0 * pi,
+        na_to_default(row[:gal_radius_px] / sqrt(gal_axis_ratio), 2.)
+        )
 end
 
 function make_initialization_catalog(catalog::DataFrame, use_full_initialzation::Bool)
@@ -617,9 +650,8 @@ function make_initialization_catalog(catalog::DataFrame, use_full_initialzation:
             make_catalog_entry(row)
         else
             make_catalog_entry(
-                row[:right_ascension_deg] + position_offset_width,
-                row[:declination_deg] - 0.5 * position_offset_width,
-                row[:objid],
+                row[:ra] + position_offset_width,
+                row[:dec] - 0.5 * position_offset_width
             )
         end
     end
@@ -638,10 +670,10 @@ struct ImageGeometry
 end
 
 function get_image_geometry(catalog_data::DataFrame; field_expand_arcsec=20.0)
-    min_ra_deg = minimum(catalog_data[:right_ascension_deg])
-    max_ra_deg = maximum(catalog_data[:right_ascension_deg])
-    min_dec_deg = minimum(catalog_data[:declination_deg])
-    max_dec_deg = maximum(catalog_data[:declination_deg])
+    min_ra_deg = minimum(catalog_data[:ra])
+    max_ra_deg = maximum(catalog_data[:ra])
+    min_dec_deg = minimum(catalog_data[:dec])
+    max_dec_deg = maximum(catalog_data[:dec])
 
     width_arcsec = (max_ra_deg - min_ra_deg) * ARCSEC_PER_DEGREE + 2 * field_expand_arcsec
     height_arcsec = (max_dec_deg - min_dec_deg) * ARCSEC_PER_DEGREE + 2 * field_expand_arcsec
@@ -763,10 +795,10 @@ end
 # Score a set of predictions against a ground truth catalog
 ################################################################################
 
-COLOR_COLUMNS = [:color_log_ratio_ug, :color_log_ratio_gr, :color_log_ratio_ri, :color_log_ratio_iz]
+COLOR_COLUMNS = [:color_ug, :color_gr, :color_ri, :color_iz]
 
 ABSOLUTE_ERROR_COLUMNS = vcat(
-    [:de_vaucouleurs_mixture_weight, :minor_major_axis_ratio, :half_light_radius_px],
+    [:gal_frac_dev, :gal_axis_ratio, :gal_radius_px],
     COLOR_COLUMNS,
 )
 
@@ -774,6 +806,11 @@ function degrees_to_diff(a, b)
     angle_between = abs(a - b) % 180
     min.(angle_between, 180 - angle_between)
 end
+
+# When a dataframe column only has NA values it gets an NAtype rather
+# than a Float64 type, and abs no longer works
+import Base.abs
+abs(x::DataArrays.DataArray{DataArrays.NAtype,1}) = NA
 
 """
 Given two results data frame, one containing ground truth (i.e Coadd)
@@ -783,32 +820,29 @@ compute an a data frame containing each prediction's error.
 Let's call the return type of this function an \"error data frame\".
 """
 function get_error_df(truth::DataFrame, predicted::DataFrame)
-    errors = DataFrame(
-        objid=truth[:objid],
-        is_saturated=predicted[:is_saturated],
-    )
+    errors = DataFrame()
 
     predicted_galaxy = predicted[:is_star] .< .5
     true_galaxy = truth[:is_star] .< .5
     errors[:missed_stars] = ifelse.(!true_galaxy, predicted_galaxy, NA)
     errors[:missed_galaxies] = ifelse.(true_galaxy, !predicted_galaxy, NA)
 
-    errors[:position] = sky_distance_px.(
-        truth[:right_ascension_deg],
-        truth[:declination_deg],
-        predicted[:right_ascension_deg],
-        predicted[:declination_deg],
-    )
+    errors[:position] =
+        (ARCSEC_PER_DEGREE / SDSS_ARCSEC_PER_PIXEL) .*
+        angular_separation.(truth[:ra],
+                            truth[:dec],
+                            predicted[:ra],
+                            predicted[:dec])
 
     # compare flux in both mags and nMgy for now
-    errors[:reference_band_flux_mag] = abs(
-        flux_to_mag.(truth[:reference_band_flux_nmgy], 3)
-        .- flux_to_mag.(predicted[:reference_band_flux_nmgy], 3)
+    errors[:flux_r_mag] = abs(
+        flux_to_mag.(truth[:flux_r_nmgy], 3)
+        .- flux_to_mag.(predicted[:flux_r_nmgy], 3)
     )
-    errors[:reference_band_flux_nmgy] = abs(
-        truth[:reference_band_flux_nmgy] .- predicted[:reference_band_flux_nmgy]
+    errors[:flux_r_nmgy] = abs(
+        truth[:flux_r_nmgy] .- predicted[:flux_r_nmgy]
     )
-    errors[:angle_deg] = degrees_to_diff(truth[:angle_deg], predicted[:angle_deg])
+    errors[:gal_angle_deg] = degrees_to_diff(truth[:gal_angle_deg], predicted[:gal_angle_deg])
 
     for column_symbol in ABSOLUTE_ERROR_COLUMNS
         errors[column_symbol] = abs(truth[column_symbol] - predicted[column_symbol])
@@ -824,21 +858,19 @@ end
 function is_good_row(truth_row::DataFrameRow, error_row::DataFrameRow, column_name::Symbol)
     if isna(error_row[column_name]) || isnan(error_row[column_name])
         return false
-    elseif !isna(truth_row[:half_light_radius_px]) && truth_row[:half_light_radius_px] > 20
-        return false
-    elseif truth_row[:is_saturated] || error_row[:is_saturated]
+    elseif !isna(truth_row[:gal_radius_px]) && truth_row[:gal_radius_px] > 20
         return false
     end
 
-    if column_name in [:minor_major_axis_ratio, :half_light_radius_px, :angle_deg,
-                       :de_vaucouleurs_mixture_weight]
-        has_mixture_weight = !isna(truth_row[:de_vaucouleurs_mixture_weight])
-        if has_mixture_weight && (0.05 < truth_row[:de_vaucouleurs_mixture_weight] < 0.95)
+    if column_name in [:gal_axis_ratio, :gal_radius_px, :gal_angle_deg,
+                       :gal_frac_dev]
+        has_mixture_weight = !isna(truth_row[:gal_frac_dev])
+        if has_mixture_weight && (0.05 < truth_row[:gal_frac_dev] < 0.95)
             return false
         end
     end
-    if column_name == :angle_deg
-        if !isna(truth_row[:minor_major_axis_ratio]) && truth_row[:minor_major_axis_ratio] > .6
+    if column_name == :gal_angle_deg
+        if !isna(truth_row[:gal_axis_ratio]) && truth_row[:gal_axis_ratio] > .6
             return false
         end
     end
@@ -874,10 +906,6 @@ function get_scores_df(
 )
     score_rows = DataFrame[]
     for column_name in names(first_errors)
-        if column_name == :objid
-            continue
-        end
-
         good_row = filter_rows(truth, first_errors, column_name)
         if !isnull(second_errors)
             good_row .&= filter_rows(truth, get(second_errors), column_name)
@@ -901,32 +929,42 @@ function get_scores_df(
     vcat(score_rows...)
 end
 
-function extract_rows_by_objid(catalog_df::DataFrame, objids::Vector{String})
-    row_indices = map(objids) do objid
-        findfirst(catalog_df[:objid] .== objid)
+
+"""
+    match_catalogs(truth, predictions)
+
+Return subset of rows in `truth` and `predictions`, such that each entry in
+`truth` has a corresponding match in all `predictions`. A "match" is the
+closest object within `tol` degrees. The output data frames all have the same
+number of rows, and rows correspond to matching objects.
+"""
+function match_catalogs(truth::DataFrame, prediction_dfs::Vector{DataFrame};
+                        tol::Float64=(0.396 / 3600.))
+
+    matched = trues(nrow(truth))
+    idxs = Vector{Int}[]
+    for prediction in prediction_dfs
+        idx, dists = match_coordinates(truth[:ra],
+                                       truth[:dec],
+                                       prediction[:ra],
+                                       prediction[:dec])
+        matched .&= dists .< tol
+        push!(idxs, idx)
     end
-    @assert all(row_indices .!= 0)
-    catalog_df[row_indices, :]
+
+    # For each row in `truth`, `matched` is now true if and only if all
+    # predictions have a close match.
+    #
+    # `idxs[i]` is same length as `truth` and contains the index in
+    # `prediction_dfs[i]` that is the closest match to each row in
+    # `truth`.
+    matched_truth = truth[matched, :]
+    matched_predictions = [prediction[idx[matched], :]
+                           for (prediction, idx) in zip(prediction_dfs, idxs)]
+
+    return matched_truth, matched_predictions
 end
 
-function match_catalogs(truth::DataFrame, prediction_dfs::Vector{DataFrame})
-    objid_sets = [Set(predictions[:objid]) for predictions in prediction_dfs]
-    common_objids = intersect(objid_sets...)
-    @printf("%d objids in common\n", length(common_objids))
-
-    objids_not_in_ground_truth = setdiff(common_objids, truth[:objid])
-    if !isempty(objids_not_in_ground_truth)
-        @printf("%d objids not found in ground truth catalog:\n", length(objids_not_in_ground_truth))
-        println(join(objids_not_in_ground_truth, ", "))
-        throw(ObjectsMissingFromGroundTruth([objids_not_in_ground_truth]))
-    end
-
-    ordered_objids = [common_objids...]
-    (
-        extract_rows_by_objid(truth, ordered_objids),
-        [extract_rows_by_objid(predictions, ordered_objids) for predictions in prediction_dfs]
-    )
-end
 
 function score_predictions(truth::DataFrame, prediction_dfs::Vector{DataFrame})
     matched_truth, matched_prediction_dfs = match_catalogs(truth, prediction_dfs)
@@ -944,7 +982,7 @@ function get_uncertainty_df(truth::DataFrame, predictions::DataFrame)
     matched_truth, matched_prediction_dfs = match_catalogs(truth, [predictions])
     matched_predictions = matched_prediction_dfs[1]
 
-    valid_rows = (matched_truth[:reference_band_flux_nmgy] .> 0)
+    valid_rows = (matched_truth[:flux_r_nmgy] .> 0)
     matched_truth = matched_truth[valid_rows, :]
     matched_predictions = matched_predictions[valid_rows, :]
 
@@ -952,37 +990,39 @@ function get_uncertainty_df(truth::DataFrame, predictions::DataFrame)
         map_fn.(matched_predictions[column]) .- map_fn.(matched_truth[column])
     get_errors(column) = get_errors(column, x -> x)
     errors = [
-        get_errors(:reference_band_flux_nmgy, log),
-        get_errors(:color_log_ratio_ug),
-        get_errors(:color_log_ratio_gr),
-        get_errors(:color_log_ratio_ri),
-        get_errors(:color_log_ratio_iz),
+        get_errors(:flux_r_nmgy, log),
+        get_errors(:color_ug),
+        get_errors(:color_gr),
+        get_errors(:color_ri),
+        get_errors(:color_iz),
     ]
     std_errs = [
-        matched_predictions[:log_reference_band_flux_stderr],
-        matched_predictions[:color_log_ratio_ug_stderr],
-        matched_predictions[:color_log_ratio_gr_stderr],
-        matched_predictions[:color_log_ratio_ri_stderr],
-        matched_predictions[:color_log_ratio_iz_stderr],
+        matched_predictions[:log_flux_r_stderr],
+        matched_predictions[:color_ug_stderr],
+        matched_predictions[:color_gr_stderr],
+        matched_predictions[:color_ri_stderr],
+        matched_predictions[:color_iz_stderr],
     ]
-    names = [:log_reference_band_flux_nmgy, :color_log_ratio_ug, :color_log_ratio_gr,
-             :color_log_ratio_ri, :color_log_ratio_iz]
+    names = [:log_flux_r_nmgy, :color_ug, :color_gr,
+             :color_ri, :color_iz]
+
+    matched_truth[:log_flux_err] = errors[1]
+    matched_truth[:log_flux_stderr] = std_errs[1]
+    matched_truth[:flux_r_celeste] = matched_predictions[:flux_r_nmgy]
+    writetable("stderr.csv", matched_truth)
 
     mapreduce(vcat, zip(names, errors, std_errs)) do values
         name, error, std_err = values
-        DataFrame(
-            objid=matched_truth[:objid],
-            name=fill(name, length(error)),
-            error=error,
-            posterior_std_err=std_err,
-        )
+        DataFrame(name=fill(name, length(error)),
+                  error=error,
+                  posterior_std_err=std_err)
     end
 end
 
 function score_uncertainty(uncertainty_df::DataFrame)
     mapreduce(vcat, groupby(uncertainty_df, :name)) do group_df
         abs_error_sds = abs.(group_df[:error] ./ group_df[:posterior_std_err])
-        abs_error_sds = abs_error_sds[!isna(abs_error_sds)]
+        abs_error_sds = abs_error_sds[.!isna.(abs_error_sds)]
         DataFrame(
             field=group_df[1, :name],
             within_half_sd=mean(abs_error_sds .<= 1/2),
@@ -997,46 +1037,27 @@ end
 # Utilities
 ################################################################################
 
-"""
-Return distance in pixels using small-distance approximation. Falls apart at poles and RA boundary.
-"""
-function sky_distance_px(ra1, dec1, ra2, dec2)
-    distance_deg = sqrt((dec2 - dec1)^2 + (cosd(dec1) * (ra2 - ra1))^2)
-    distance_deg * ARCSEC_PER_DEGREE / SDSS_ARCSEC_PER_PIXEL
-end
-
-"""
-Return indices of positions in `ras`, `decs` that are within a distance `maxdist_px` of the target
-position `ra`, `dec`.
-"""
-function match_position(ras, decs, ra, dec, maxdist_px)
-    @assert length(ras) == length(decs)
-    filter(eachindex(ras)) do index
-        sky_distance_px(ra, dec, ras[index], decs[index]) < maxdist_px
-    end
-end
-
 # Run Celeste with any combination of single/joint inference
 function run_celeste(
     config::Config, catalog_entries, target_sources, images;
     use_joint_inference=false,
 )
-    neighbor_map = Infer.find_neighbors(target_sources, catalog_entries, images)
+    neighbor_map = ParallelRun.find_neighbors(target_sources, catalog_entries, images)
     if use_joint_inference
         ParallelRun.one_node_joint_infer(
-            config,
             catalog_entries,
             target_sources,
             neighbor_map,
             images,
+            config=config,
         )
     else
         ParallelRun.one_node_single_infer(
-            config,
             catalog_entries,
             target_sources,
             neighbor_map,
             images,
+            config=config,
         )
     end
 end

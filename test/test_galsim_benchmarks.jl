@@ -19,9 +19,9 @@ function assert_estimates_are_close(benchmark_results)
         end
         if row[:variable] == :is_star
             maximum_error = 0.1
-        elseif row[:variable] == :de_vaucouleurs_mixture_weight
+        elseif row[:variable] == :gal_frac_dev
             maximum_error = 0.2
-        elseif row[:variable] == :angle_deg
+        elseif row[:variable] == :gal_angle_deg
             maximum_error = 5
         #elseif !isna(row[1, :error_sds])
         #    maximum_error = 2.5 * row[1, :error_sds]

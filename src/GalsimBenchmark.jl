@@ -1,5 +1,3 @@
-__precompile__()
-
 module GalsimBenchmark
 
 using DataFrames
@@ -7,7 +5,6 @@ import FITSIO
 
 import ..AccuracyBenchmark
 import ..Config
-import ..Infer
 
 const GALSIM_BENCHMARK_DIR = joinpath(Pkg.dir("Celeste"), "benchmark", "galsim")
 const LATEST_FITS_FILENAME_DIR = joinpath(GALSIM_BENCHMARK_DIR, "latest_filenames")
@@ -36,18 +33,18 @@ function extract_catalog_from_header(header::FITSIO.FITSHeader)
         end
         DataFrame(
             objid=@sprintf("%s_%03d", header["CLDESCR"], source_index),
-            right_ascension_deg=source_field("CLRA"),
-            declination_deg=source_field("CLDEC"),
+            ra=source_field("CLRA"),
+            dec=source_field("CLDEC"),
             is_star=(source_field("CLTYP") == "star" ? 1 : 0),
-            reference_band_flux_nmgy=convert(Float64, source_field("CLFLX")),
-            color_log_ratio_ug=log(source_field("CLC12")),
-            color_log_ratio_gr=log(source_field("CLC23")),
-            color_log_ratio_ri=log(source_field("CLC34")),
-            color_log_ratio_iz=log(source_field("CLC45")),
-            de_vaucouleurs_mixture_weight=source_field("CLDEV"),
-            minor_major_axis_ratio=source_field("CLRTO"),
-            half_light_radius_px=source_field("CLRDP"),
-            angle_deg=source_field("CLANG"),
+            flux_r_nmgy=convert(Float64, source_field("CLFLX")),
+            color_ug=log(source_field("CLC12")),
+            color_gr=log(source_field("CLC23")),
+            color_ri=log(source_field("CLC34")),
+            color_iz=log(source_field("CLC45")),
+            gal_frac_dev=source_field("CLDEV"),
+            gal_axis_ratio=source_field("CLRTO"),
+            gal_radius_px=source_field("CLRDP"),
+            gal_angle_deg=source_field("CLANG"),
         )
     end
 end
@@ -55,11 +52,21 @@ end
 function truth_comparison_df(truth_df::DataFrame, prediction_df::DataFrame)
     @assert size(truth_df, 1) == size(prediction_df, 1)
     parameter_columns = names(truth_df)
+
+    # remove objid if present
     deleteat!(parameter_columns, findin(parameter_columns, [:objid]))
+
+    # add an object index to truth and prediction, for when we reshape
+    idx = collect(1:nrow(truth_df))
+    truth_df = hcat(DataFrame(index=idx), truth_df)
+    prediction_df = hcat(DataFrame(index=idx), prediction_df)
+
     long_truth_df = stack(truth_df, parameter_columns)
-    sort!(long_truth_df, cols=[:objid, :variable])
+    sort!(long_truth_df, cols=[:index, :variable])
+
     long_prediction_df = stack(prediction_df, parameter_columns)
-    sort!(long_prediction_df, cols=[:objid, :variable])
+    sort!(long_prediction_df, cols=[:index, :variable])
+
     rename!(long_truth_df, :value, :truth)
     long_truth_df[:estimate] = long_prediction_df[:value]
     long_truth_df[:error] = long_truth_df[:estimate] .- long_truth_df[:truth]
@@ -86,8 +93,7 @@ function run_benchmarks(; test_case_names=String[], joint_inference=false)
         truth_catalog_df = extract_catalog_from_header(header)
         catalog_entries = AccuracyBenchmark.make_initialization_catalog(truth_catalog_df, false)
         target_sources = collect(1:num_sources)
-        config = Config()
-        config.min_radius_pix = ACTIVE_PIXELS_MIN_RADIUS_PX
+        config = Config(ACTIVE_PIXELS_MIN_RADIUS_PX)
         results = AccuracyBenchmark.run_celeste(
             config,
             catalog_entries,

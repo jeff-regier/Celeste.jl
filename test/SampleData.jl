@@ -1,7 +1,6 @@
 module SampleData
 
 using Celeste: Model, DeterministicVI
-import Celeste: Infer
 import Celeste: Synthetic
 import Celeste.SDSSIO: RunCamcolField, load_field_images, PlainFITSStrategy
 
@@ -39,7 +38,7 @@ cd(wd)
 
 
 const sample_rcf = RunCamcolField(3900, 6, 269)
-const sample_images = load_field_images(PlainFITSStrategy(datadir),sample_rcf)
+const sample_images = load_field_images(PlainFITSStrategy(datadir), sample_rcf)
 
 
 """
@@ -51,7 +50,7 @@ function make_elbo_args(images::Vector{Image},
                         active_source=-1,
                         patch_radius_pix::Float64=NaN,
                         include_kl=true)
-    patches = Infer.get_sky_patches(images,
+    patches = Model.get_sky_patches(images,
                                     catalog,
                                     radius_override_pix=patch_radius_pix)
     S = length(catalog)
@@ -72,7 +71,7 @@ end
 
 function sample_ce(pos, is_star::Bool)
     CatalogEntry(pos, is_star, sample_star_fluxes, sample_galaxy_fluxes,
-        0.1, .7, pi/4, 4., "sample", 0)
+        0.1, 0.7, pi/4, 4.0)
 end
 
 
@@ -84,10 +83,10 @@ function perturb_params(vp)
         vs[ids.pos[2]] -= .7
         vs[ids.flux_loc] -= log(10)
         vs[ids.flux_scale] *= 25.
-        vs[ids.gal_fracdev] += 0.05
-        vs[ids.gal_ab] += 0.05
+        vs[ids.gal_frac_dev] += 0.05
+        vs[ids.gal_axis_ratio] += 0.05
         vs[ids.gal_angle] += pi/10
-        vs[ids.gal_scale] *= 1.2
+        vs[ids.gal_radius_px] *= 1.2
         vs[ids.color_mean] += 0.5
         vs[ids.color_var] =  1e-1
     end
@@ -207,7 +206,7 @@ function gen_n_body_dataset(
     world_locations = WCS.pix_to_world(images0[3].wcs, locations)
 
     catalog = CatalogEntry[CatalogEntry(world_locations[:, s], true,
-            fluxes, fluxes, 0.1, .7, pi/4, 4., string(s), s) for s in 1:S];
+            fluxes, fluxes, 0.1, 0.7, pi/4, 4.0) for s in 1:S];
 
     images = Synthetic.gen_blob(images0, catalog);
 

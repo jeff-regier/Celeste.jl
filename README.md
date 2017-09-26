@@ -27,6 +27,5 @@ Please see [the project wiki](https://github.com/jeff-regier/Celeste.jl/wiki/) f
 
 #### License
 
-Celeste.jl is free software, licensed under version 2.0 of the Apache
-License.
+Celeste.jl is free software, licensed under the MIT "Expat" License.
 

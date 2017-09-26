@@ -109,17 +109,17 @@ function test_psf_fit()
     # sig_sf_vec = Vector{GalaxySigmaDerivs{NumType}}(K)
     #
     # for k = 1:K
-    #   sigma_vec[k] = PSF.get_bvn_cov(psf_params[k][psf_ids.gal_ab],
+    #   sigma_vec[k] = PSF.get_bvn_cov(psf_params[k][psf_ids.gal_axis_ratio],
     #                                   psf_params[k][psf_ids.gal_angle],
-    #                                   psf_params[k][psf_ids.gal_scale])
+    #                                   psf_params[k][psf_ids.gal_radius_px])
     #   sig_sf_vec[k] = GalaxySigmaDerivs(
     #     psf_params[k][psf_ids.gal_angle],
-    #     psf_params[k][psf_ids.gal_ab],
-    #     psf_params[k][psf_ids.gal_scale], sigma_vec[k], calculate_gradient)
+    #     psf_params[k][psf_ids.gal_axis_ratio],
+    #     psf_params[k][psf_ids.gal_radius_px], sigma_vec[k], calculate_gradient)
     #
     # end
 
-    clear!(pixel_value)
+    SensitiveFloats.zero!(pixel_value)
     PSF.evaluate_psf_pixel_fit!(
         x, psf_params, sig_sf_vec, bvn_vec,
         bvn_derivs, log_pdf, pdf, pixel_value, calculate_gradient)
@@ -135,9 +135,9 @@ function test_psf_fit()
 
   sigma_vec = Vector{Matrix{Float64}}(K)
   for k = 1:K
-    sigma_vec[k] = PSF.get_bvn_cov(psf_params[k][psf_ids.gal_ab],
+    sigma_vec[k] = PSF.get_bvn_cov(psf_params[k][psf_ids.gal_axis_ratio],
                                     psf_params[k][psf_ids.gal_angle],
-                                    psf_params[k][psf_ids.gal_scale])
+                                    psf_params[k][psf_ids.gal_radius_px])
   end
 
   println("Testing single pixel value")

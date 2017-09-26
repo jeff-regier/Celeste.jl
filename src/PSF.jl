@@ -9,9 +9,10 @@ module PSF
 using Celeste
 using Celeste: Const, @aliasscope, @unroll_loop
 using ..Model
+using ..Model: GalaxySigmaDerivs, BivariateNormalDerivatives, get_bvn_derivs!,
+               eval_bvn_pdf!, transform_bvn_derivs!, BvnComponent, get_bvn_cov
 using ..Transform
 using ..SensitiveFloats.SensitiveFloat
-import ..SensitiveFloats.clear!
 import ..SensitiveFloats
 
 import Optim
@@ -19,8 +20,6 @@ import WCS
 
 using ForwardDiff
 using StaticArrays
-
-include("bivariate_normals.jl")
 
 
 const ID_MAT_2D = eye(Float64, 2)
@@ -232,16 +231,16 @@ function initialize_psf_params(K::Int; for_test::Bool=false)
             # Choose asymmetric values for testing.
             psf_params[k] = zeros(length(PsfParams))
             psf_params[k][psf_ids.mu] = [0.1, 0.2]
-            psf_params[k][psf_ids.gal_ab] = 0.8
+            psf_params[k][psf_ids.gal_axis_ratio] = 0.8
             psf_params[k][psf_ids.gal_angle] = pi / 4
-            psf_params[k][psf_ids.gal_scale] = sqrt(2 * k)
+            psf_params[k][psf_ids.gal_radius_px] = sqrt(2 * k)
             psf_params[k][psf_ids.weight] = 1 / K + k / 10
         else
             psf_params[k] = zeros(length(PsfParams))
             psf_params[k][psf_ids.mu] = [0.0, 0.0]
-            psf_params[k][psf_ids.gal_ab] = 0.95
+            psf_params[k][psf_ids.gal_axis_ratio] = 0.95
             psf_params[k][psf_ids.gal_angle] = 0.0
-            psf_params[k][psf_ids.gal_scale] = sqrt(2 * k)
+            psf_params[k][psf_ids.gal_radius_px] = sqrt(2 * k)
             psf_params[k][psf_ids.weight] = 1 / K
         end
     end
@@ -272,11 +271,11 @@ function get_psf_transform(
         bounds[k] = ParamBounds()
         bounds[k][:mu] = ParamBox[ ParamBox(-5.0, 5.0, scale[psf_ids.mu[1]]),
                                    ParamBox(-5.0, 5.0, scale[psf_ids.mu[2]]) ]
-        bounds[k][:gal_ab] = ParamBox[ ParamBox(0.1, 1.0, scale[psf_ids.gal_ab] ) ]
+        bounds[k][:gal_axis_ratio] = ParamBox[ ParamBox(0.1, 1.0, scale[psf_ids.gal_axis_ratio] ) ]
         bounds[k][:gal_angle] =
             ParamBox[ ParamBox(-4 * pi, 4 * pi, scale[psf_ids.gal_angle] ) ]
-        bounds[k][:gal_scale] =
-            ParamBox[ ParamBox(0.05, 10.0, scale[psf_ids.gal_scale] ) ]
+        bounds[k][:gal_radius_px] =
+            ParamBox[ ParamBox(0.05, 10.0, scale[psf_ids.gal_radius_px] ) ]
 
         # Note that the weights do not need to sum to one.
         bounds[k][:weight] = ParamBox[ ParamBox(0.05, 2.0, scale[psf_ids.weight] ) ]
@@ -404,10 +403,10 @@ function evaluate_psf_pixel_fit!{NumType <: Number}(
         pdf::SensitiveFloat{NumType},
         pixel_value::SensitiveFloat{NumType},
         calculate_gradient::Bool)
-    clear!(pixel_value)
+    SensitiveFloats.zero!(pixel_value)
 
     K = length(psf_params)
-    sigma_ids = (psf_ids.gal_ab, psf_ids.gal_angle, psf_ids.gal_scale)
+    sigma_ids = (psf_ids.gal_axis_ratio, psf_ids.gal_angle, psf_ids.gal_radius_px)
     @inbounds for k = 1:K
         # I will put in the weights later so that the log pdf sensitive float
         # is accurate.
@@ -416,8 +415,8 @@ function evaluate_psf_pixel_fit!{NumType <: Number}(
         get_bvn_derivs!(bvn_derivs, bvn, true, true)
         transform_bvn_derivs!(bvn_derivs, sig_sf_vec[k], I, true)
 
-        clear!(log_pdf)
-        clear!(pdf)
+        SensitiveFloats.zero!(log_pdf)
+        SensitiveFloats.zero!(pdf)
 
         # This is redundant, but it's what eval_bvn_pdf returns.
         log_pdf.v[] = log(bvn_derivs.f_pre[1])
@@ -490,13 +489,13 @@ function get_sigma_from_params{NumType <: Number}(psf_params::Vector{Vector{NumT
     sig_sf_vec = Vector{GalaxySigmaDerivs{NumType}}(K)
     bvn_vec = Vector{BvnComponent{NumType}}(K)
     for k = 1:K
-        sigma_vec[k] = get_bvn_cov(psf_params[k][psf_ids.gal_ab],
+        sigma_vec[k] = get_bvn_cov(psf_params[k][psf_ids.gal_axis_ratio],
             psf_params[k][psf_ids.gal_angle],
-            psf_params[k][psf_ids.gal_scale])
+            psf_params[k][psf_ids.gal_radius_px])
         sig_sf_vec[k] = GalaxySigmaDerivs(
             psf_params[k][psf_ids.gal_angle],
-            psf_params[k][psf_ids.gal_ab],
-            psf_params[k][psf_ids.gal_scale], sigma_vec[k], 1.0, true)
+            psf_params[k][psf_ids.gal_axis_ratio],
+            psf_params[k][psf_ids.gal_radius_px], sigma_vec[k], 1.0, true)
 
         bvn_vec[k] =
             BvnComponent(SVector{2,NumType}(psf_params[k][psf_ids.mu]), sigma_vec[k], 1.0)
@@ -519,10 +518,10 @@ function evaluate_psf_fit!{NumType <: Number}(
         calculate_gradient::Bool)
     K = length(psf_params)
     sigma_vec, sig_sf_vec, bvn_vec = get_sigma_from_params(psf_params)
-    clear!(squared_error)
+    SensitiveFloats.zero!(squared_error)
 
     @inbounds for x_ind in 1:length(x_mat)
-        clear!(pixel_value)
+        SensitiveFloats.zero!(pixel_value)
         evaluate_psf_pixel_fit!(
                 x_mat[x_ind], psf_params, sig_sf_vec, bvn_vec,
                 bvn_derivs, log_pdf, pdf, pixel_value, calculate_gradient)

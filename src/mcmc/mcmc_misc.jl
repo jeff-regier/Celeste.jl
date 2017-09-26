@@ -86,24 +86,23 @@ function catalog_to_data_frame_row(catalog_entry; objid="truth")
     df = DataFrame()
     fluxes = ce.is_star ? ce.star_fluxes : ce.gal_fluxes
     df[:objid]                          = [objid]
-    df[:right_ascension_deg]            = [ce.pos[1]]
-    df[:declination_deg]                = [ce.pos[2]]
-    df[:is_saturated]                   = [false]
+    df[:ra]            = [ce.pos[1]]
+    df[:dec]                = [ce.pos[2]]
     df[:is_star]                        = [ce.is_star]
-    df[:de_vaucouleurs_mixture_weight]  = [ce.gal_frac_dev]
-    df[:minor_major_axis_ratio]         = [ce.gal_ab]
-    df[:half_light_radius_px]           = [ce.gal_scale]
-    df[:angle_deg]                      = [ce.gal_angle]
-    df[:reference_band_flux_nmgy]       = [fluxes[3]]
-    df[:log_reference_band_flux_stderr] = [NaN]
-    df[:color_log_ratio_ug]             = [log(fluxes[2]) - log(fluxes[1])]
-    df[:color_log_ratio_gr]             = [log(fluxes[3]) - log(fluxes[2])]
-    df[:color_log_ratio_ri]             = [log(fluxes[4]) - log(fluxes[3])]
-    df[:color_log_ratio_iz]             = [log(fluxes[5]) - log(fluxes[4])]
-    df[:color_log_ratio_ug_stderr]      = [NaN]
-    df[:color_log_ratio_gr_stderr]      = [NaN]
-    df[:color_log_ratio_ri_stderr]      = [NaN]
-    df[:color_log_ratio_iz_stderr]      = [NaN]
+    df[:gal_frac_dev]  = [ce.gal_frac_dev]
+    df[:gal_axis_ratio]         = [ce.gal_axis_ratio]
+    df[:gal_radius_px]           = [ce.gal_radius_px]
+    df[:gal_angle_deg]                      = [ce.gal_angle]
+    df[:flux_r_nmgy]       = [fluxes[3]]
+    df[:log_flux_r_stderr] = [NaN]
+    df[:color_ug]             = [log(fluxes[2]) - log(fluxes[1])]
+    df[:color_gr]             = [log(fluxes[3]) - log(fluxes[2])]
+    df[:color_ri]             = [log(fluxes[4]) - log(fluxes[3])]
+    df[:color_iz]             = [log(fluxes[5]) - log(fluxes[4])]
+    df[:color_ug_stderr]      = [NaN]
+    df[:color_gr_stderr]      = [NaN]
+    df[:color_ri_stderr]      = [NaN]
+    df[:color_iz_stderr]      = [NaN]
     return df
 end
 
@@ -130,14 +129,12 @@ function samples_to_dataframe(chain; is_star=true)
     df[:color_log_ratio_iz]       = chain[:,5] .- chain[:,4]
     df[:right_ascension_deg]      = chain[:, 6]
     df[:declination_deg]          = chain[:, 7]
-
     if !is_star
       df[:de_vaucouleurs_mixture_weight] = chain[:, 8]
       df[:minor_major_axis_ratio]        = chain[:, 9]
       df[:angle_deg]                     = chain[:, 10] * 360 / (2*pi) # rad => deg
       df[:half_light_radius_px]          = chain[:, 11] .* sqrt.(df[:minor_major_axis_ratio])
     end
-
     return df
 end
 
@@ -146,9 +143,8 @@ function samples_to_dataframe_row(sampdf; is_star=true, objid="mcmc")
     """ only for stars right now """
     df = DataFrame()
     df[:objid]                          = [objid]
-    df[:right_ascension_deg]            = [mean(sampdf[:right_ascension_deg])]
-    df[:declination_deg]                = [mean(sampdf[:declination_deg])]
-    df[:is_saturated]                   = [false]
+    df[:ra]            = [mean(sampdf[:ra])]
+    df[:dec]                = [mean(sampdf[:dec])]
     df[:is_star]                        = [true]
     df[:de_vaucouleurs_mixture_weight]  = [NaN]
     df[:minor_major_axis_ratio]         = [NaN]
@@ -237,7 +233,7 @@ function write_galaxy_unit_flux(pos::Array{Float64, 1},
                                 wcs::WCS.WCSTransform,
                                 iota::Float64,
                                 gal_frac_dev::Float64,
-                                gal_ab::Float64,
+                                gal_axis_ratio::Float64,
                                 gal_angle::Float64,
                                 gal_scale::Float64,
                                 pixels::Matrix{Float64};
@@ -348,7 +344,7 @@ end
 
 
 """
-Potential Scale Reduction Factor --- Followed the formula from the 
+Potential Scale Reduction Factor --- Followed the formula from the
 following website:
 http://blog.stata.com/2016/05/26/gelman-rubin-convergence-diagnostic-using-multiple-chains/
 """
@@ -378,7 +374,7 @@ end
 
 
 """
-Convert `chains` (list of sample arrays), `logprobs` (list of 
+Convert `chains` (list of sample arrays), `logprobs` (list of
 log-likelihood traces) and `colnames` (list of parameter names for chains)
 into a DataFrame object --- for saving and plotting
 """
@@ -398,5 +394,3 @@ function chains_to_dataframe(chains, logprobs, colnames)
     sdf[:chain] = chain_id
     return sdf
 end
-
-

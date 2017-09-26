@@ -399,7 +399,6 @@ function read_photoobj(f::FITSIO.FITS, band::Char='r', close_file=true)
 
     # nopeak, DEBLEND_DEGENERATE, or saturated center
     bad_flags2 = objc_flags2 .& UInt32(2^14 + 2^18 + 2^11) .!= 0
-    i = findfirst(objid, "1237680069097291856")
 
     has_child = read(hdu, "nchild")::Vector{Int16} .> 0
 
@@ -519,8 +518,8 @@ function convert(::Type{Vector{CatalogEntry}}, catalog::Dict)
         celeste_phi_rad = fits_phi * (pi / 180)
 
         entry = CatalogEntry(worldcoords, catalog["is_star"][i], star_fluxes,
-                             gal_fluxes, frac_dev, fits_ab, celeste_phi_rad, re_pixel,
-                             catalog["objid"][i], Int(catalog["thing_id"][i]))
+                             gal_fluxes, frac_dev, fits_ab, celeste_phi_rad,
+                             re_pixel)
         push!(out, entry)
     end
 
@@ -608,10 +607,6 @@ function read_photoobj_files(strategy, fts::Vector{RunCamcolField};
     if drop_quickly
         return CatalogEntry[]
     end
-
-    #for i in eachindex(fts)
-    #    Log.info("field $(fts[i]): $(length(rawcatalogs[i]["objid"])) entries")
-    #end
 
     return assemble_catalog(rawcatalogs; duplicate_policy=duplicate_policy)
 end

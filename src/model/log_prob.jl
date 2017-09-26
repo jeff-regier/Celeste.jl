@@ -1,7 +1,8 @@
 # Functions to compute the log probability of star parameters and galaxy
 # parameters given pixel data
 using Distributions
-import ..SensitiveFloats: SensitiveFloat, clear!
+import ..SensitiveFloats: SensitiveFloat
+import JLD
 
 const eps_prob_a = 1e-6
 
@@ -153,10 +154,10 @@ function state_log_likelihood(is_star::Bool,                # source is star
     # load star/gal mixture components (make sure these reflect
     gdev, gaxis, gangle, gscale = gal_shape
     source_params[1][lidx.pos]       = position
-    source_params[1][lidx.gal_fracdev]   = gdev
-    source_params[1][lidx.gal_ab]  = gaxis
+    source_params[1][lidx.gal_frac_dev]   = gdev
+    source_params[1][lidx.gal_axis_ratio]  = gaxis
     source_params[1][lidx.gal_angle] = gangle
-    source_params[1][lidx.gal_scale] = gscale
+    source_params[1][lidx.gal_radius_px] = gscale
 
     # iterate over the pixels, summing pixel-specific poisson rates
     ll = 0.
@@ -183,40 +184,30 @@ function state_log_likelihood(is_star::Bool,                # source is star
             end
 
             # compute the unit-flux pixel values
-            hw = SVector{2,Float64}(h, w)
-
-            # compute the background rate for this pixel
-            background_rate = img.sky[h, w]
-            for s in 2:S  # excludes source #1
-                # determine if background source is star/gal; get fluxes
+            pixel_rate = img.sky[h, w]
+            for s in 1:S
                 params_s  = source_params[s]
-                s_is_star = params_s[lidx.is_star[1,1]] > .5
-                type_idx  = s_is_star ? 1 : 2
-                flux_s    = colors_to_fluxes(params_s[lidx.flux[type_idx]],
-                                             params_s[lidx.color[:,type_idx]])
-                populate_fsm!(bvn_derivs,
-                              fs0m, fs1m,
-                              s, hw,
-                              false,
-                              p.wcs_jacobian,
-                              gal_mcs, star_mcs)
-                rate_s = s_is_star ? fs0m.v[] : fs1m.v[]
-                rate_s *= flux_s[img.b]
-                background_rate += rate_s
+
+                star_light_density!(fs0m, p, h, w, params_s[lidx.pos], false)
+                populate_gal_fsm!(fs1m, bvn_derivs, s, h, w, false, p.wcs_jacobian, gal_mcs)
+
+                if s == 1
+                    this_rate  = is_star ? fs0m.v[] : fs1m.v[]
+                    pixel_rate += fluxes[img.b] * this_rate
+                else
+                    # determine if background source is star/gal; get fluxes
+                    s_is_star = params_s[lidx.is_star[1,1]] > .5
+                    type_idx  = s_is_star ? 1 : 2
+                    flux_s    = colors_to_fluxes(params_s[lidx.flux[type_idx]],
+                                                 params_s[lidx.color[:,type_idx]])
+                    rate_s = s_is_star ? fs0m.v[] : fs1m.v[]
+                    rate_s *= flux_s[img.b]
+                    pixel_rate += rate_s
+                end
             end
 
-            # this source's rate, add to background for total
-            populate_fsm!(bvn_derivs,
-                          fs0m, fs1m,
-                          1, hw,
-                          false,
-                          p.wcs_jacobian,
-                          gal_mcs, star_mcs)
-            this_rate  = is_star ? fs0m.v[] : fs1m.v[]
-            pixel_rate = fluxes[img.b] * this_rate + background_rate
-
             # multiply by image's gain for this pixel
-            rate     = pixel_rate * img.nelec_per_nmgy[h]
+            rate = pixel_rate * img.nelec_per_nmgy[h]
             pixel_ll = logpdf(Poisson(rate[1]), round(Int, img.pixels[h, w]))
             ll += pixel_ll
         end
@@ -242,9 +233,9 @@ struct GalaxyPrior
     brightness::LogNormal
     color_component::Categorical
     colors::Vector{MvNormal}
-    gal_scale::LogNormal
-    gal_ab::Beta
-    gal_fracdev::Beta
+    gal_radius_px::LogNormal
+    gal_axis_ratio::Beta
+    gal_frac_dev::Beta
 end
 
 
@@ -297,9 +288,9 @@ function shape_logprior(gal_shape::Vector{Float64}, prior::Prior)
     # position and gal_angle have uniform priors--we ignore them
     gdev, gaxis, gangle, gscale = gal_shape
     ll_shape = 0.
-    ll_shape += logpdf(prior.galaxy.gal_scale, gscale)
-    ll_shape += logpdf(prior.galaxy.gal_ab, gaxis)
-    ll_shape += logpdf(prior.galaxy.gal_fracdev, gdev)
+    ll_shape += logpdf(prior.galaxy.gal_radius_px, gscale)
+    ll_shape += logpdf(prior.galaxy.gal_axis_ratio, gaxis)
+    ll_shape += logpdf(prior.galaxy.gal_frac_dev, gdev)
     return ll_shape
 end
 
@@ -384,9 +375,9 @@ function init_galaxy_state(entry::CatalogEntry)
     #gdev, gaxis, gangle, gscale = gal_shape
     gal_shape = unconstrain_gal_shape([
                     clamp(entry.gal_frac_dev, eps_prob_a, 1.-eps_prob_a),
-                    clamp(entry.gal_ab, eps_prob_a, 1.-eps_prob_a),
+                    clamp(entry.gal_axis_ratio, eps_prob_a, 1.-eps_prob_a),
                     entry.gal_angle,
-                    clamp(entry.gal_scale, eps_prob_a, Inf)
+                    clamp(entry.gal_radius_px, eps_prob_a, Inf)
                     ])
     param_vec = [brightness; colors; entry.pos; gal_shape]
     return param_vec
@@ -399,9 +390,9 @@ function catalog_entry_to_latent_state_params(ce::CatalogEntry)
 
     # galaxy shape params
     ret[lidx.pos]       = ce.pos
-    ret[lidx.gal_fracdev]   = ce.gal_frac_dev
-    ret[lidx.gal_ab]  = ce.gal_ab
-    ret[lidx.gal_scale] = ce.gal_scale
+    ret[lidx.gal_frac_dev]   = ce.gal_frac_dev
+    ret[lidx.gal_axis_ratio]  = ce.gal_axis_ratio
+    ret[lidx.gal_radius_px] = ce.gal_radius_px
     ret[lidx.gal_angle] = ce.gal_angle
 
     # star, gal r flux
@@ -422,10 +413,10 @@ end
 
 
 function extract_galaxy_state(ls::Array{Float64, 1})
-    gal_shape = [ls[lidx.gal_fracdev]  ,
-                 ls[lidx.gal_ab] ,
+    gal_shape = [ls[lidx.gal_frac_dev]  ,
+                 ls[lidx.gal_axis_ratio] ,
                  ls[lidx.gal_angle],
-                 ls[lidx.gal_scale]]
+                 ls[lidx.gal_radius_px]]
     return [[ls[lidx.flux[2]]]; ls[lidx.color[:, 2]]; ls[lidx.pos];
             unconstrain_gal_shape(gal_shape)]
 end
