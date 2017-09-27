@@ -14,13 +14,8 @@ using StaticArrays
 
 # Generate synthetic data.
 
-function wrapped_poisson(rate::Float64)
-    0 < rate ? float(rand(Distributions.Poisson(rate))) : 0.
-end
-
-
 function get_patch(the_mean::SVector{2,Float64}, H::Int, W::Int)
-    radius = 50
+    radius = 25
     hm = round(Int, the_mean[1])
     wm = round(Int, the_mean[2])
     w11 = max(1, wm - radius):min(W, wm + radius)
@@ -46,7 +41,7 @@ end
 
 
 function write_star_nmgy!(img::Image, ce::CatalogEntry)
-    p = Model.SkyPatch(img, ce)
+    p = Model.SkyPatch(img, ce, radius_override_pix=25)
     fs0m = SensitiveFloat{Float64}(length(StarPosParams), 1, false, false)
 
     H2, W2 = size(p.active_pixel_bitmap)
@@ -60,20 +55,23 @@ end
 
 
 function write_galaxy_nmgy!(img::Image, ce::CatalogEntry)
-    gal_frac_devs = [ce.gal_frac_dev, 1 - ce.gal_frac_dev]
-    XiXi = Model.get_bvn_cov(ce.gal_axis_ratio, ce.gal_angle, ce.gal_radius_px)
-
-    for i in 1:2
-        for gproto in galaxy_prototypes[i]
-            for k in 1:length(img.psf)
-                the_mean = SVector{2}(WCS.world_to_pix(img.wcs, ce.pos)) +
-                           img.psf[k].xiBar
-                the_cov = img.psf[k].tauBar + gproto.nuBar * XiXi
-                intensity = ce.gal_fluxes[img.b] *
-                    img.psf[k].alphaBar * gal_frac_devs[i] * gproto.etaBar
-                write_gaussian!(img.pixels, the_mean, the_cov, intensity)
-            end
-        end
+    bvn_derivs = Model.BivariateNormalDerivatives{Float64}()
+    fs1m = SensitiveFloat{Float64}(length(GalaxyPosParams), 1, false, false)
+    patches = Model.get_sky_patches([img], [ce], radius_override_pix=25.0)
+    source_params = [[ce.pos[1], ce.pos[2], ce.gal_frac_dev, ce.gal_axis_ratio,
+                     ce.gal_angle, ce.gal_radius_px],]
+    star_mcs, gal_mcs = Model.load_bvn_mixtures(1, patches,
+                          source_params, [1,], length(img.psf), 1,
+                          calculate_gradient=false,
+                          calculate_hessian=false)
+    p = patches[1]
+    H2, W2 = size(p.active_pixel_bitmap)
+    for w2 in 1:W2, h2 in 1:H2
+        # (h2, w2) index the local patch, while (h, w) index the image
+        h = p.bitmap_offset[1] + h2
+        w = p.bitmap_offset[2] + w2
+        Model.populate_gal_fsm!(fs1m, bvn_derivs, 1, h, w, false, p.wcs_jacobian, gal_mcs)
+        img.pixels[h, w] += fs1m.v[] * ce.gal_fluxes[img.b]
     end
 end
 
