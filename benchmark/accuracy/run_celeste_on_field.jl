@@ -28,12 +28,6 @@ ArgumentParse.add_argument(
 )
 ArgumentParse.add_argument(
     parser,
-    "--min-radius-px",
-    help="Override Config.min_radius_px with the given value",
-    arg_type=Float64,
-)
-ArgumentParse.add_argument(
-    parser,
     "--images-jld",
     help="FITS file containing synthetic imagery; if not specified, will use SDSS RCF",
 )
@@ -97,12 +91,8 @@ else
     target_sources = collect(1:length(catalog_entries))
 end
 
-config = Config()
-if haskey(parsed_args, "min-radius-px")
-    config.min_radius_pix = parsed_args["min-radius-px"]
-end
 results = AccuracyBenchmark.run_celeste(
-    config,
+    Config(25.0),
     catalog_entries,
     target_sources,
     images,
