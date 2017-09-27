@@ -411,6 +411,9 @@ function draw_source_params(prior)
         gal_frac_dev = -1
     end
 
+    # We should change ra/dec ranges below if we start using another field
+    @assert STRIPE82_RCF.run = 4263 && STRIPE82_RCF.camcol == 5 && STRIPE82_RCF.field == 119
+
     # Use approximate size of SDSS field in degrees
     ra = rand(Uniform(0.443, 0.606))
     dec = rand(Uniform(0.411, 0.635))

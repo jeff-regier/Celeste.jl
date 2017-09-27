@@ -29,28 +29,7 @@ ArgumentParse.add_argument(
 ArgumentParse.add_argument(
     parser,
     "--images-jld",
-    help="FITS file containing synthetic imagery; if not specified, will use SDSS RCF",
-)
-ArgumentParse.add_argument(
-    parser,
-    "--run",
-    help="SDSS run #",
-    arg_type=Int,
-    default=AccuracyBenchmark.STRIPE82_RCF.run,
-)
-ArgumentParse.add_argument(
-    parser,
-    "--camcol",
-    help="SDSS camcol #",
-    arg_type=Int,
-    default=AccuracyBenchmark.STRIPE82_RCF.camcol,
-)
-ArgumentParse.add_argument(
-    parser,
-    "--field",
-    help="SDSS field #",
-    arg_type=Int,
-    default=AccuracyBenchmark.STRIPE82_RCF.field,
+    help="FITS file containing synthetic imagery; if not specified, will use SDSS (primary) images",
 )
 ArgumentParse.add_argument(
     parser,
@@ -64,11 +43,7 @@ if haskey(parsed_args, "images-jld")
     images = JLD.load(parsed_args["images-jld"], "images")
     catalog_label = splitext(basename(parsed_args["images-jld"]))[1]
 else
-    rcf = SDSSIO.RunCamcolField(
-        parsed_args["run"],
-        parsed_args["camcol"],
-        parsed_args["field"],
-    )
+    rcf = AccuracyBenchmark.STRIPE82_RCF
     strategy = SDSSIO.PlainFITSStrategy(AccuracyBenchmark.SDSS_DATA_DIR)
     images = SDSSIO.load_field_images(strategy, [rcf])
     catalog_label = @sprintf("sdss_%s_%s_%s", rcf.run, rcf.camcol, rcf.field)

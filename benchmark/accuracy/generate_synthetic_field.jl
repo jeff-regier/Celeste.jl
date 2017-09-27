@@ -14,24 +14,6 @@ const OUTPUT_DIRECTORY = joinpath(splitdir(Base.source_path())[1], "output")
 parser = Celeste.ArgumentParse.ArgumentParser()
 ArgumentParse.add_argument(
     parser,
-    "run",
-    help="SDSS run # for templates images",
-    arg_type=Int,
-)
-ArgumentParse.add_argument(
-    parser,
-    "camcol",
-    help="SDSS camcol # for templates images",
-    arg_type=Int,
-)
-ArgumentParse.add_argument(
-    parser,
-    "field",
-    help="SDSS field # for templates images",
-    arg_type=Int,
-)
-ArgumentParse.add_argument(
-    parser,
     "catalog_csv",
     help="Ground truth CSV catalog",
 )
@@ -48,15 +30,10 @@ catalog_entries = [
         for row in eachrow(catalog_data)]
 
 # load template iamges
-rcf = SDSSIO.RunCamcolField(
-    parsed_args["run"],
-    parsed_args["camcol"],
-    parsed_args["field"],
-)
 strategy = SDSSIO.PlainFITSStrategy(AccuracyBenchmark.SDSS_DATA_DIR)
-images = SDSSIO.load_field_images(strategy, [rcf])
+images = SDSSIO.load_field_images(strategy, [AccuracyBenchmark.STRIPE82_RCF])
 
-# generate synthetic images
+# overwrite the pixels with synthetic images
 Synthetic.gen_images!(images, catalog_entries)
 
 # save images
