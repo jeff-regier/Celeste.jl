@@ -4,6 +4,7 @@ export gen_image!, gen_images!
 
 using Celeste
 using Celeste.Model
+using Celeste.SensitiveFloats
 
 import WCS
 import Distributions
@@ -45,13 +46,15 @@ end
 
 
 function write_star_nmgy!(img::Image, ce::CatalogEntry)
-    for k in 1:length(img.psf)
-        the_mean = SVector{2}(WCS.world_to_pix(img.wcs, ce.pos)) + img.psf[k].xiBar
-        the_cov = img.psf[k].tauBar
-        intensity = ce.star_fluxes[img.b] * img.psf[k].alphaBar
-        before = sum(img.pixels)
-        write_gaussian!(img.pixels, the_mean, the_cov, intensity)
-        change = sum(img.pixels) - before
+    p = Model.SkyPatch(img, ce)
+    fs0m = SensitiveFloat{Float64}(length(StarPosParams), 1, false, false)
+
+    H2, W2 = size(p.active_pixel_bitmap)
+    for w2 in 1:W2, h2 in 1:H2
+        h = p.bitmap_offset[1] + h2
+        w = p.bitmap_offset[2] + w2
+        Model.star_light_density!(fs0m, p, h, w, ce.pos, false)
+        img.pixels[h, w] += fs0m.v[] * ce.star_fluxes[img.b]
     end
 end
 
