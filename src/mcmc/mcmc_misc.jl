@@ -15,12 +15,8 @@ end
 
 # output a single poisson log likelihood
 function poisson_lnpdf(data, lam)
-    try
-      return float(logpdf(Distributions.Poisson(lam), data))
-    catch err
-      println("data, lambda", data, lam)
-      throw()
-    end
+    #lldist = float(logpdf(Distributions.Poisson(lam), data))
+    return data*log(lam) - lam - lgamma(data+1.)
 end
 
 # constrain checking
@@ -224,6 +220,21 @@ function write_star_unit_flux(pos::Array{Float64, 1},
     end
 end
 
+function write_star_unit_flux_raw(world_pos::Array{Float64, 1},
+                                  patch::SkyPatch,
+                                  iota::Float64,
+                                  pixels::Matrix{Float64};
+                                  flux::Float64=1.)
+    fs0m = SensitiveFloat{Float64}(length(StarPosParams), 1, false, false)
+    H, W = size(pixels)
+    for w in 1:W, h in 1:H
+        hfield = patch.bitmap_offset[1] + h
+        wfield = patch.bitmap_offset[2] + w
+        Model.star_light_density!(fs0m, patch, hfield, wfield, world_pos, false)
+        pixel_rate = flux * iota * fs0m.v[]
+        pixels[h, w] += pixel_rate
+    end
+end
 
 """
 Add a galaxy model image to a matrix of pixels.  Defaults to unit flux.
@@ -242,12 +253,37 @@ function write_galaxy_unit_flux(pos::Array{Float64, 1},
     # write the unit-flux scaled, correctly offset galaxy shape + 
     # psf convolution
     e_devs = [gal_frac_dev, 1 - gal_frac_dev]
-    XiXi = Model.get_bvn_cov(gal_ab, gal_angle, gal_scale)
+    XiXi = Model.get_bvn_cov(gal_axis_ratio, gal_angle, gal_scale)
     for i in 1:2
         for gproto in galaxy_prototypes[i]
             for k in 1:length(psf)
                 the_mean = SVector{2}(WCS.world_to_pix(wcs, pos) - offset) +
                            psf[k].xiBar
+                the_cov = psf[k].tauBar + gproto.nuBar * XiXi
+                intensity = flux * iota * psf[k].alphaBar * e_devs[i] * gproto.etaBar
+                write_gaussian(the_mean, the_cov, intensity, pixels)
+            end
+        end
+    end
+end
+
+function write_galaxy_unit_flux_pixel(px_pos::Array{Float64, 1},
+                                      psf::Array{Model.PsfComponent,1},
+                                      iota::Float64,
+                                      gal_frac_dev::Float64,
+                                      gal_axis_ratio::Float64,
+                                      gal_angle::Float64,
+                                      gal_scale::Float64,
+                                      pixels::Matrix{Float64};
+                                      flux::Float64=1.)
+    # write the unit-flux scaled, correctly offset galaxy shape + 
+    # psf convolution
+    e_devs = [gal_frac_dev, 1 - gal_frac_dev]
+    XiXi = Model.get_bvn_cov(gal_axis_ratio, gal_angle, gal_scale)
+    for i in 1:2
+        for gproto in galaxy_prototypes[i]
+            for k in 1:length(psf)
+                the_mean = px_pos + psf[k].xiBar
                 the_cov = psf[k].tauBar + gproto.nuBar * XiXi
                 intensity = flux * iota * psf[k].alphaBar * e_devs[i] * gproto.etaBar
                 write_gaussian(the_mean, the_cov, intensity, pixels)

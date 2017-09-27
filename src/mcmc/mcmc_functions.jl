@@ -104,11 +104,17 @@ parameterized by a flat vector
 
 Args:
   imgs: Array of observed data Images with the .pixel field
+  patches...
+  background_images...
+  pos_transform....
+  use_raw_psf: use patch provided raw psf that interpolates on a grid as 
+    appearance model, not the MOG approximation
 """
 function make_star_loglike(imgs::Array{Image};
                            patches::Array{SkyPatch, 1}=nothing,
                            background_images::Array{Array{Float64, 2}, 1}=nothing,
-                           pos_transform::Function=nothing)
+                           pos_transform::Function=nothing,
+                           use_raw_psf=true)
     # create background images --- sky noise and neighbors if there
     if background_images == nothing
         background_images = make_empty_background_images(imgs)
@@ -123,6 +129,9 @@ function make_star_loglike(imgs::Array{Image};
                         for p in patches]...)
         active_bitmaps = [p.active_pixel_bitmap for p in patches]
     end
+
+    # create iota vecs --- number of elecs per nanomaggy fo reach image
+    nelec_per_nmgy_vec = [Float64(median(img.nelec_per_nmgy)) for img in imgs]
 
     # create function to return
     function star_loglike(th::Array{Float64, 1})
@@ -142,9 +151,13 @@ function make_star_loglike(imgs::Array{Image};
 
             # create and cache unit flux src image
             src_pixels = zeros(img.H, img.W)
-            write_star_unit_flux(pos, img.psf, img.wcs,
-                                 Float64(median(img.nelec_per_nmgy)), src_pixels,
-                                 offset=offsets[:,ii])
+            iota = nelec_per_nmgy_vec[ii]
+            if use_raw_psf
+                write_star_unit_flux_raw(pos, patches[ii], iota, src_pixels)
+            else
+                write_star_unit_flux(pos, img.psf, img.wcs, iota, src_pixels,
+                                     offset=offsets[:,ii])
+            end
 
             # band-specific flux --- do bounds check
             bflux = exp(lnfluxes[img.b])
@@ -163,6 +176,16 @@ function make_star_loglike(imgs::Array{Image};
             end
         end
         return ll
+
+        # test model star_loglike handle
+        #lnr, colors = logfluxes_to_colors(lnfluxes)
+        #dummy_shape = [1., 1., 1., 1.]
+        #active_sources = [1]
+        #llm = Model.state_log_likelihood(true, lnr, colors, pos,
+        #                                 dummy_shape, imgs, patches,
+        #                                 active_sources, 
+        #                                 [1][1., 1., 1., 1.], 
+
     end
 
     return star_loglike
@@ -251,10 +274,10 @@ function make_gal_loglike(imgs::Array{Image};
 
             # create and cache unit flux src image
             src_pixels = zeros(img.H, img.W)
-            write_galaxy_unit_flux(pos, img.psf, img.wcs,
+            px_pos     = WCS.world_to_pix(img.wcs, pos) - offsets[:,ii]
+            write_galaxy_unit_flux_pixel(px_pos, img.psf,
                 Float64(median(img.nelec_per_nmgy)),
-                gal_frac_dev, gal_ab, gal_angle, gal_scale, src_pixels;
-                offset=offsets[:,ii])
+                gal_frac_dev, gal_ab, gal_angle, gal_scale, src_pixels)
 
             # image specific flux
             bflux = exp(lnfluxes[img.b])
@@ -337,7 +360,6 @@ end
 
 
 function make_gal_logprior()
-
     # distributions over galaxy parameters
     prior = Model.construct_prior()
 
@@ -361,7 +383,7 @@ function make_gal_logprior()
 
         # uniform over angle, ll log normal over scale
         llangle = -log(pi)
-        llscale = logpdf(prior.galaxy.gal_scale, gal_scale)
+        llscale = logpdf(prior.galaxy.gal_radius_px, gal_scale)
         if isinf(llangle)
           println(" angle bad!")
         end
@@ -381,7 +403,7 @@ function sample_galaxy_shape()
     gal_frac_dev = rand()
     gal_ab       = rand()
     gal_angle    = rand() * pi
-    gal_scale = rand(param_prior.galaxy.gal_scale)
+    gal_scale    = rand(param_prior.galaxy.gal_radius_px)
     return [gal_frac_dev, gal_ab, gal_angle, gal_scale]
 end
 
@@ -609,9 +631,9 @@ function parameters_from_catalog(entry::CatalogEntry;
         #ushape = Model.unconstrain_gal_shape([
         #  entry.gal_frac_dev, entry.gal_ab, entry.gal_angle, entry.gal_scale])
         ushape = [clamp(entry.gal_frac_dev, epsilon, 1-epsilon),
-                  clamp(entry.gal_ab, epsilon, 1-epsilon),
+                  clamp(entry.gal_axis_ratio, epsilon, 1-epsilon),
                   clamp(entry.gal_angle, epsilon, pi-epsilon),
-                  clamp(entry.gal_scale, epsilon, Inf)]
+                  clamp(entry.gal_radius_px, epsilon, Inf)]
         return vcat([log.(entry.gal_fluxes), unconstrain_pos(entry.pos), ushape]...)
     end
 end
