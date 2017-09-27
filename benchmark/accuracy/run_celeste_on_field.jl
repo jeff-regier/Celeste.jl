@@ -1,6 +1,7 @@
 #!/usr/bin/env julia
 
 using DataFrames
+import JLD
 
 import Celeste.AccuracyBenchmark
 import Celeste.ArgumentParse
@@ -33,7 +34,7 @@ ArgumentParse.add_argument(
 )
 ArgumentParse.add_argument(
     parser,
-    "--image-fits",
+    "--images-jld",
     help="FITS file containing synthetic imagery; if not specified, will use SDSS RCF",
 )
 ArgumentParse.add_argument(
@@ -65,10 +66,9 @@ ArgumentParse.add_argument(
 )
 parsed_args = ArgumentParse.parse_args(parser, ARGS)
 
-if haskey(parsed_args, "image-fits")
-    extensions = AccuracyBenchmark.read_fits(parsed_args["image-fits"])
-    images = AccuracyBenchmark.make_images(extensions)
-    catalog_label = splitext(basename(parsed_args["image-fits"]))[1]
+if haskey(parsed_args, "images-jld")
+    images = JLD.load(parsed_args["images-jld"], "images")
+    catalog_label = splitext(basename(parsed_args["images-jld"]))[1]
 else
     rcf = SDSSIO.RunCamcolField(
         parsed_args["run"],

@@ -412,8 +412,8 @@ function draw_source_params(prior)
     end
 
     # Use approximate size of SDSS field in degrees
-    ra = rand(Uniform(0, 0.14))
-    dec = rand(Uniform(0, 0.22))
+    ra = rand(Uniform(0.443, 0.606))
+    dec = rand(Uniform(0.411, 0.635))
 
     DataFrame(
         ra=ra,
