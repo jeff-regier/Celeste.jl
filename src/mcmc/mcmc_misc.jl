@@ -429,3 +429,41 @@ function chains_to_dataframe(chains, logprobs, colnames)
     sdf[:chain] = chain_id
     return sdf
 end
+
+
+"""
+creates a new image from an existing larger (field) and a patch object
+"""
+function patch_to_image(patch::SkyPatch, img::Image; round_pixels_to_int=true)
+    # subselect patch pixels from image
+    Hr = patch.bitmap_offset[1]:(patch.bitmap_offset[1] +
+                                size(patch.active_pixel_bitmap)[1] - 1)
+    Wr = patch.bitmap_offset[2]:(patch.bitmap_offset[2] +
+                                size(patch.active_pixel_bitmap)[2] - 1)
+    patch_pixels = img.pixels[Hr, Wr]
+    if round_pixels_to_int
+        patch_pixels = round.(patch_pixels)
+    end
+    H, W = length(Hr), length(Wr)
+
+    # create sub sky intensity object
+    sky_small   = fill(median(img.sky.sky_small), H, W)
+    calibration = img.sky.calibration[Hr]
+    sky_x       = img.sky.sky_x[Hr]
+    sky_y       = img.sky.sky_y[Wr]
+    sky         = SkyIntensity(sky_small, sky_x, sky_y, calibration)
+    nelec_per_nmgy = img.nelec_per_nmgy[Hr]
+
+    # TODO create an adjusted WCS object
+    #wcs = deepcopy(img.wcs)
+    #wcs[:crpix] = wcs[:crpix] - patch.bitmap_offset
+
+    # instantiate a smaller patch image
+    patch_image = Image(H, W, patch_pixels, img.b, img.wcs,
+                        patch.psf,
+                        img.run_num, img.camcol_num, img.field_num,
+                        sky, nelec_per_nmgy, img.raw_psf_comp)
+    return patch_image
+end
+
+
