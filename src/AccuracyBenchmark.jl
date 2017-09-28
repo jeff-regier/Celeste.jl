@@ -541,22 +541,8 @@ function make_image(
         ones(height_px),
     )
 
-    # The next code block generates an SDSS-style raw_psf with just one
-    # eigenimage. That eigenimage is obtained by rendering the Celeste PSF
-    # on a grid.
-    psf_dims = (51, 51)
-    rendered_psf = zeros(psf_dims...)
-    x = Vector{Float64}(2)
-    for pc in psf
-        bvn = MultivariateNormal(convert(Array, pc.xiBar), convert(Array, pc.tauBar))
-        for w in 1:psf_dims[2], h in 1:psf_dims[1]
-            x[1] = h - 26
-            x[2] = w - 26
-            rendered_psf[h, w] += pc.alphaBar * pdf(bvn, x)
-        end
-    end
-    rendered_psf = reshape(rendered_psf, (reduce(*, psf_dims), 1))
-    raw_psf = Model.RawPSF(rendered_psf, psf_dims[1], psf_dims[2], ones(1, 1, 1))
+    # Render the PSF on a grid, to be used as a (spatially constant) PSF map.
+    psfstamp = Model.render_psf(psf, (51, 51))
 
     Model.Image(
         height_px,
@@ -565,10 +551,10 @@ function make_image(
         band_index,
         wcs,
         psf,
-        0, 0, 0, # run, camcol, field
+        Int16(0), UInt8(0), Int16(0), # run, camcol, field
         sky_intensity,
-        fill(nelec_per_nmgy, height_px),
-        raw_psf,
+        fill(Float32(nelec_per_nmgy), height_px),
+        Model.ConstantPSFMap(psfstamp)
     )
 end
 
@@ -774,7 +760,7 @@ function parse_fits_header_from_string(header_string::AbstractString)
     header
 end
 
-function save_images_to_fits(filename::String, images::Vector{Model.Image})
+function save_images_to_fits(filename::String, images::Vector{<:Model.Image})
     println("Writing images to $filename...")
     fits_file = FITSIO.FITS(filename, "w")
     for band_image in images

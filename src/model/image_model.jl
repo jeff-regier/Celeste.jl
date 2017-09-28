@@ -61,7 +61,7 @@ end
 
 
 """An image, taken though a particular filter band"""
-mutable struct Image
+mutable struct Image{T <: AbstractPSFMap}
     # The image height.
     H::Int
 
@@ -82,9 +82,9 @@ mutable struct Image
 
     # SDSS-specific identifiers. A field is a particular region of the sky.
     # A Camcol is the output of one camera column as part of a Run.
-    run_num::Int
-    camcol_num::Int
-    field_num::Int
+    run_num::Int16
+    camcol_num::UInt8
+    field_num::Int16
 
     # The background noise in nanomaggies. (varies by position)
     sky::SkyIntensity
@@ -93,9 +93,10 @@ mutable struct Image
     # by a source 1 nanomaggie in brightness. (varies by row)
     nelec_per_nmgy::Array{Float32, 1}
 
-    # storing a RawPSF here isn't ideal, because it's an SDSS type
-    # not a Celeste type
-    raw_psf_comp::RawPSF
+    # The image PSF map: a callable f(x, y) -> Matrix that takes a pixel
+    # coordinate and returns the rasterized PSF image at that coordinate,
+    # with the PSF centered in the image.
+    psfmap::T
 end
 
 

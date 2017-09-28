@@ -72,7 +72,7 @@ end
 Generate a synthetic images based on a vector of catalog entries using
 identity world coordinates.
 """
-function gen_images!(images::Vector{Image}, n_bodies::Vector{CatalogEntry}; expectation=false)
+function gen_images!(images::Vector{<:Image}, n_bodies::Vector{CatalogEntry}; expectation=false)
     for img in images
         gen_image!(img, n_bodies; expectation=expectation)
     end

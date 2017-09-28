@@ -173,16 +173,9 @@ Returns:
      of Gaussians.
 """
 function get_source_psf(world_loc::Vector{Float64}, img::Image, psf_K::Int)
-    # Some stamps or simulated data have no raw psf information.    In that case,
-    # just use the psf from the image.
-    if size(img.raw_psf_comp.rrows) == (0, 0)
-        # Also return a vector of empty psf params
-        return img.psf, fill(fill(NaN, length(PsfParams)), psf_K)
-    else
-        pixel_loc = WCS.world_to_pix(img.wcs, world_loc)
-        psfstamp = Model.eval_psf(img.raw_psf_comp, pixel_loc[1], pixel_loc[2])
-        return PSF.fit_raw_psf_for_celeste(psfstamp, psf_K)
-    end
+    pixel_loc = WCS.world_to_pix(img.wcs, world_loc)
+    psfstamp = img.psfmap(pixel_loc[1], pixel_loc[2])
+    return fit_raw_psf_for_celeste(psfstamp, psf_K)
 end
 
 
@@ -201,15 +194,9 @@ function get_source_psf(world_loc::Vector{Float64},
                         img::Image,
                         psf_optimizer::PsfOptimizer,
                         initial_psf_params::Vector{Vector{Float64}})
-    # Some stamps or simulated data have no raw psf information. In that case,
-    # just use the psf from the image.
-    if size(img.raw_psf_comp.rrows) == (0, 0)
-        return img.psf
-    else
-        pixel_loc = WCS.world_to_pix(img.wcs, world_loc)
-        psfstamp = Model.eval_psf(img.raw_psf_comp, pixel_loc[1], pixel_loc[2])
-        return PSF.fit_raw_psf_for_celeste(psfstamp, psf_optimizer, initial_psf_params)
-    end
+    pixel_loc = WCS.world_to_pix(img.wcs, world_loc)
+    psfstamp = img.psfmap(pixel_loc[1], pixel_loc[2])
+    return fit_raw_psf_for_celeste(psfstamp, psf_optimizer, initial_psf_params)
 end
 
 
@@ -673,8 +660,8 @@ Args:
      - A vector of PsfComponents fit to the raw_psf.
 """
 function fit_raw_psf_for_celeste(raw_psf::Array{Float64, 2}, K::Integer; ftol=1e-9)
-    psf_params = PSF.initialize_psf_params(K, for_test=false)
-    psf_transform = PSF.get_psf_transform(psf_params)
+    psf_params = initialize_psf_params(K, for_test=false)
+    psf_transform = get_psf_transform(psf_params)
     psf_optimizer = PsfOptimizer(psf_transform, K)
     psf_optimizer.ftol = ftol
     fit_raw_psf_for_celeste(raw_psf, psf_optimizer, psf_params)

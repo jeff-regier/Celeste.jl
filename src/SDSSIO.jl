@@ -7,7 +7,7 @@ using CodecZlib
 using CodecBzip2
 
 import ..Log
-import ..Model: RawPSF, Image, CatalogEntry, eval_psf, SkyIntensity
+import ..Model: Image, CatalogEntry, SkyIntensity, AbstractPSFMap
 import ..PSF
 import Base.convert, Base.getindex
 export PlainFITSStrategy, RunCamcolField
@@ -195,6 +195,127 @@ function read_mask(strategy, rcf, b, mask_planes=DEFAULT_MASK_PLANES; data=nothi
 end
 
 
+# -----------------------------------------------------------------------------
+# PSF-related functions
+
+"""
+    SDSSPSFMap
+
+SDSS representation of a spatially variable PSF. The PSF is represented as
+a weighted combination of eigenimages (stored in `rrows`), where the weights
+vary smoothly across the image as a polynomial of the form
+
+```
+weight[k](x, y) = sum_{i,j} cmat[i, j, k] * (rcs * x)^i (rcs * y)^j
+```
+
+where `rcs` is a coordinate transformation and `x` and `y` are zero-indexed.
+"""
+struct SDSSPSFMap <: AbstractPSFMap
+    rrows::Array{Float64,2}  # A matrix of flattened eigenimages.
+    rnrow::Int  # The number of rows in an eigenimage.
+    rncol::Int  # The number of columns in an eigenimage.
+    cmat::Array{Float64,3}  # The coefficients of the weight polynomial
+
+    function SDSSPSFMap(rrows::Array{Float64, 2},
+                        rnrow::Integer, rncol::Integer,
+                        cmat::Array{Float64, 3})
+        # rrows contains eigen images. Each eigen image is along the first
+        # dimension in a flattened form. Check that dimensions match up.
+        @assert size(rrows, 1) == rnrow * rncol
+
+        # The second dimension is the number of eigen images, which should
+        # match the number of coefficient arrays.
+        @assert size(rrows, 2) == size(cmat, 3)
+
+        return new(rrows, Int(rnrow), Int(rncol), cmat)
+    end
+end
+
+
+"""
+    (psfmap::SDSSPDFMap)(x, y)
+
+Evaluate the PSF at the given image coordinates. The size of the result is
+will be `(psf.rnrow, psf.rncol)`, with the PSF (presumably) centered in the
+stamp.
+
+This function was originally based on the function sdss_psf_at_points
+in astrometry.net:
+https://github.com/dstndstn/astrometry.net/blob/master/util/sdss_psf.py
+"""
+function (psfmap::SDSSPSFMap)(x::Real, y::Real)
+    const RCS = 0.001  # A coordinate transform to keep polynomial
+                       # coefficients to a reasonable size.
+    nk = size(psfmap.rrows, 2)  # number of eigen images.
+
+    # initialize output stamp
+    stamp = zeros(psfmap.rnrow, psfmap.rncol)
+
+    # Loop over eigen images
+    for k=1:nk
+        # calculate the weight for the k-th eigen image from psfmap.cmat.
+        # Note that the image coordinates and coefficients are intended
+        # to be zero-indexed.
+        w = 0.0
+        for j=1:size(psfmap.cmat, 2), i=1:size(psfmap.cmat, 1)
+            w += (psfmap.cmat[i, j, k] *
+                  (RCS * (x - 1.0))^(i-1) * (RCS * (y - 1.0))^(j-1))
+        end
+
+        # add the weighted k-th eigen image to the output stamp
+        for i=1:length(stamp)
+            stamp[i] += w * psfmap.rrows[i, k]
+        end
+    end
+
+    return stamp
+end
+
+
+
+"""
+read_psfmap(fitsfile, band)
+
+Read spatially variable PSF map for the given band ('u', 'g', 'r', 'i', or 'z')
+from the open FITSIO.FITS instance `fitsfile`, which should be a SDSS
+\"psField\" file, and return a SDSSPSFMap instance representing the spatially
+variable PSF.
+"""
+function read_psfmap(fitsfile::FITSIO.FITS, band::Char)
+
+    # get the HDU, assuming PSF hdus are in order after primary header
+    extnum = 1 + BAND_CHAR_TO_NUM[band]
+    hdu = fitsfile[extnum]::FITSIO.TableHDU
+
+    nrows = FITSIO.read_key(hdu, "NAXIS2")[1]::Int
+    nrow_b = Int((read(hdu, "nrow_b")::Vector{Int32})[1])
+    ncol_b = Int((read(hdu, "ncol_b")::Vector{Int32})[1])
+    rnrow = (read(hdu, "rnrow")::Vector{Int32})[1]
+    rncol = (read(hdu, "rncol")::Vector{Int32})[1]
+    cmat_raw = read(hdu, "c")::Array{Float32, 3}
+    rrows_raw = read(hdu, "rrows")::Array{Array{Float32,1},1}
+
+    # Only the first (nrow_b, ncol_b) submatrix of cmat is used for
+    # reasons obscure to the author.
+    cmat = Array{Float64,3}(nrow_b, ncol_b, size(cmat_raw, 3))
+    for k=1:size(cmat_raw, 3), j=1:nrow_b, i=1:ncol_b
+        cmat[i, j, k] = cmat_raw[i, j, k]
+    end
+
+    # convert rrows to Array{Float64, 2}, assuming each row is the same length.
+    rrows = Matrix{Float64}(length(rrows_raw[1]), length(rrows_raw))
+    for i=1:length(rrows_raw)
+        rrows[:, i] = rrows_raw[i]
+    end
+
+    return SDSSPSFMap(rrows, rnrow, rncol, cmat)
+end
+
+# -----------------------------------------------------------------------------
+# Image-related functions
+
+
 struct RawImage
     rcf::RunCamcolField
     b::Int  # band index
@@ -203,7 +324,7 @@ struct RawImage
     sky::SkyIntensity
     wcs::WCS.WCSTransform
     gain::Float32
-    raw_psf_comp::RawPSF
+    psfmap::SDSSPSFMap
 end
 
 
@@ -244,12 +365,12 @@ function parse_image(strategy, rcf, b, psffile, band, gains)
     end
 
     # read the psf
-    raw_psf_comp = read_psf(psffile, band)
+    psfmap = read_psfmap(psffile, band)
 
     # Set it to use a constant background but include the non-constant data.
     r = RawImage(rcf, b,
-                        pixels, calibration, sky, wcs,
-                        gains[band], raw_psf_comp)
+                 pixels, calibration, sky, wcs,
+                 gains[band], psfmap)
     r
 end
 
@@ -276,7 +397,7 @@ Converts a raw image to an image by fitting the PSF, a mixture of Gaussians.
 function convert(::Type{Image}, r::RawImage)
     H, W = size(r.pixels)
 
-    psfstamp = eval_psf(r.raw_psf_comp, H / 2., W / 2.)
+    psfstamp = r.psfmap(H / 2., W / 2.)
     celeste_psf = PSF.fit_raw_psf_for_celeste(psfstamp, 2)[1]
 
     # scale pixels to raw electron counts
@@ -290,48 +411,7 @@ function convert(::Type{Image}, r::RawImage)
 
     Image(H, W, r.pixels, r.b, r.wcs, celeste_psf,
           r.rcf.run, r.rcf.camcol, r.rcf.field,
-          r.sky, nelec_per_nmgy, r.raw_psf_comp)
-end
-
-# -----------------------------------------------------------------------------
-# PSF-related functions
-
-"""
-read_psf(fitsfile, band)
-
-Read PSF components for the given band ('u', 'g', 'r', 'i', or 'z')
-from the open FITSIO.FITS instance `fitsfile`, which should be a SDSS
-\"psField\" file, and return a RawPSF instance representing the spatially
-variable PSF.
-"""
-function read_psf(fitsfile::FITSIO.FITS, band::Char)
-
-    # get the HDU, assuming PSF hdus are in order after primary header
-    extnum = 1 + BAND_CHAR_TO_NUM[band]
-    hdu = fitsfile[extnum]::FITSIO.TableHDU
-
-    nrows = FITSIO.read_key(hdu, "NAXIS2")[1]::Int
-    nrow_b = Int((read(hdu, "nrow_b")::Vector{Int32})[1])
-    ncol_b = Int((read(hdu, "ncol_b")::Vector{Int32})[1])
-    rnrow = (read(hdu, "rnrow")::Vector{Int32})[1]
-    rncol = (read(hdu, "rncol")::Vector{Int32})[1]
-    cmat_raw = read(hdu, "c")::Array{Float32, 3}
-    rrows_raw = read(hdu, "rrows")::Array{Array{Float32,1},1}
-
-    # Only the first (nrow_b, ncol_b) submatrix of cmat is used for
-    # reasons obscure to the author.
-    cmat = Array{Float64,3}(nrow_b, ncol_b, size(cmat_raw, 3))
-    for k=1:size(cmat_raw, 3), j=1:nrow_b, i=1:ncol_b
-        cmat[i, j, k] = cmat_raw[i, j, k]
-    end
-
-    # convert rrows to Array{Float64, 2}, assuming each row is the same length.
-    rrows = Matrix{Float64}(length(rrows_raw[1]), length(rrows_raw))
-    for i=1:length(rrows_raw)
-        rrows[:, i] = rrows_raw[i]
-    end
-
-    return RawPSF(rrows, rnrow, rncol, cmat)
+          r.sky, nelec_per_nmgy, r.psfmap)
 end
 
 

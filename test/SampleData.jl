@@ -45,7 +45,7 @@ const sample_images = load_field_images(PlainFITSStrategy(datadir), sample_rcf)
 Turn a images and vector of catalog entries into elbo arguments
 that can be used with Celeste.
 """
-function make_elbo_args(images::Vector{Image},
+function make_elbo_args(images::Vector{<:Image},
                         catalog::Vector{CatalogEntry};
                         active_source=-1,
                         patch_radius_pix::Float64=NaN,

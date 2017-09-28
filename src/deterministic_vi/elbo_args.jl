@@ -175,7 +175,7 @@ struct ElboArgs
 
     # The number of components in the point spread function.
     psf_K::Int64
-    images::Vector{Image}
+    images::Vector{<:Image}
 
     # subimages is a better name for patches: regions of an image
     # around a particular light source
@@ -190,7 +190,7 @@ end
 
 
 function ElboArgs(
-            images::Vector{Image},
+            images::Vector{<:Image},
             patches::Matrix{SkyPatch},
             active_sources::Vector{Int};
             psf_K::Int=2,
