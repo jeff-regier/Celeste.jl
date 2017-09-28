@@ -115,53 +115,52 @@ function samples_to_dataframe(chain; is_star=true)
          :minor_major_axis_ratio, e.g. px => px / sqrt(gal_ab)
     """
     df = DataFrame()
-
     # reference band flux (+ log flux) and colors
-    df[:log_reference_band_flux]  = chain[:,3]
-    df[:reference_band_flux_nmgy] = exp.(chain[:,3])
-    df[:color_log_ratio_ug]       = chain[:,2] .- chain[:,1]
-    df[:color_log_ratio_gr]       = chain[:,3] .- chain[:,2]
-    df[:color_log_ratio_ri]       = chain[:,4] .- chain[:,3]
-    df[:color_log_ratio_iz]       = chain[:,5] .- chain[:,4]
-    df[:right_ascension_deg]      = chain[:, 6]
-    df[:declination_deg]          = chain[:, 7]
+    df[:log_flux_r]  = chain[:,3]
+    df[:flux_r_nmgy] = exp.(chain[:,3])
+    df[:color_ug]    = chain[:,2] .- chain[:,1]
+    df[:color_gr]    = chain[:,3] .- chain[:,2]
+    df[:color_ri]    = chain[:,4] .- chain[:,3]
+    df[:color_iz]    = chain[:,5] .- chain[:,4]
+    df[:ra]          = chain[:, 6]
+    df[:dec]         = chain[:, 7]
     if !is_star
-      df[:de_vaucouleurs_mixture_weight] = chain[:, 8]
-      df[:minor_major_axis_ratio]        = chain[:, 9]
-      df[:angle_deg]                     = chain[:, 10] * 360 / (2*pi) # rad => deg
-      df[:half_light_radius_px]          = chain[:, 11] .* sqrt.(df[:minor_major_axis_ratio])
+      df[:gal_frac_dev]   = chain[:, 8]
+      df[:gal_axis_ratio] = chain[:, 9]
+      df[:gal_angle_deg]  = chain[:, 10] * 360 / (2*pi) # rad => deg
+      df[:gal_radius_px]  = chain[:, 11] .* sqrt.(df[:minor_major_axis_ratio])
     end
     return df
 end
 
 
-function samples_to_dataframe_row(sampdf; is_star=true, objid="mcmc")
-    """ only for stars right now """
+function samples_to_dataframe_row(sampdf; is_star=true)
+    """ summarize a set of samples into a single dataframe row """
     df = DataFrame()
-    df[:objid]                          = [objid]
-    df[:ra]            = [mean(sampdf[:ra])]
-    df[:dec]                = [mean(sampdf[:dec])]
-    df[:is_star]                        = [true]
-    df[:de_vaucouleurs_mixture_weight]  = [NaN]
-    df[:minor_major_axis_ratio]         = [NaN]
-    df[:half_light_radius_px]           = [NaN]
-    df[:angle_deg]                      = [NaN]
-    df[:reference_band_flux_nmgy]       = [mean(sampdf[:reference_band_flux_nmgy])]
-    df[:log_reference_band_flux_stderr] = [std(sampdf[:log_reference_band_flux])]
-    df[:color_log_ratio_ug]             = [mean(sampdf[:color_log_ratio_ug])]
-    df[:color_log_ratio_gr]             = [mean(sampdf[:color_log_ratio_gr])]
-    df[:color_log_ratio_ri]             = [mean(sampdf[:color_log_ratio_ri])]
-    df[:color_log_ratio_iz]             = [mean(sampdf[:color_log_ratio_iz])]
-    df[:color_log_ratio_ug_stderr]      = [std(sampdf[:color_log_ratio_ug])]
-    df[:color_log_ratio_gr_stderr]      = [std(sampdf[:color_log_ratio_gr])]
-    df[:color_log_ratio_ri_stderr]      = [std(sampdf[:color_log_ratio_ri])]
-    df[:color_log_ratio_iz_stderr]      = [std(sampdf[:color_log_ratio_iz])]
+    df[:ra]                = [mean(sampdf[:ra])]
+    df[:dec]               = [mean(sampdf[:dec])]
+    df[:is_star]           = [true]
+    df[:gal_frac_dev]      = [NaN]
+    df[:gal_axis_ratio]    = [NaN]
+    df[:gal_radius_px]     = [NaN]
+    df[:gal_angle_deg]     = [NaN]
+    df[:flux_r_nmgy]       = [mean(sampdf[:flux_r_nmgy])]
+    df[:log_flux_r]        = [mean(sampdf[:log_flux_r])]
+    df[:log_flux_r_stderr] = [std(sampdf[:log_flux_r])]
+    df[:color_ug]          = [mean(sampdf[:color_ug])]
+    df[:color_gr]          = [mean(sampdf[:color_gr])]
+    df[:color_ri]          = [mean(sampdf[:color_ri])]
+    df[:color_iz]          = [mean(sampdf[:color_iz])]
+    df[:color_ug_stderr]   = [std(sampdf[:color_ug])]
+    df[:color_gr_stderr]   = [std(sampdf[:color_gr])]
+    df[:color_ri_stderr]   = [std(sampdf[:color_ri])]
+    df[:color_iz_stderr]   = [std(sampdf[:color_iz])]
     if !is_star
         df[:is_star]                        = [false]
-        df[:de_vaucouleurs_mixture_weight]  = [mean(sampdf[:de_vaucouleurs_mixture_weight])]
-        df[:minor_major_axis_ratio]         = [mean(sampdf[:minor_major_axis_ratio])]
-        df[:half_light_radius_px]           = [mean(sampdf[:half_light_radius_px])]
-        df[:angle_deg]                      = [mean(sampdf[:angle_deg])]
+        df[:gal_frac_dev]   = [mean(sampdf[:gal_frac_dev])]
+        df[:gal_axis_ratio] = [mean(sampdf[:gal_axis_ratio])]
+        df[:gal_radius_px]  = [mean(sampdf[:gal_radius_px])]
+        df[:gal_angle_deg]  = [mean(sampdf[:gal_angle_deg])]
     end
     return df
 end
