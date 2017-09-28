@@ -12,91 +12,6 @@ using ..DeterministicVI
 using ..DeterministicVI.ConstraintTransforms: ConstraintBatch, DEFAULT_CHUNK
 using ..DeterministicVI.ElboMaximize: ElboConfig, maximize!
 
-const PeakFlops = false
-gdlog = nothing
-
-# 20 minute threshold
-const BoxMaxThreshold = convert(UInt64, 20*60*1e9)::UInt64
-const OneMinute = 0x0000000df8475800 # in nanoseconds
-
-mutable struct BoxKillSwitch <: Function
-    started::UInt64
-    numfin_threshold::Int64
-    numfin::Atomic{Int64}
-    finished::Vector{UInt64}
-    lastfin::Atomic{Int64}
-    killed::Bool
-    messaged::Bool
-
-    BoxKillSwitch() = new(0, ceil(Int64, nthreads()/2), Atomic{Int64}(0),
-                          fill(typemax(UInt64), nthreads()),
-                          Atomic{Int64}(0), false, false)
-end
-
-if PeakFlops
-function (f::BoxKillSwitch)(x)
-    now_ns = time_ns()
-    if f.started == 0
-        # benign race here
-        f.started = now_ns
-        return false
-    end
-    intv = now_ns - f.started
-    if intv > BoxMaxThreshold
-        # and here
-        return f.killed = true
-    end
-    if div(intv, OneMinute) > 0
-        f.started = now_ns
-        n_active = 0
-        n_inactive = 0
-        for elbo_vars in DeterministicVI.ElboMaximize.ELBO_VARS_POOL
-            n_active += elbo_vars.active_pixel_counter[]
-            n_inactive += elbo_vars.inactive_pixel_counter[]
-        end
-        message(gdlog, "pixel visits: ($n_active,$n_inactive)")
-    end
-    return f.killed
-end
-else # !PeakFlops
-function (f::BoxKillSwitch)(x)
-    now_ns = time_ns()
-    if f.started == 0
-        # benign race here
-        f.started = now_ns
-        return false
-    end
-    intv = now_ns - f.started
-    if intv > BoxMaxThreshold
-        # and here
-        return f.killed = true
-    end
-#=
-    if f.numfin[] >= f.numfin_threshold
-        lastfinat = f.finished[f.lastfin[]]
-        if now_ns - lastfinat > floor(Int64, (lastfinat - f.started) * 0.25)
-            #f.killed = true
-            if !f.messaged
-                f.messaged = true
-                ttms = [f.finished[i] == typemax(UInt64) ? "" :
-                            @sprintf("%d:%.3f ", i, (f.finished[i] - f.started) / 1e6)
-                        for i in 1:length(f.finished)]
-                Log.message("imbalance threshold: $(ttms...)ms")
-            end
-        end
-=#
-    return f.killed
-end
-end
-
-function ks_reset_finished(ks::BoxKillSwitch)
-    ks.numfin[] = 0
-    fill!(ks.finished, typemax(UInt64))
-    ks.lastfin[] = 0
-    ks.messaged = false
-end
-
-
 function union_find!(i, components_tree)
     root = i
     while components_tree[i] != i
@@ -508,15 +423,12 @@ function one_node_joint_infer(catalog, target_sources, neighbor_map, images;
     ea_vec, vp_vec, cfg_vec, target_source_variational_params =
             setup_vecs(n_sources, target_sources, catalog)
 
-    ks = BoxKillSwitch()
-
     # Initialize elboargs in parallel
     thread_initialize_sources_assignment::Vector{Vector{Vector{Int64}}} = partition_equally(n_threads, n_sources)
 
     initialize_elboargs_sources!(config, ea_vec, vp_vec, cfg_vec, thread_initialize_sources_assignment,
                                  catalog, target_sources, neighbor_map, images,
-                                 target_source_variational_params;
-                                 termination_callback=ks)
+                                 target_source_variational_params)
 
     #thread_sources_assignment = partition_box(n_threads, target_sources,
     #                                  neighbor_map;
@@ -533,21 +445,16 @@ function one_node_joint_infer(catalog, target_sources, neighbor_map, images;
     #                 n_iters, within_batch_shuffling)
     process_sources_dynamic!(images, ea_vec, vp_vec, cfg_vec,
                              batched_connected_components,
-                             n_iters, within_batch_shuffling;
-                             kill_switch=ks)
+                             n_iters, within_batch_shuffling)
 
     # Return add results to vector
     results = OptimizedSource[]
 
-    if ks.killed
-        Log.message("optimization terminated due to timeout")
-    else
-        for i = 1:n_sources
-            entry = catalog[target_sources[i]]
-            is_sky_bad = bad_sky(entry, images)
-            result = OptimizedSource(entry.pos[1], entry.pos[2], vp_vec[i][1], is_sky_bad)
-            push!(results, result)
-        end
+    for i = 1:n_sources
+        entry = catalog[target_sources[i]]
+        is_sky_bad = bad_sky(entry, images)
+        result = OptimizedSource(entry.pos[1], entry.pos[2], vp_vec[i][1], is_sky_bad)
+        push!(results, result)
     end
 
     show_pixels_processed()
@@ -663,8 +570,7 @@ function process_sources_dynamic!(images::Vector{Model.Image},
                                   cfg_vec::Vector{ElboConfig{DEFAULT_CHUNK,Float64}},
                                   thread_sources_assignment::Vector{Vector{Vector{Int64}}},
                                   n_iters::Int,
-                                  within_batch_shuffling::Bool;
-                                  kill_switch=nothing)
+                                  within_batch_shuffling::Bool)
     Log.info("Processing with dynamic connected components load balancing")
 
     n_threads::Int = nthreads()
@@ -708,20 +614,11 @@ function process_sources_dynamic!(images::Vector{Model.Image},
                         process_sources_kernel!(ea_vec, vp_vec, cfg_vec,
                                                 thread_sources_assignment[batch::Int][cc_index],
                                                 within_batch_shuffling)
-                        if kill_switch != nothing && kill_switch.killed
-                            break
-                        end
                     end
                     process_sources_elapsed_times[i::Int] = toq()
                 catch exc
                     Log.exception(exc)
                     rethrow()
-                end
-                if kill_switch != nothing
-                    tid = threadid()
-                    kill_switch.finished[tid] = time_ns()
-                    kill_switch.lastfin[] = tid
-                    atomic_add!(kill_switch.numfin, 1)
                 end
             end
             Log.info("Batch $(batch) - $(process_sources_elapsed_times)")
@@ -731,16 +628,6 @@ function process_sources_dynamic!(images::Vector{Model.Image},
             Log.info("Batch $(batch) avg threads idle: $(round(Int, idle_percent))% ($(avg_thread_idle_time) / $(maximum_thread_time))")
 	    total_idle_time += sum(maximum(process_sources_elapsed_times) - process_sources_elapsed_times)
             total_sum_of_thread_times += sum(process_sources_elapsed_times)
-            if kill_switch != nothing
-                if kill_switch.killed
-                    break
-                else
-                    ks_reset_finished(kill_switch)
-                end
-            end
-        end
-        if kill_switch != nothing && kill_switch.killed
-            break
         end
     end
     Log.info("Total idle time: $(round(Int, total_idle_time)), Total sum of threads times: $(round(Int, total_sum_of_thread_times))")
@@ -763,9 +650,6 @@ function process_sources_kernel!(ea_vec::Vector{ElboArgs},
 	#tic()
         for i in source_assignment
             maximize!(ea_vec[i], vp_vec[i], cfg_vec[i])
-            if cfg_vec[i].optim_options.callback.killed
-                break
-            end
         end
 	#ccall(:jl_,Void,(Any,), "this is thread number $(Threads.threadid()) took $(toq()) seconds to process batch with $(length(source_assignment)) sources")
     catch ex
