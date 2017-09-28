@@ -19,6 +19,7 @@ data <- (
     + theme_bw()
     + ggtitle('Q-Q plot of errors for all sources')
 )
+ggsave("qq_all.png", width=6, height=4, units="in")
 
 trimmed_data <- (
     data
@@ -33,3 +34,5 @@ trimmed_data <- (
     + theme_bw()
     + ggtitle('Q-Q plot of middle 90% of errors')
 )
+
+ggsave("qq_90.png", width=6, height=4, units="in")
