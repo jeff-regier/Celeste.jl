@@ -124,7 +124,7 @@ const ASINH_SOFTENING_PARAMETERS = [
 
 function mag_to_flux(mags::AbstractFloat, band_index::Int)
     b = ASINH_SOFTENING_PARAMETERS[band_index]
-    1e9 * 2 * b * sinh(-log(10) / 2.5 * mags - log(b))
+     1e9 * 2 * b * sinh(-log(10) / 2.5 * mags - log(b))
 end
 
 function flux_to_mag(flux_nmgy::AbstractFloat, band_index::Int)
@@ -411,9 +411,12 @@ function draw_source_params(prior)
         gal_frac_dev = -1
     end
 
+    # We should change ra/dec ranges below if we start using another field
+    @assert STRIPE82_RCF.run == 4263 && STRIPE82_RCF.camcol == 5 && STRIPE82_RCF.field == 119
+
     # Use approximate size of SDSS field in degrees
-    ra = rand(Uniform(0, 0.14))
-    dec = rand(Uniform(0, 0.22))
+    ra = rand(Uniform(0.443, 0.606))
+    dec = rand(Uniform(0.411, 0.635))
 
     DataFrame(
         ra=ra,

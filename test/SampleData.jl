@@ -93,15 +93,26 @@ function perturb_params(vp)
 end
 
 
-function gen_sample_star_dataset(; perturb=true)
+function cropped_sample_images(new_H, new_W)
     srand(1)
-    images0 = deepcopy(sample_images)
-    for b in 1:5
-        images0[b].H, images0[b].W = 20, 23
-        images0[b].wcs = wcs_id
+    images = deepcopy(sample_images)
+
+    for img in images
+        img.H = new_H
+        img.W = new_W
+        img.pixels = zeros(Float32, new_H, new_W)
+        img.nelec_per_nmgy = img.nelec_per_nmgy[1:new_H]
+        img.wcs = wcs_id
     end
+
+    return images
+end
+
+
+function gen_sample_star_dataset(; perturb=true)
+    images = cropped_sample_images(20, 23)
     catalog = [sample_ce([10.1, 12.2], true),]
-    images = Synthetic.gen_blob(images0, catalog)
+    Synthetic.gen_images!(images, catalog)
     ea = make_elbo_args(images, catalog)
 
     vp = Vector{Float64}[DeterministicVI.catalog_init_source(ce) for ce in catalog]
@@ -114,14 +125,9 @@ end
 
 
 function gen_sample_galaxy_dataset(; perturb=true, include_kl=true)
-    srand(1)
-    images0 = deepcopy(sample_images)
-    for b in 1:5
-        images0[b].H, images0[b].W = 20, 23
-        images0[b].wcs = wcs_id
-    end
+    images = cropped_sample_images(20, 23)
     catalog = [sample_ce([8.5, 9.6], false),]
-    images = Synthetic.gen_blob(images0, catalog)
+    Synthetic.gen_images!(images, catalog)
     ea = make_elbo_args(images, catalog; include_kl=include_kl)
 
     vp = Vector{Float64}[DeterministicVI.catalog_init_source(ce) for ce in catalog]
@@ -132,21 +138,16 @@ function gen_sample_galaxy_dataset(; perturb=true, include_kl=true)
     ea, vp, catalog
 end
 
-function gen_two_body_dataset(; perturb=true)
-    # A small two-body dataset for quick unit testing.  These objects
-    # will be too close to be identifiable.
 
-    srand(1)
-    images0 = deepcopy(sample_images)
-    for b in 1:5
-        images0[b].H, images0[b].W = 20, 23
-        images0[b].wcs = wcs_id
-    end
+# A small two-body dataset for quick unit testing.  These objects
+# will be too close to be identifiable.
+function gen_two_body_dataset(; perturb=true)
+    images = cropped_sample_images(20, 23)
     catalog = [
         sample_ce([4.5, 3.6], false),
         sample_ce([10.1, 12.1], true)
     ]
-    images = Synthetic.gen_blob(images0, catalog)
+    Synthetic.gen_images!(images, catalog)
     ea = make_elbo_args(images, catalog)
 
     vp = Vector{Float64}[DeterministicVI.catalog_init_source(ce) for ce in catalog]
@@ -158,20 +159,14 @@ function gen_two_body_dataset(; perturb=true)
 end
 
 
-
 function gen_three_body_dataset(; perturb=true)
-    srand(1)
-    images0 = deepcopy(sample_images)
-    for b in 1:5
-        images0[b].H, images0[b].W = 112, 238
-        images0[b].wcs = wcs_id
-    end
+    images = cropped_sample_images(112, 238)
     catalog = [
         sample_ce([4.5, 3.6], false),
         sample_ce([60.1, 82.2], true),
         sample_ce([71.3, 100.4], false),
     ];
-    images = Synthetic.gen_blob(images0, catalog);
+    Synthetic.gen_images!(images, catalog);
     ea = make_elbo_args(images, catalog);
 
     vp = Vector{Float64}[DeterministicVI.catalog_init_source(ce) for ce in catalog]
@@ -187,28 +182,16 @@ end
 Generate a large dataset with S randomly placed bodies and non-constant
 background.
 """
-function gen_n_body_dataset(
-        S::Int; patch_pixel_radius=20., seed=NaN, perturb=true)
-    if !isnan(seed)
-        srand(seed)
-    end
-
-    images0 = deepcopy(sample_images)
-    img_size_h = 900
-    img_size_w = 1000
-    for b in 1:5
-        images0[b].H, images0[b].W = img_size_h, img_size_w
-    end
+function gen_n_body_dataset(S::Int; patch_pixel_radius=20., perturb=true)
+    images = cropped_sample_images(900, 1000)
 
     fluxes = [4.451805E+03,1.491065E+03,2.264545E+03,2.027004E+03,1.846822E+04]
-
-    locations = rand(2, S) .* [img_size_h, img_size_w]
-    world_locations = WCS.pix_to_world(images0[3].wcs, locations)
-
+    locations = rand(2, S) .* [900, 1000]
+    world_locations = WCS.pix_to_world(images[3].wcs, locations)
     catalog = CatalogEntry[CatalogEntry(world_locations[:, s], true,
             fluxes, fluxes, 0.1, 0.7, pi/4, 4.0) for s in 1:S];
 
-    images = Synthetic.gen_blob(images0, catalog);
+    Synthetic.gen_images!(images, catalog);
 
     # Make non-constant background.
     for b=1:5

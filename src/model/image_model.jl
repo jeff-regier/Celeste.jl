@@ -97,3 +97,30 @@ mutable struct Image
     # not a Celeste type
     raw_psf_comp::RawPSF
 end
+
+
+# The code below lets us JLD serialize images instances.
+# Without this code we get an error for trying to serialize C pointers from WCS
+# and some problems for StaticArrays too.
+struct SerializedWCS
+    header::String
+end
+
+JLD.writeas(wcs::WCSTransform) = SerializedWCS(WCS.to_header(wcs))
+JLD.readas(s_wcs::SerializedWCS) = WCS.from_header(s_wcs.header)[1]
+
+
+struct PsfComponentSerial
+    alphaBar::Float64
+    xiBar::Vector{Float64}
+    tauBar::Matrix{Float64}
+end
+
+JLD.writeas(pcs::Vector{PsfComponent}) = begin
+    [PsfComponentSerial(pc.alphaBar, pc.xiBar, pc.tauBar) for pc in pcs]
+end
+JLD.readas(pcs::Vector{PsfComponentSerial}) = begin
+    [PsfComponent(pc.alphaBar,
+                  convert(SVector{2,Float64}, pc.xiBar),
+                  convert(SMatrix{2,2,Float64,4}, pc.tauBar)) for pc in pcs]
+end

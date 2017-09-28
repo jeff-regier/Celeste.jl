@@ -1,9 +1,10 @@
 module Synthetic
 
-export gen_blob
+export gen_image!, gen_images!
 
 using Celeste
 using Celeste.Model
+using Celeste.SensitiveFloats
 
 import WCS
 import Distributions
@@ -13,13 +14,8 @@ using StaticArrays
 
 # Generate synthetic data.
 
-function wrapped_poisson(rate::Float64)
-    0 < rate ? float(rand(Distributions.Poisson(rate))) : 0.
-end
-
-
 function get_patch(the_mean::SVector{2,Float64}, H::Int, W::Int)
-    radius = 50
+    radius = 25
     hm = round(Int, the_mean[1])
     wm = round(Int, the_mean[2])
     w11 = max(1, wm - radius):min(W, wm + radius)
@@ -28,93 +24,86 @@ function get_patch(the_mean::SVector{2,Float64}, H::Int, W::Int)
 end
 
 
-function write_gaussian(the_mean, the_cov, intensity, pixels;
-                        expectation=false)
+function write_gaussian!(pixel_rates, the_mean, the_cov, intensity)
     the_precision = inv(the_cov)
     c = sqrt(det(the_precision)) / 2pi
 
-    H, W = size(pixels)
+    H, W = size(pixel_rates)
     w_range, h_range = get_patch(the_mean, H, W)
 
     for w in w_range, h in h_range
         y = @SVector [the_mean[1] - h, the_mean[2] - w] # Maybe not hard code Float64
         ypy = dot(y,  the_precision * y)
         pdf_hw = c * exp(-0.5 * ypy)
-        pixel_rate = intensity * pdf_hw
-        pixels[h, w] += expectation ? pixel_rate : wrapped_poisson(pixel_rate)
-    end
-
-    pixels
-end
-
-
-function write_star(img0::Image, ce::CatalogEntry, pixels::Matrix{Float64};
-                    expectation=false)
-    iota = median(img0.nelec_per_nmgy)
-    for k in 1:length(img0.psf)
-        the_mean = SVector{2}(WCS.world_to_pix(img0.wcs, ce.pos)) + img0.psf[k].xiBar
-        the_cov = img0.psf[k].tauBar
-        intensity = ce.star_fluxes[img0.b] * iota * img0.psf[k].alphaBar
-        write_gaussian(the_mean, the_cov, intensity, pixels,
-            expectation = expectation)
+        pixel_rates[h, w] += intensity * pdf_hw
     end
 end
 
 
-function write_galaxy(img0::Image, ce::CatalogEntry, pixels::Matrix{Float64};
-                      expectation=false)
-    iota = median(img0.nelec_per_nmgy)
-    gal_frac_devs = [ce.gal_frac_dev, 1 - ce.gal_frac_dev]
-    XiXi = Model.get_bvn_cov(ce.gal_axis_ratio, ce.gal_angle, ce.gal_radius_px)
+function write_star_nmgy!(img::Image, ce::CatalogEntry)
+    p = Model.SkyPatch(img, ce, radius_override_pix=25)
+    fs0m = SensitiveFloat{Float64}(length(StarPosParams), 1, false, false)
 
-    for i in 1:2
-        for gproto in galaxy_prototypes[i]
-            for k in 1:length(img0.psf)
-                the_mean = SVector{2}(WCS.world_to_pix(img0.wcs, ce.pos)) +
-                           img0.psf[k].xiBar
-                the_cov = img0.psf[k].tauBar + gproto.nuBar * XiXi
-                intensity = ce.gal_fluxes[img0.b] * iota *
-                    img0.psf[k].alphaBar * gal_frac_devs[i] * gproto.etaBar
-                write_gaussian(the_mean, the_cov, intensity, pixels,
-                    expectation=expectation)
-            end
+    H2, W2 = size(p.active_pixel_bitmap)
+    for w2 in 1:W2, h2 in 1:H2
+        h = p.bitmap_offset[1] + h2
+        w = p.bitmap_offset[2] + w2
+        Model.star_light_density!(fs0m, p, h, w, ce.pos, false)
+        img.pixels[h, w] += fs0m.v[] * ce.star_fluxes[img.b]
+    end
+end
+
+
+function write_galaxy_nmgy!(img::Image, ce::CatalogEntry)
+    bvn_derivs = Model.BivariateNormalDerivatives{Float64}()
+    fs1m = SensitiveFloat{Float64}(length(GalaxyPosParams), 1, false, false)
+    patches = Model.get_sky_patches([img], [ce], radius_override_pix=25.0)
+    source_params = [[ce.pos[1], ce.pos[2], ce.gal_frac_dev, ce.gal_axis_ratio,
+                     ce.gal_angle, ce.gal_radius_px],]
+    star_mcs, gal_mcs = Model.load_bvn_mixtures(1, patches,
+                          source_params, [1,], length(img.psf), 1,
+                          calculate_gradient=false,
+                          calculate_hessian=false)
+    p = patches[1]
+    H2, W2 = size(p.active_pixel_bitmap)
+    for w2 in 1:W2, h2 in 1:H2
+        # (h2, w2) index the local patch, while (h, w) index the image
+        h = p.bitmap_offset[1] + h2
+        w = p.bitmap_offset[2] + w2
+        Model.populate_gal_fsm!(fs1m, bvn_derivs, 1, h, w, false, p.wcs_jacobian, gal_mcs)
+        img.pixels[h, w] += fs1m.v[] * ce.gal_fluxes[img.b]
+    end
+end
+
+
+function gen_image!(img::Image, n_bodies::Vector{CatalogEntry}; expectation=false)
+    H, W = size(img.pixels)
+    for w in 1:W, h in 1:H
+        img.pixels[h, w] = img.sky[h, w]  # in nmgy
+    end
+
+    for body in n_bodies
+        body.is_star ? write_star_nmgy!(img, body) : write_galaxy_nmgy!(img, body)
+    end
+
+    img.pixels .*= img.nelec_per_nmgy
+
+    if !expectation
+        for w in 1:W, h in 1:H
+            img.pixels[h, w] = rand(Distributions.Poisson(img.pixels[h, w]))
         end
     end
 end
 
-function gen_image(img0::Image, n_bodies::Vector{CatalogEntry}; expectation=false)
-    epsilon = img0.sky[1, 1]
-    iota = img0.nelec_per_nmgy[1]
-
-    if expectation
-        pixels = [epsilon * iota for h=1:img0.H, w=1:img0.W]
-    else
-        pixels = reshape(float(rand(Distributions.Poisson(epsilon * iota),
-                         img0.H * img0.W)), img0.H, img0.W)
-    end
-
-    for body in n_bodies
-        body.is_star ? write_star(img0, body, pixels) : write_galaxy(img0, body, pixels)
-    end
-
-    sky = SkyIntensity(fill(epsilon, img0.H, img0.W),
-                       collect(1:img0.H), collect(1:img0.W),
-                       ones(img0.H))
-    nelec_per_nmgy = fill(iota, img0.H)
-
-    return Image(img0.H, img0.W, pixels, img0.b, img0.wcs,
-                 img0.psf,
-                 img0.run_num, img0.camcol_num, img0.field_num,
-                 sky, nelec_per_nmgy,
-                 img0.raw_psf_comp)
-end
 
 """
-Generate a simulated blob based on a vector of catalog entries using
+Generate a synthetic images based on a vector of catalog entries using
 identity world coordinates.
 """
-function gen_blob(blob0::Vector{Image}, n_bodies::Vector{CatalogEntry}; expectation=false)
-    [gen_image(blob0[b], n_bodies, expectation=expectation) for b in 1:5]
+function gen_images!(images::Vector{Image}, n_bodies::Vector{CatalogEntry}; expectation=false)
+    for img in images
+        gen_image!(img, n_bodies; expectation=expectation)
+    end
 end
 
 

@@ -1,6 +1,7 @@
 #!/usr/bin/env julia
 
 using DataFrames
+import JLD
 
 import Celeste.AccuracyBenchmark
 import Celeste.ArgumentParse
@@ -27,35 +28,8 @@ ArgumentParse.add_argument(
 )
 ArgumentParse.add_argument(
     parser,
-    "--min-radius-px",
-    help="Override Config.min_radius_px with the given value",
-    arg_type=Float64,
-)
-ArgumentParse.add_argument(
-    parser,
-    "--image-fits",
-    help="FITS file containing synthetic imagery; if not specified, will use SDSS RCF",
-)
-ArgumentParse.add_argument(
-    parser,
-    "--run",
-    help="SDSS run #",
-    arg_type=Int,
-    default=AccuracyBenchmark.STRIPE82_RCF.run,
-)
-ArgumentParse.add_argument(
-    parser,
-    "--camcol",
-    help="SDSS camcol #",
-    arg_type=Int,
-    default=AccuracyBenchmark.STRIPE82_RCF.camcol,
-)
-ArgumentParse.add_argument(
-    parser,
-    "--field",
-    help="SDSS field #",
-    arg_type=Int,
-    default=AccuracyBenchmark.STRIPE82_RCF.field,
+    "--images-jld",
+    help="FITS file containing synthetic imagery; if not specified, will use SDSS (primary) images",
 )
 ArgumentParse.add_argument(
     parser,
@@ -65,16 +39,11 @@ ArgumentParse.add_argument(
 )
 parsed_args = ArgumentParse.parse_args(parser, ARGS)
 
-if haskey(parsed_args, "image-fits")
-    extensions = AccuracyBenchmark.read_fits(parsed_args["image-fits"])
-    images = AccuracyBenchmark.make_images(extensions)
-    catalog_label = splitext(basename(parsed_args["image-fits"]))[1]
+if haskey(parsed_args, "images-jld")
+    images = JLD.load(parsed_args["images-jld"], "images")
+    catalog_label = splitext(basename(parsed_args["images-jld"]))[1]
 else
-    rcf = SDSSIO.RunCamcolField(
-        parsed_args["run"],
-        parsed_args["camcol"],
-        parsed_args["field"],
-    )
+    rcf = AccuracyBenchmark.STRIPE82_RCF
     strategy = SDSSIO.PlainFITSStrategy(AccuracyBenchmark.SDSS_DATA_DIR)
     images = SDSSIO.load_field_images(strategy, [rcf])
     catalog_label = @sprintf("sdss_%s_%s_%s", rcf.run, rcf.camcol, rcf.field)
@@ -97,12 +66,8 @@ else
     target_sources = collect(1:length(catalog_entries))
 end
 
-config = Config()
-if haskey(parsed_args, "min-radius-px")
-    config.min_radius_pix = parsed_args["min-radius-px"]
-end
 results = AccuracyBenchmark.run_celeste(
-    config,
+    Config(25.0),
     catalog_entries,
     target_sources,
     images,
