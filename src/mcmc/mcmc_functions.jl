@@ -43,10 +43,6 @@ function make_star_inference_functions(imgs::Array{Image},
     end
 
     # quick test
-    #th_cat = [log.(entry.star_fluxes)..., deg_to_uniform(entry.pos)...]
-    #th_rand = th_cat #sample_star_prior()
-    #println("star loglike at CATALOG vs PRIOR : ", star_loglike(th_cat), ", ", star_loglike(th_rand))
-    #println("star logprior at CATALOG vs PRIOR : ", star_logprior(th_cat), ", ", star_logprior(th_rand))
     return loglike, logprior, logpost, sample_prior,
            ra_lim, dec_lim, uniform_to_deg, deg_to_uniform
 end
@@ -114,7 +110,7 @@ function make_star_loglike(imgs::Array{Image};
                            patches::Array{SkyPatch, 1}=nothing,
                            background_images::Array{Array{Float64, 2}, 1}=nothing,
                            pos_transform::Function=nothing,
-                           use_raw_psf=true)
+                           use_raw_psf=false)
     # create background images --- sky noise and neighbors if there
     if background_images == nothing
         background_images = make_empty_background_images(imgs)
@@ -129,6 +125,11 @@ function make_star_loglike(imgs::Array{Image};
                         for p in patches]...)
         active_bitmaps = [p.active_pixel_bitmap for p in patches]
     end
+
+    # cache the log(data!) term (lgamma in poisson lnpdf) --- this call is
+    # a fixed constant wrt params, and only enters into the likelihood
+    # as a sum, so we can compute it here and cache it
+    lgamma_const = compute_lgamma_sum(imgs, active_bitmaps)
 
     # create iota vecs --- number of elecs per nanomaggy fo reach image
     nelec_per_nmgy_vec = [Float64(median(img.nelec_per_nmgy)) for img in imgs]
@@ -171,21 +172,12 @@ function make_star_loglike(imgs::Array{Image};
                 is_active  = active_bitmap[h, w]
                 if !isnan(pixel_data) && is_active
                     rate_hw = background[h,w] + bflux*src_pixels[h,w]
-                    ll += poisson_lnpdf(pixel_data, rate_hw)
+                    #ll += poisson_lnpdf(pixel_data, rate_hw)
+                    ll += (pixel_data*log(rate_hw) - rate_hw)
                 end
             end
         end
-        return ll
-
-        # test model star_loglike handle
-        #lnr, colors = logfluxes_to_colors(lnfluxes)
-        #dummy_shape = [1., 1., 1., 1.]
-        #active_sources = [1]
-        #llm = Model.state_log_likelihood(true, lnr, colors, pos,
-        #                                 dummy_shape, imgs, patches,
-        #                                 active_sources, 
-        #                                 [1][1., 1., 1., 1.], 
-
+        return ll - lgamma_const
     end
 
     return star_loglike
@@ -237,6 +229,11 @@ function make_gal_loglike(imgs::Array{Image};
                         for p in patches]...)
         active_bitmaps = [p.active_pixel_bitmap for p in patches]
     end
+
+    # cache the log(data!) term (lgamma in poisson lnpdf) --- this call is
+    # a fixed constant wrt params, and only enters into the likelihood
+    # as a sum, so we can compute it here and cache it
+    lgamma_const = compute_lgamma_sum(imgs, active_bitmaps)
 
     function pretty_print_galaxy_params(th)
         lnfluxes, unc_pos, ushape = th[1:5], th[6:7], th[8:end]
@@ -291,11 +288,12 @@ function make_gal_loglike(imgs::Array{Image};
                 is_active  = active_bitmap[h,w]
                 if !isnan(pixel_data) && is_active
                     rate_hw = background[h,w] + bflux*src_pixels[h,w]
-                    ll += poisson_lnpdf(pixel_data, rate_hw)
+                    #ll += poisson_lnpdf(pixel_data, rate_hw)
+                    ll += (pixel_data*log(rate_hw) - rate_hw)
                 end
             end
         end
-        return ll
+        return ll - lgamma_const
     end
 
     return gal_loglike
@@ -305,7 +303,6 @@ end
 ##########
 # priors #
 ##########
-
 
 """
 Create a uniform prior around a RA/DEC location --- specify size of box
@@ -418,6 +415,22 @@ function make_empty_background_images(imgs::Array{Image})
         push!(background_images, sky_pixels)
     end
     return background_images
+end
+
+
+function compute_lgamma_sum(imgs::Array{Image}, active_bitmaps)
+    lgamma_const = 0.
+    for ii in 1:length(imgs)
+        img, active_bitmap = imgs[ii], active_bitmaps[ii]
+        for h in 1:img.H, w in 1:img.W
+            pixel_data = img.pixels[h,w]
+            is_active  = active_bitmap[h,w]
+            if !isnan(pixel_data) && is_active
+                lgamma_const += lgamma(pixel_data+1.)
+            end
+        end
+    end
+    return lgamma_const
 end
 
 
