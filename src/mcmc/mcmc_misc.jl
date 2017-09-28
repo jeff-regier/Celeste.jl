@@ -128,7 +128,7 @@ function samples_to_dataframe(chain; is_star=true)
       df[:gal_frac_dev]   = chain[:, 8]
       df[:gal_axis_ratio] = chain[:, 9]
       df[:gal_angle_deg]  = chain[:, 10] * 360 / (2*pi) # rad => deg
-      df[:gal_radius_px]  = chain[:, 11] .* sqrt.(df[:minor_major_axis_ratio])
+      df[:gal_radius_px]  = chain[:, 11] .* sqrt.(df[:gal_axis_ratio])
     end
     return df
 end
@@ -314,8 +314,8 @@ function render_patch(img::Image, patch::SkyPatch, n_bodies::Vector{CatalogEntry
               )
         else
             write_galaxy_unit_flux(body.pos, img.psf, img.wcs, iota,
-                body.gal_frac_dev, body.gal_ab, body.gal_angle,
-                body.gal_scale, patch_pixels;
+                body.gal_frac_dev, body.gal_axis_ratio, body.gal_angle,
+                body.gal_radius_px, patch_pixels;
                 offset = offset,
                 flux   = body.gal_fluxes[img.b]
               )
