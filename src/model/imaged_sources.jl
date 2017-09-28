@@ -54,7 +54,7 @@ function SkyPatch(img::Image, ce::CatalogEntry; radius_override_pix=NaN)
     # all pixels are active by default
     active_pixel_bitmap = trues(H2, W2)
 
-    grid_psf = Model.eval_psf(img.raw_psf_comp, pixel_center[1], pixel_center[2])
+    grid_psf = img.psfmap(pixel_center[1], pixel_center[2])
     grid_psf[:, :] = max.(grid_psf, 0.0)
     grid_psf += 1e-6
     grid_psf /= sum(grid_psf)
@@ -77,7 +77,7 @@ function SkyPatch(img::Image, ce::CatalogEntry; radius_override_pix=NaN)
 end
 
 
-function get_sky_patches(images::Vector{Image},
+function get_sky_patches(images::Vector{<:Image},
                          catalog::Vector{CatalogEntry};
                          radius_override_pix=NaN)
     N = length(images)

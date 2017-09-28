@@ -56,7 +56,7 @@ Arguments:
 """
 function find_neighbors(target_sources::Vector{Int64},
                         catalog::Vector{CatalogEntry},
-                        images::Vector{Image})
+                        images::Vector{<:Image})
     psf_width_ub = zeros(NUM_BANDS)
     for img in images
         psf_width = Model.get_psf_width(img.psf)
@@ -111,7 +111,7 @@ Non-standard arguments:
   noise_fraction: The proportion of the noise below which we will remove pixels.
 """
 function load_active_pixels!(config::Config,
-                             images::Vector{Image},
+                             images::Vector{<:Image},
                              patches::Matrix{SkyPatch};
                              exclude_nan=true,
                              noise_fraction=0.5)
@@ -154,7 +154,7 @@ function load_active_pixels!(config::Config,
 end
 
 # legacy wrapper
-function load_active_pixels!(images::Vector{Image},
+function load_active_pixels!(images::Vector{<:Image},
                              patches::Matrix{SkyPatch};
                              exclude_nan=true,
                              noise_fraction=0.5)
@@ -516,7 +516,7 @@ function process_source(config::Config,
                         catalog::Vector{CatalogEntry},
                         target_sources::Vector{Int},
                         neighbor_map::Vector{Vector{Int}},
-                        images::Vector{Image})
+                        images::Vector{<:Image})
     neighbors = catalog[neighbor_map[ts]]
     if length(neighbors) > 100
         msg = string("object at RA, Dec = $(entry.pos) has an excessive",
@@ -551,7 +551,7 @@ callback and write the results to a file.
 function one_node_single_infer(catalog::Vector{CatalogEntry},
                                target_sources::Vector{Int},
                                neighbor_map::Vector{Vector{Int}},
-                               images::Vector{Image};
+                               images::Vector{<:Image};
                                config=Config())
     curr_source = 1
     last_source = length(target_sources)

@@ -9,7 +9,7 @@ export Image, SkyPatch, PsfComponent,
        GalaxyComponent, GalaxyPrototype,
        PriorParams, CanonicalParams, BrightnessParams, StarPosParams,
        GalaxyPosParams, GalaxyShapeParams,
-       PsfParams, RawPSF, CatalogEntry,
+       PsfParams, CatalogEntry,
        ParamSet, SkyIntensity
 
 # functions
