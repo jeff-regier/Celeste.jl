@@ -15,9 +15,17 @@ end
 
 # output a single poisson log likelihood
 function poisson_lnpdf(data, lam)
-    return float(logpdf(Distributions.Poisson(lam), data))
+    #lldist = float(logpdf(Distributions.Poisson(lam), data))
+    return data*log(lam) - lam - lgamma(data+1.)
 end
 
+# constrain checking
+function inrange(val, a, b)
+    if (val <= a) || (val >= b)
+        return false
+    end
+    return true
+end
 
 #######################################################
 # save images + plotting stuff for numpy/matplotlib   #
@@ -48,8 +56,8 @@ end
 
 
 """
-Given a function (lnpdf), that takes in a NUM_COLOR_COMPONENTS dimensional vector (th),
-this function fixes NUM_COLOR_COMPONENTS-1 of the dimensions of th, and returns a function
+Given a function (lnpdf), that takes in a D dimensional vector (th),
+this function fixes D-1 of the dimensions of th, and returns a function
 handle that only varies with respect to dimension d.
 """
 function curry_dim(lnpdf::Function, th0::Vector{Float64}, dim::Int)
@@ -94,49 +102,66 @@ function catalog_to_data_frame_row(catalog_entry; objid="truth")
     return df
 end
 
-function samples_to_data_frame_rows(chain; is_star=true)
-    df = DataFrame()
+function samples_to_dataframe(chain; is_star=true)
+    """ Turns MCMC samples (star or galaxy chain) into a dataframe of samples 
+    with parameters we can compare to Photo and VB inferences
 
+    Conversions performed:
+      - lnfluxes  : lnfluxes => reference band lnflux and colors
+      - gal_angle : radians [0, pi] => degrees [0, 180]
+      - half_light_radius_px : the Celeste parameterization is uncoupled from
+         the minor_major_axis_ratio --- in the coadd+primary catalogs the
+         :half_light_radius_px is scaled by the sqrt of the
+         :minor_major_axis_ratio, e.g. px => px / sqrt(gal_ab)
+    """
+    df = DataFrame()
     # reference band flux (+ log flux) and colors
     df[:log_flux_r]  = chain[:,3]
     df[:flux_r_nmgy] = exp.(chain[:,3])
-    df[:color_ug] = chain[:,2] .- chain[:,1]
-    df[:color_gr] = chain[:,3] .- chain[:,2]
-    df[:color_ri] = chain[:,4] .- chain[:,3]
-    df[:color_iz] = chain[:,5] .- chain[:,4]
-
-    u_samps = [constrain_pos(chain[p,6:7]) for p in 1:size(chain, 1)]
-    u_samps = transpose(hcat(u_samps...))
-
-    df[:ra] = u_samps[:,1]
-    df[:dec]     = u_samps[:,2]
-
+    df[:color_ug]    = chain[:,2] .- chain[:,1]
+    df[:color_gr]    = chain[:,3] .- chain[:,2]
+    df[:color_ri]    = chain[:,4] .- chain[:,3]
+    df[:color_iz]    = chain[:,5] .- chain[:,4]
+    df[:ra]          = chain[:, 6]
+    df[:dec]         = chain[:, 7]
+    if !is_star
+      df[:gal_frac_dev]   = chain[:, 8]
+      df[:gal_axis_ratio] = chain[:, 9]
+      df[:gal_angle_deg]  = chain[:, 10] * 360 / (2*pi) # rad => deg
+      df[:gal_radius_px]  = chain[:, 11] .* sqrt.(df[:gal_axis_ratio])
+    end
     return df
 end
 
 
-function samples_to_data_frame_row(sampdf; objid="mcmc")
-    """ only for stars right now """
+function samples_to_dataframe_row(sampdf; is_star=true)
+    """ summarize a set of samples into a single dataframe row """
     df = DataFrame()
-    df[:objid]                          = [objid]
-    df[:ra]            = [mean(sampdf[:ra])]
-    df[:dec]                = [mean(sampdf[:dec])]
-    df[:is_star]                        = [true]
-    df[:gal_frac_dev]  = [NaN]
-    df[:gal_axis_ratio]         = [NaN]
-    df[:gal_radius_px]           = [NaN]
-    df[:gal_angle_deg]                      = [NaN]
+    df[:ra]                = [mean(sampdf[:ra])]
+    df[:dec]               = [mean(sampdf[:dec])]
+    df[:is_star]           = [true]
+    df[:gal_frac_dev]      = [NaN]
+    df[:gal_axis_ratio]    = [NaN]
+    df[:gal_radius_px]     = [NaN]
+    df[:gal_angle_deg]     = [NaN]
     df[:flux_r_nmgy]       = [mean(sampdf[:flux_r_nmgy])]
+    df[:log_flux_r]        = [mean(sampdf[:log_flux_r])]
     df[:log_flux_r_stderr] = [std(sampdf[:log_flux_r])]
-    df[:color_ug]             = [mean(sampdf[:color_ug])]
-    df[:color_gr]             = [mean(sampdf[:color_gr])]
-    df[:color_ri]             = [mean(sampdf[:color_ri])]
-    df[:color_iz]             = [mean(sampdf[:color_iz])]
-    df[:color_ug_stderr]      = [std(sampdf[:color_ug])]
-    df[:color_gr_stderr]      = [std(sampdf[:color_gr])]
-    df[:color_ri_stderr]      = [std(sampdf[:color_ri])]
-    df[:color_iz_stderr]      = [std(sampdf[:color_iz])]
-
+    df[:color_ug]          = [mean(sampdf[:color_ug])]
+    df[:color_gr]          = [mean(sampdf[:color_gr])]
+    df[:color_ri]          = [mean(sampdf[:color_ri])]
+    df[:color_iz]          = [mean(sampdf[:color_iz])]
+    df[:color_ug_stderr]   = [std(sampdf[:color_ug])]
+    df[:color_gr_stderr]   = [std(sampdf[:color_gr])]
+    df[:color_ri_stderr]   = [std(sampdf[:color_ri])]
+    df[:color_iz_stderr]   = [std(sampdf[:color_iz])]
+    if !is_star
+        df[:is_star]                        = [false]
+        df[:gal_frac_dev]   = [mean(sampdf[:gal_frac_dev])]
+        df[:gal_axis_ratio] = [mean(sampdf[:gal_axis_ratio])]
+        df[:gal_radius_px]  = [mean(sampdf[:gal_radius_px])]
+        df[:gal_angle_deg]  = [mean(sampdf[:gal_angle_deg])]
+    end
     return df
 end
 
@@ -174,44 +199,135 @@ end
 # Very similar to Synthetic.jl functions                             #
 ######################################################################
 
-function write_star_unit_flux(img0::Image,
-                              pos::Array{Float64, 1},
-                              pixels::Matrix{Float64})
-    iota = median(img0.nelec_per_nmgy)
-    for k in 1:length(img0.psf)
-        the_mean = SVector{2}(WCS.world_to_pix(img0.wcs, pos)) + img0.psf[k].xiBar
-        the_cov = img0.psf[k].tauBar
-        intensity = iota * img0.psf[k].alphaBar
+"""
+Add a star to a matrix of pixels.  Defaults to unit flux.
+"""
+function write_star_unit_flux(pos::Array{Float64, 1},
+                              psf::Array{Model.PsfComponent,1},
+                              wcs::WCS.WCSTransform,
+                              iota::Float64,
+                              pixels::Matrix{Float64};
+                              offset::Array{Float64, 1}=[0., 0.],
+                              flux::Float64=1.)
+    # write the unit-flux scaled, correctly offset psf
+    for k in 1:length(psf)
+        # mean in pixels space
+        the_mean = SVector{2}(WCS.world_to_pix(wcs, pos) - offset) + psf[k].xiBar
+        the_cov  = psf[k].tauBar
+        intensity = flux * iota * psf[k].alphaBar
         write_gaussian(the_mean, the_cov, intensity, pixels)
     end
 end
 
-function write_galaxy_unit_flux(img0::Image,
-                                pos::Array{Float64,1},
+function write_star_unit_flux_raw(world_pos::Array{Float64, 1},
+                                  patch::SkyPatch,
+                                  iota::Float64,
+                                  pixels::Matrix{Float64};
+                                  flux::Float64=1.)
+    fs0m = SensitiveFloat{Float64}(length(StarPosParams), 1, false, false)
+    H, W = size(pixels)
+    for w in 1:W, h in 1:H
+        hfield = patch.bitmap_offset[1] + h
+        wfield = patch.bitmap_offset[2] + w
+        Model.star_light_density!(fs0m, patch, hfield, wfield, world_pos, false)
+        pixel_rate = flux * iota * fs0m.v[]
+        pixels[h, w] += pixel_rate
+    end
+end
+
+"""
+Add a galaxy model image to a matrix of pixels.  Defaults to unit flux.
+"""
+function write_galaxy_unit_flux(pos::Array{Float64, 1},
+                                psf::Array{Model.PsfComponent,1},
+                                wcs::WCS.WCSTransform,
+                                iota::Float64,
                                 gal_frac_dev::Float64,
                                 gal_axis_ratio::Float64,
                                 gal_angle::Float64,
-                                gal_radius_px::Float64,
-                                pixels::Matrix{Float64})
-    iota = median(img0.nelec_per_nmgy)
-    gal_frac_devs = [gal_frac_dev, 1 - gal_frac_dev]
-    #XiXi = DeterministicVI.get_bvn_cov(ce.gal_axis_ratio, ce.gal_angle, ce.gal_radius_px)
-    XiXi = Model.get_bvn_cov(gal_axis_ratio, gal_angle, gal_radius_px)
-
+                                gal_scale::Float64,
+                                pixels::Matrix{Float64};
+                                offset::Array{Float64, 1}=[0., 0.],
+                                flux::Float64=1.)
+    # write the unit-flux scaled, correctly offset galaxy shape + 
+    # psf convolution
+    e_devs = [gal_frac_dev, 1 - gal_frac_dev]
+    XiXi = Model.get_bvn_cov(gal_axis_ratio, gal_angle, gal_scale)
     for i in 1:2
         for gproto in galaxy_prototypes[i]
-            for k in 1:length(img0.psf)
-                the_mean = SVector{2}(WCS.world_to_pix(img0.wcs, pos)) +
-                           img0.psf[k].xiBar
-                the_cov = img0.psf[k].tauBar + gproto.nuBar * XiXi
-                intensity = iota * img0.psf[k].alphaBar * gal_frac_devs[i] *
-                    gproto.etaBar
+            for k in 1:length(psf)
+                the_mean = SVector{2}(WCS.world_to_pix(wcs, pos) - offset) +
+                           psf[k].xiBar
+                the_cov = psf[k].tauBar + gproto.nuBar * XiXi
+                intensity = flux * iota * psf[k].alphaBar * e_devs[i] * gproto.etaBar
                 write_gaussian(the_mean, the_cov, intensity, pixels)
             end
         end
     end
 end
 
+function write_galaxy_unit_flux_pixel(px_pos::Array{Float64, 1},
+                                      psf::Array{Model.PsfComponent,1},
+                                      iota::Float64,
+                                      gal_frac_dev::Float64,
+                                      gal_axis_ratio::Float64,
+                                      gal_angle::Float64,
+                                      gal_scale::Float64,
+                                      pixels::Matrix{Float64};
+                                      flux::Float64=1.)
+    # write the unit-flux scaled, correctly offset galaxy shape + 
+    # psf convolution
+    e_devs = [gal_frac_dev, 1 - gal_frac_dev]
+    XiXi = Model.get_bvn_cov(gal_axis_ratio, gal_angle, gal_scale)
+    for i in 1:2
+        for gproto in galaxy_prototypes[i]
+            for k in 1:length(psf)
+                the_mean = px_pos + psf[k].xiBar
+                the_cov = psf[k].tauBar + gproto.nuBar * XiXi
+                intensity = flux * iota * psf[k].alphaBar * e_devs[i] * gproto.etaBar
+                write_gaussian(the_mean, the_cov, intensity, pixels)
+            end
+        end
+    end
+end
+
+
+"""
+Generate a model image on a patch, according to that image/patch psf
+"""
+function render_patch(img::Image, patch::SkyPatch, n_bodies::Vector{CatalogEntry})
+    # sky noise an gain
+    epsilon = img.sky[1, 1]
+    iota    = Float64(median(img.nelec_per_nmgy))
+    offset  = convert(Array{Float64, 1}, patch.bitmap_offset)
+
+    # create sky noise background image
+    H, W = size(patch.active_pixel_bitmap)
+    patch_pixels = [epsilon*iota for h=1:H, w=1:W]
+
+    # write star/gal model images onto patch_pixels
+    for body in n_bodies
+        if body.is_star
+            write_star_unit_flux(body.pos, img.psf, img.wcs, iota, patch_pixels;
+                offset = offset,
+                flux   = body.star_fluxes[img.b]
+              )
+        else
+            write_galaxy_unit_flux(body.pos, img.psf, img.wcs, iota,
+                body.gal_frac_dev, body.gal_axis_ratio, body.gal_angle,
+                body.gal_radius_px, patch_pixels;
+                offset = offset,
+                flux   = body.gal_fluxes[img.b]
+              )
+        end
+    end
+    return patch_pixels
+end
+
+
+"""
+Write a gaussian bump on a pixel array
+"""
 function write_gaussian(the_mean, the_cov, intensity, pixels)
     the_precision = inv(the_cov)
     c = sqrt(det(the_precision)) / 2pi
@@ -239,14 +355,37 @@ function get_patch(the_mean::SVector{2,Float64}, H::Int, W::Int)
 end
 
 
+#########################################
+# older interface 
+#########################################
+function write_star_unit_flux(img0::Image,
+                              pos::Array{Float64, 1},
+                              pixels::Matrix{Float64})
+    iota = Float64(median(img0.nelec_per_nmgy))
+    write_star_unit_flux(pos, img0.psf, img0.wcs, iota, pixels)
+end
+
+function write_galaxy_unit_flux(img0::Image,
+                                pos::Array{Float64,1},
+                                gal_frac_dev::Float64,
+                                gal_ab::Float64,
+                                gal_angle::Float64,
+                                gal_scale::Float64,
+                                pixels::Matrix{Float64})
+    iota = Float64(median(img0.nelec_per_nmgy))
+    write_galaxy_unit_flux(pos, img0.psf, img0.wcs, iota,
+        gal_frac_dev, gal_ab, gal_angle, gal_scale, pixels)
+end
+
+
 """
 Potential Scale Reduction Factor --- Followed the formula from the
 following website:
 http://blog.stata.com/2016/05/26/gelman-rubin-convergence-diagnostic-using-multiple-chains/
 """
 function potential_scale_reduction_factor(chains)
-    # each chain has to be size N x NUM_COLOR_COMPONENTS, we have M chains
-    N, NUM_COLOR_COMPONENTS  = size(chains[1])
+    # each chain has to be size N x D, we have M chains
+    N, D  = size(chains[1])
     M     = length(chains)
 
     # mean and variance of each chain
@@ -257,13 +396,13 @@ function potential_scale_reduction_factor(chains)
     gmu   = mean(means, 1)
 
     # between chain variance:w
-    NUM_BANDS = float(N)/(float(M)-1)*sum( broadcast(-, means, gmu).^2, 1)
+    B = float(N)/(float(M)-1)*sum( broadcast(-, means, gmu).^2, 1)
 
     # average within chain variance
     W = mean(vars, 1)
 
     # compute PRSF ratio
-    Vhat = (float(N)-1.)/float(N) * W + (float(M)+1)/float(N*M) * NUM_BANDS
+    Vhat = (float(N)-1.)/float(N) * W + (float(M)+1)/float(N*M) * B
     psrf = Vhat ./ W
     return psrf
 end
@@ -290,3 +429,41 @@ function chains_to_dataframe(chains, logprobs, colnames)
     sdf[:chain] = chain_id
     return sdf
 end
+
+
+"""
+creates a new image from an existing larger (field) and a patch object
+"""
+function patch_to_image(patch::SkyPatch, img::Image; round_pixels_to_int=true)
+    # subselect patch pixels from image
+    Hr = patch.bitmap_offset[1]:(patch.bitmap_offset[1] +
+                                size(patch.active_pixel_bitmap)[1] - 1)
+    Wr = patch.bitmap_offset[2]:(patch.bitmap_offset[2] +
+                                size(patch.active_pixel_bitmap)[2] - 1)
+    patch_pixels = img.pixels[Hr, Wr]
+    if round_pixels_to_int
+        patch_pixels = round.(patch_pixels)
+    end
+    H, W = length(Hr), length(Wr)
+
+    # create sub sky intensity object
+    sky_small   = fill(median(img.sky.sky_small), H, W)
+    calibration = img.sky.calibration[Hr]
+    sky_x       = img.sky.sky_x[Hr]
+    sky_y       = img.sky.sky_y[Wr]
+    sky         = SkyIntensity(sky_small, sky_x, sky_y, calibration)
+    nelec_per_nmgy = img.nelec_per_nmgy[Hr]
+
+    # TODO create an adjusted WCS object
+    #wcs = deepcopy(img.wcs)
+    #wcs[:crpix] = wcs[:crpix] - patch.bitmap_offset
+
+    # instantiate a smaller patch image
+    patch_image = Image(H, W, patch_pixels, img.b, img.wcs,
+                        patch.psf,
+                        img.run_num, img.camcol_num, img.field_num,
+                        sky, nelec_per_nmgy, img.raw_psf_comp)
+    return patch_image
+end
+
+
