@@ -15,6 +15,7 @@ import ..SDSSIO: RunCamcolField, IOStrategy, PlainFITSStrategy
 import ..PSF
 import ..SEP
 import ..Coordinates: angular_separation, match_coordinates
+import ..MCMC
 
 export BoundingBox
 
@@ -545,6 +546,51 @@ end
 
 
 """
+Run MCMC to process a source.  Returns 
+"""
+function process_source_mcmc(config::Config,
+                             ts::Int,
+                             catalog::Vector{CatalogEntry},
+                             target_sources::Vector{Int},
+                             neighbor_map::Vector{Vector{Int}},
+                             images::Vector{Image};
+                             use_ais::Bool=true)
+    # subselect source, select active source and neighbor set
+    s = target_sources[ts]
+    entry = catalog[s]
+    neighbors = catalog[neighbor_map[ts]]
+    if length(neighbors) > 100
+        msg = string("objid $(entry.objid) [ra: $(entry.pos)] has an excessive",
+                     "number ($(length(neighbors))) of neighbors")
+        Log.warn(msg)
+    end
+
+    # 1. handle SkyPatch subsampling for the active source `entry`
+    cat_local = vcat([entry], neighbors)
+    patches = Model.get_sky_patches(images, cat_local)
+    load_active_pixels!(config, images, patches)
+
+    # create smaller images for the MCMC sampler to use
+    patch_images = [MCMC.patch_to_image(patches[1, i], images[i])
+                    for i in 1:length(images)]
+
+    # render a background image on the active source (first in list)
+    background_images = [MCMC.render_patch(images[i], patches[1, i], neighbors)
+                         for i in 1:length(images)]
+
+    # run mcmc sampler on this image/patch/background initialized at entry
+    if use_ais
+        mcmc_results = MCMC.run_ais(entry, patch_images, patches, background_images)
+    else
+        mcmc_results = MCMC.run_mcmc(entry, patch_images, patches, background_images)
+    end
+
+    # summary
+    return mcmc_results
+end
+
+
+"""
 Use multiple threads to process each target source with the specified
 callback and write the results to a file.
 """
@@ -552,12 +598,17 @@ function one_node_single_infer(catalog::Vector{CatalogEntry},
                                target_sources::Vector{Int},
                                neighbor_map::Vector{Vector{Int}},
                                images::Vector{Image};
-                               config=Config())
+                               config=Config(),
+                               do_vi=true)
     curr_source = 1
     last_source = length(target_sources)
     sources_lock = SpinLock()
-    results = OptimizedSource[]
     results_lock = SpinLock()
+    if do_vi
+        results = OptimizedSource[]
+    else
+        results = []
+    end
 
     # iterate over sources
     function process_sources()
@@ -573,8 +624,13 @@ function one_node_single_infer(catalog::Vector{CatalogEntry},
             end
 
             try
-                result = process_source(config, ts, catalog, target_sources,
-                                        neighbor_map, images)
+                if do_vi
+                    result = process_source(config, ts, catalog, target_sources,
+                                            neighbor_map, images)
+                else
+                    result = process_source_mcmc(config, ts, catalog,
+                        target_sources, neighbor_map, images)
+                end
 
                 lock(results_lock)
                 push!(results, result)
