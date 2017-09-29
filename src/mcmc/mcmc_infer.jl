@@ -1,47 +1,6 @@
-#### Celeste Specific MCMC Functions
-
-#"""
-#Main MCMC function for a field/catalog.
-#Mimics a composition of the AccuracyBenchmarks.run_celeste
-#and the AccuracyBenchmark.celeste_to_df functions.
-#
-#Should return catalog that can be used with `accuracy/score_prediction` and
-#`accuracy/score_uncertainty`.
-#
-#Input:
-#  - config : defines a pixel restriction
-#  - catalog_entries : 
-#  - target_sources : (1, ..., n_sources)
-#  - images : ...
-#
-#Output:
-#  - results_df : dataframe with rows ...
-#"""
-#function run_celeste_mcmc(config::Config,
-#                          catalog_entries,
-#                          target_sources,
-#                          images)
-#    # for each source, establish list of neighboring sources
-#    neighbor_map = ParallelRun.find_neighbors(target_sources, catalog_entries, images)
-#
-#    # infer on each source
-#    results = one_node_single_infer_mcmc(
-#      config,
-#      catalog_entries,
-#      target_sources,
-#      neighbor_map,
-#      images,
-#    )
-#
-#    # collect into a single dataframe
-#    return results
-#end
-#
-#    star_row, gal_row = summarize_samples(mcmc_results, entry)
-#    mcmc_results["star_row"] = star_row
-#    mcmc_results["gal_row"]  = gal_row
-# 
-
+# High level MCMC and AIS inference functions.  These functions
+# construct the star and galaxy log likelihood and prior functions, and
+# run either Slice-Sampling or Slice-Sampling-within-AIS
 
 """
 Runs Annealed Importance Sampling on both the Star and Galaxy posteriors
@@ -53,15 +12,14 @@ function run_ais(entry::CatalogEntry,
                  patches::Array{SkyPatch, 2},
                  background_images::Array{Array{Float64, 2}, 1},
                  pos_delta::Array{Float64, 1}=[2., 2.];
-                 num_samples::Int=10,
+                 num_samples::Int=2,
                  num_temperatures::Int=50,
                  print_skip::Int=20)
     println("\nRunning AIS on with patch size ", imgs[1].H, "x", imgs[1].W)
     println("  catalog type: ", entry.is_star ? "star" : "galaxy")
-    println("   num active pixels ")
-    for p in patches
-        println("  ... ", sum(p.active_pixel_bitmap))
-    end
+    println("  num images  : ", length(imgs))
+    n_active = sum([sum(p.active_pixel_bitmap) for p in patches[1, :]]) / length(patches[1,:])
+    println("  num active pixels per patch: ", n_active)
     #imgs, pos_delta, num_samples, print_skip, num_temperatures = patch_images, [1., 1.], 3, 1, 10
 
     ###################
@@ -82,7 +40,7 @@ function run_ais(entry::CatalogEntry,
                                     sample_star_prior;
                                     schedule=star_schedule,
                                     num_samps=num_samples,
-                                    num_samples_per_step=5)
+                                    num_samples_per_step=1)
     lnZ = res_star[:lnZ]
     lnZs = res_star[:lnZ_bootstrap]
     lo, hi = percentile(lnZs, 2.5), percentile(lnZs, 97.5)
@@ -103,7 +61,7 @@ function run_ais(entry::CatalogEntry,
                                    sample_gal_prior;
                                    schedule=gal_schedule,
                                    num_samps=num_samples,
-                                   num_samples_per_step=5)
+                                   num_samples_per_step=1)
     lnZ = res_gal[:lnZ]
     lnZs = res_gal[:lnZ_bootstrap]
     lo, hi = percentile(lnZs, 2.5), percentile(lnZs, 97.5)
@@ -139,8 +97,6 @@ function run_ais(entry::CatalogEntry,
     gal_chain  = MCMC.samples_to_dataframe(transpose(res_gal[:zsamps]), is_star=false)
 
     # store objid (for concatenation)
-    #star_chain[:objid] = [entry.objid for n in 1:size(star_chain)[1]]
-    #gal_chain[:objid]  = [entry.objid for n in 1:size(gal_chain)[1]]
     mcmc_results = Dict("star_samples" => star_chain,
                         "star_lls"     => res_star[:lnZsamps],
                         "star_boostrap"=> res_star[:lnZ_bootstrap],
@@ -273,8 +229,6 @@ function run_mcmc(entry::CatalogEntry,
     gal_chain = MCMC.samples_to_dataframe(gal_chain; is_star=false)
 
     # store objid (for concatenation)
-    #star_chain[:objid] = [entry.objid for n in 1:size(star_chain)[1]]
-    #gal_chain[:objid]  = [entry.objid for n in 1:size(gal_chain)[1]]
     mcmc_results = Dict("star_samples" => star_chain,
                         "star_lls"     => star_lls,
                         "gal_samples"  => gal_chain,
@@ -288,11 +242,11 @@ end
 Turn MCMC results into a single dataframe row that summarizes the
 posterior distribution
 """
-function summarize_samples(results_dict, entry)
+function summarize_samples(results_dict)
     stardf   = results_dict["star_samples"]
     galdf    = results_dict["gal_samples"]
-    star_row = MCMC.samples_to_dataframe_row(stardf; is_star=true)
-    gal_row  = MCMC.samples_to_dataframe_row(galdf; is_star=false)
+    star_row = samples_to_dataframe_row(stardf; is_star=true)
+    gal_row  = samples_to_dataframe_row(galdf; is_star=false)
     return star_row, gal_row
 end
 
@@ -300,23 +254,32 @@ end
 """
 Consolidate samples into results dataframes (single entry per source)
 """
-function consolidate_samples(reslist)
-    stardf    = vcat([r["star_samples"] for r in reslist]...)
-    galdf     = vcat([r["gal_samples"] for r in reslist]...)
-    star_summary = vcat([r["star_row"] for r in reslist]...)
-    gal_summary  = vcat([r["gal_row"] for r in reslist]...)
+function consolidate_samples(reslist; objids=nothing)
+    # give each source a unique label
+    if objids==nothing
+        objids = ["samp_$(i)" for i in 1:length(reslist)]
+    end
 
-    # compute average type, and create a unified typed list
-    joint_summary = []
-    for r in reslist
+    # loop through each result sample list and summarize
+    joint_summary, star_summary, gal_summary = [], [], []
+    for i in 1:length(reslist)
+        r = reslist[i]
+
+        # compute star and gal summaries
+        star_row, gal_row = summarize_samples(r)
+        star_row[:objid], gal_row[:objid] = objids[i], objids[i]
+        push!(star_summary, star_row)
+        push!(gal_summary, gal_row)
+
+        # compute star average
         pstar = exp(r["ave_pstar"])
-        srow  = (pstar > .5) ? r["star_row"] : r["gal_row"]
+        srow  = (pstar > .5) ? star_row : gal_row
         srow[:, :is_star] = [pstar]
         push!(joint_summary, srow)
     end
     joint_summary = vcat(joint_summary...)
-
-    return stardf, galdf, star_summary, gal_summary, joint_summary
+    star_summary  = vcat(star_summary...)
+    gal_summary   = vcat(gal_summary...)
+    return star_summary, gal_summary, joint_summary
 end
-
 
