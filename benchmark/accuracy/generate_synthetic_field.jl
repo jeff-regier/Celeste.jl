@@ -21,10 +21,6 @@ parsed_args = ArgumentParse.parse_args(parser, ARGS)
 
 # load catalog
 catalog_data = AccuracyBenchmark.read_catalog(parsed_args["catalog_csv"])
-no_na_cols = :flux_r_nmgy, :color_ug, :color_gr, :color_ri, :color_iz
-for col in no_na_cols
-    catalog_data = catalog_data[.!isna.(catalog_data[col]), :]
-end
 catalog_entries = [
     AccuracyBenchmark.make_catalog_entry(row)
         for row in eachrow(catalog_data)]

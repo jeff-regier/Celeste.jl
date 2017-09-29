@@ -1,5 +1,5 @@
+#  Generates synthetic data.
 module Synthetic
-
 export gen_image!, gen_images!
 
 using Celeste
@@ -10,34 +10,6 @@ import WCS
 import Distributions
 using ForwardDiff
 using StaticArrays
-
-
-# Generate synthetic data.
-
-function get_patch(the_mean::SVector{2,Float64}, H::Int, W::Int)
-    radius = 25
-    hm = round(Int, the_mean[1])
-    wm = round(Int, the_mean[2])
-    w11 = max(1, wm - radius):min(W, wm + radius)
-    h11 = max(1, hm - radius):min(H, hm + radius)
-    return (w11, h11)
-end
-
-
-function write_gaussian!(pixel_rates, the_mean, the_cov, intensity)
-    the_precision = inv(the_cov)
-    c = sqrt(det(the_precision)) / 2pi
-
-    H, W = size(pixel_rates)
-    w_range, h_range = get_patch(the_mean, H, W)
-
-    for w in w_range, h in h_range
-        y = @SVector [the_mean[1] - h, the_mean[2] - w] # Maybe not hard code Float64
-        ypy = dot(y,  the_precision * y)
-        pdf_hw = c * exp(-0.5 * ypy)
-        pixel_rates[h, w] += intensity * pdf_hw
-    end
-end
 
 
 function write_star_nmgy!(img::Image, ce::CatalogEntry)
