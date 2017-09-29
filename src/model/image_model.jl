@@ -80,12 +80,6 @@ mutable struct Image{T <: AbstractPSFMap}
     # The components of the point spread function.
     psf::Vector{PsfComponent}
 
-    # SDSS-specific identifiers. A field is a particular region of the sky.
-    # A Camcol is the output of one camera column as part of a Run.
-    run_num::Int16
-    camcol_num::UInt8
-    field_num::Int16
-
     # The background noise in nanomaggies. (varies by position)
     sky::SkyIntensity
 

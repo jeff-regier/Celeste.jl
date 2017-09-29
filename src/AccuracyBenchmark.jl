@@ -551,7 +551,6 @@ function make_image(
         band_index,
         wcs,
         psf,
-        Int16(0), UInt8(0), Int16(0), # run, camcol, field
         sky_intensity,
         fill(Float32(nelec_per_nmgy), height_px),
         Model.ConstantPSFMap(psfstamp)

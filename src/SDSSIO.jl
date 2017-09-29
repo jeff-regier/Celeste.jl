@@ -410,7 +410,6 @@ function convert(::Type{Image}, r::RawImage)
     nelec_per_nmgy = r.gain ./ r.calibration
 
     Image(H, W, r.pixels, r.b, r.wcs, celeste_psf,
-          r.rcf.run, r.rcf.camcol, r.rcf.field,
           r.sky, nelec_per_nmgy, r.psfmap)
 end
 
