@@ -99,10 +99,10 @@ function run_ais(entry::CatalogEntry,
     # store objid (for concatenation)
     mcmc_results = Dict("star_samples" => star_chain,
                         "star_lls"     => res_star[:lnZsamps],
-                        "star_boostrap"=> res_star[:lnZ_bootstrap],
+                        "star_bootstrap"=> res_star[:lnZ_bootstrap],
                         "gal_samples"  => gal_chain,
                         "gal_lls"      => res_gal[:lnZsamps],
-                        "gal_bootsrap" => res_gal[:lnZ_bootstrap],
+                        "gal_bootstrap" => res_gal[:lnZ_bootstrap],
                         "type_samples" => type_chain,
                         "ave_pstar"    => ave_pstar)
     return mcmc_results
