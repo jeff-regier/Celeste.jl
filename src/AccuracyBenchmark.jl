@@ -545,8 +545,6 @@ function make_image(
     psfstamp = Model.render_psf(psf, (51, 51))
 
     Model.Image(
-        height_px,
-        width_px,
         pixels,
         band_index,
         wcs,

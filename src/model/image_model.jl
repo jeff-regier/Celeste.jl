@@ -62,25 +62,17 @@ end
 
 """An image, taken though a particular filter band"""
 mutable struct Image{T <: AbstractPSFMap}
-    # The image height.
-    H::Int
-
-    # The image width.
-    W::Int
+    H::Int  # image height in pixels
+    W::Int  # image width in pixels
 
     # An HxW matrix of pixel intensities, in raw electron counts (nelec).
     pixels::Matrix{Float32}
 
-    # The band id (takes on values from 1 to 5).
-    b::Int
+    b::Int  # band id (values from 1 to 5).
+    wcs::WCSTransform  # Transform between pixels and world coordinates
+    psf::Vector{PsfComponent}  # The PSF at the center of the image
 
-    # World coordinates
-    wcs::WCSTransform
-
-    # The components of the point spread function.
-    psf::Vector{PsfComponent}
-
-    # The background noise in nanomaggies. (varies by position)
+    # The background intensity in nanomaggies. (varies by position)
     sky::SkyIntensity
 
     # The expected number of photons contributed to this image
@@ -91,8 +83,26 @@ mutable struct Image{T <: AbstractPSFMap}
     # coordinate and returns the rasterized PSF image at that coordinate,
     # with the PSF centered in the image.
     psfmap::T
+
+    Image{T}(pixels::Matrix{Float32},
+             b::Int,
+             wcs::WCSTransform,
+             psf::Vector{PsfComponent},
+             sky::SkyIntensity,
+             nelec_per_nmgy::Array{Float32, 1},
+             psfmap::T) where {T <: AbstractPSFMap} =
+        new(size(pixels, 1), size(pixels, 2), pixels, b, wcs, psf, sky,
+            nelec_per_nmgy, psfmap)
 end
 
+Image(pixels::Matrix{Float32},
+      b::Int,
+      wcs::WCSTransform,
+      psf::Vector{PsfComponent},
+      sky::SkyIntensity,
+      nelec_per_nmgy::Array{Float32, 1},
+      psfmap::T) where {T <: AbstractPSFMap} =
+    Image{T}(pixels, b, wcs, psf, sky, nelec_per_nmgy, psfmap)
 
 # The code below lets us JLD serialize images instances.
 # Without this code we get an error for trying to serialize C pointers from WCS
