@@ -529,31 +529,21 @@ function serialize_psf_to_header(psf::Vector{Model.PsfComponent}, header::FITSIO
     end
 end
 
-function make_image(
-    pixels::Matrix{Float32}, band_index::Int, wcs::WCS.WCSTransform, psf::Vector{Model.PsfComponent},
-    sky_level_nmgy::Float64, nelec_per_nmgy::Float64
-)
-    height_px, width_px = size(pixels)
-    sky_intensity = Model.SkyIntensity(
-        fill(sky_level_nmgy, height_px, width_px),
-        collect(1:height_px),
-        collect(1:width_px),
-        ones(height_px),
-    )
+function make_image(pixels::Matrix{Float32}, band_index::Int,
+                    wcs::WCS.WCSTransform, psf::Vector{Model.PsfComponent},
+                    sky_level_nmgy::Real, nelec_per_nmgy::Real)
+    nx, ny = size(pixels)
 
     # Render the PSF on a grid, to be used as a (spatially constant) PSF map.
     psfstamp = Model.render_psf(psf, (51, 51))
 
     Model.Image(
-        height_px,
-        width_px,
         pixels,
         band_index,
         wcs,
         psf,
-        Int16(0), UInt8(0), Int16(0), # run, camcol, field
-        sky_intensity,
-        fill(Float32(nelec_per_nmgy), height_px),
+        fill(Float32(sky_level_nmgy), nx, ny),
+        fill(Float32(nelec_per_nmgy), nx),
         Model.ConstantPSFMap(psfstamp)
     )
 end
@@ -566,8 +556,8 @@ function make_images(band_extensions::Vector{FitsImage})
             band_index,
             extension.wcs,
             make_psf_from_header(extension.header),
-            convert(Float64, extension.header["CLSKY"]),
-            convert(Float64, extension.header["CLIOTA"]),
+            extension.header["CLSKY"]::Float64,
+            extension.header["CLIOTA"]::Float64
         )
     end
 end
