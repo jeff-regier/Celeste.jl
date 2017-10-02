@@ -580,7 +580,9 @@ function process_source_mcmc(config::Config,
 
     # run mcmc sampler on this image/patch/background initialized at entry
     if use_ais
-        mcmc_results = MCMC.run_ais(entry, patch_images, patches, background_images)
+        mcmc_results = MCMC.run_ais(entry, patch_images, patches, background_images;
+            num_temperatures=config.num_ais_temperatures,
+            num_samples=config.num_ais_samples)
     else
         mcmc_results = MCMC.run_mcmc(entry, patch_images, patches, background_images)
     end
