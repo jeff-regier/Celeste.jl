@@ -7,7 +7,7 @@ using CodecZlib
 using CodecBzip2
 
 import ..Log
-import ..Model: Image, CatalogEntry, SkyIntensity, AbstractPSFMap
+import ..Model: Image, CatalogEntry, AbstractPSFMap
 import ..PSF
 import Base.convert, Base.getindex
 export PlainFITSStrategy, RunCamcolField
@@ -67,6 +67,78 @@ filename(p::Frame) = "frame-$(p.band)-$(dec(p.rcf.run,6))-$(p.rcf.camcol)-$(dec(
 filename(p::Mask) = "fpM-$(dec(p.rcf.run,6))-$(p.band)$(p.rcf.camcol)-$(dec(p.rcf.field,4)).fit"
 filename(p::FieldExtents) = "field_extents.fits"
 
+
+"""
+    SDSSBackground(sky_small, sky_x, sky_y, calibration) <: AbstractArray{Float32,2}
+
+The 2-d background ("sky") in an SDSS image, supporting `size` and
+`getindex`.  `sky_small` is a small version of the sky image in counts
+(ADU).  `sky_x` and `sky_y` map indicies in the full image to
+coordinates in `sky_small`, where bilinear interpolation is then used
+to get values at non-integer coordinates. The interpolated value is
+then multiplied by `calibration`.
+
+For example, suppose `bkg` is a `SDSSBackground` instance. `bkg[i, j]`
+is determined by first finding the non-integer coordinates `(sky_x[i],
+sky_y[j])`.  Suppose `sky_x[i] = 3.3` and `sky_y[j] = 4.7`. `bkg[i,
+j]` will be the result of linear interpolation between the values
+`sky_small[3:4, 4:5]`, multiplied by `calibration[i]`.
+
+For coordinates that are out-of-bounds (e.g., `sky_x[i] < 1.0` or
+`sky_x[i] > size(sky_small,1)` where the interpolation would index
+sky_small values outside the array, the nearest values in the
+sky_small array are used (in other words, constant extrapolation),
+consistent with the SDSS data model documentation.
+
+For more information, see
+https://github.com/jeff-regier/Celeste.jl/wiki/About-SDSS-and-Stripe-82
+"""
+struct SDSSBackground <: AbstractArray{Float32, 2}
+    sky_small::Matrix{Float32} # background flux per pixel, in DNs
+    sky_x::Vector{Float32} # interpolation coordinates
+    sky_y::Vector{Float32}
+    calibration::Vector{Float32} # nMgy per DN for each row
+
+    function SDSSBackground(sky_small, sky_x, sky_y, calibration)
+        @assert length(calibration) == length(sky_x)
+        new(sky_small, sky_x, sky_y, calibration)
+    end
+end
+
+Base.size(bkg::SDSSBackground) = (length(bkg.sky_x), length(bkg.sky_y))
+
+function Base.getindex(sky::SDSSBackground, i::Int, j::Int)
+    nx, ny = size(sky.sky_small)
+
+    y0 = floor(Int, sky.sky_y[j])
+    y1 = y0 + 1
+    yw0 = sky.sky_y[j] - y0
+    yw1 = 1.0f0 - yw0
+
+    # modify out-of-bounds indicies to 1 or ny
+    y0 = min(max(y0, 1), ny)
+    y1 = min(max(y1, 1), ny)
+
+    x0 = floor(Int, sky.sky_x[i])
+    x1 = x0 + 1
+    xw0 = sky.sky_x[i] - x0
+    xw1 = 1.0f0 - xw0
+
+    # modify out-of-bounds indicies to 1 or nx
+    x0 = min(max(x0, 1), nx)
+    x1 = min(max(x1, 1), nx)
+
+    # bi-linear interpolation
+    sky_dns = (xw0 * yw0 * sky.sky_small[x0, y0]
+             + xw1 * yw0 * sky.sky_small[x1, y0]
+             + xw0 * yw1 * sky.sky_small[x0, y1]
+             + xw1 * yw1 * sky.sky_small[x1, y1])
+
+    # return sky intensity in nMgy
+    sky_dns * sky.calibration[i]
+end
+
+
 """
 read_sky(hdu)
 
@@ -111,7 +183,7 @@ function read_frame(strategy, rcf, b)
     sky_small, sky_x, sky_y = read_sky(f[3])
     close(f)
 
-    sky = SkyIntensity(sky_small, sky_x, sky_y, calibration)
+    sky = SDSSBackground(sky_small, sky_x, sky_y, calibration)
 
     wcs = WCS.from_header(hdr)[1]
 
@@ -199,7 +271,7 @@ end
 # PSF-related functions
 
 """
-    SDSSPSFMap
+    SDSSPSFMap <: AbstractPSFMap
 
 SDSS representation of a spatially variable PSF. The PSF is represented as
 a weighted combination of eigenimages (stored in `rrows`), where the weights
@@ -321,7 +393,7 @@ struct RawImage
     b::Int  # band index
     pixels::Matrix{Float32} # in nMgy, sky-subtracted and calibrated
     calibration::Vector{Float32}
-    sky::SkyIntensity
+    sky::SDSSBackground
     wcs::WCS.WCSTransform
     gain::Float32
     psfmap::SDSSPSFMap

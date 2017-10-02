@@ -1,5 +1,5 @@
 using Celeste.SDSSIO
-import Celeste.SDSSIO: SkyIntensity
+import Celeste.SDSSIO: SDSSBackground
 
 
 @testset "sky interpolations" begin
@@ -8,7 +8,7 @@ import Celeste.SDSSIO: SkyIntensity
                  9. 10. 11. 12]
     sky_x = [0.1, 2.5]
     sky_y = [0.5, 2.5, 4.]
-    sky = SkyIntensity(small_sky, sky_x, sky_y, ones(2))
+    sky = SDSSBackground(small_sky, sky_x, sky_y, ones(2))
 
     @test sky[1, 1] ≈ 1.0
     @test sky[2, 1] ≈ 7.0
@@ -24,7 +24,7 @@ end
             9. 10. 11. 12]
     sky_x = [-5.0, 4.0]
     sky_y = [-4.0, 5.0]
-    sky = SkyIntensity(small_sky, sky_x, sky_y, ones(2))
+    sky = SDSSBackground(small_sky, sky_x, sky_y, ones(2))
 
     @test sky[1,1] == 1.0
     @test sky[1,2] == 4.0
