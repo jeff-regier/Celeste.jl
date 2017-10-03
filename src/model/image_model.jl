@@ -47,6 +47,15 @@ Image(pixels::Matrix{Float32},
     Image{B,P}(pixels, b, wcs, psf, sky, nelec_per_nmgy, psfmap)
 
 
+# TODO: better name for this.
+"""
+    calibrated_pixels(im::Image)
+
+Calibrated, sky-subtracted pixel values in nmgy.
+"""
+calibrated_pixels(im::Image) = im.pixels ./ im.nelec_per_nmgy .- im.sky
+
+
 # The code below lets us JLD serialize images instances.
 # Without this code we get an error for trying to serialize C pointers from WCS
 # and some problems for StaticArrays too.
