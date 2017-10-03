@@ -154,7 +154,8 @@ function make_star_loglike(imgs::Vector;
 
             # create source flux image
             src_pixels = zeros(Float32, img.H, img.W)
-            Model.write_star_nmgy!(pos, bflux, patches[ii], src_pixels)
+            Model.write_star_nmgy!(pos, bflux, patches[ii], src_pixels;
+                                   write_to_patch=true)
 
             # add background, convert flux to ave elec count
             src_pixels += background
@@ -272,7 +273,8 @@ function make_gal_loglike(imgs::Vector;
             # create and cache unit flux src image
             src_pixels = zeros(Float32, img.H, img.W)
             Model.write_galaxy_nmgy!(pos, bflux, gal_frac_dev, gal_ab,
-                gal_angle, gal_scale, img.psf, [patches[ii]][:,:], src_pixels)
+                gal_angle, gal_scale, img.psf, [patches[ii]][:,:], src_pixels;
+                write_to_patch=true)
 
             #src_pixels2 = zeros(img.H, img.W)
             #write_galaxy_unit_flux(pos, img.psf, img.wcs, 1.,
@@ -410,9 +412,11 @@ function make_empty_background_images(imgs::Vector)
     background_images = []
     for img in imgs
         # sky pixel intensity (sky image)
-        epsilon    = img.sky[1, 1]
-        iota       = img.nelec_per_nmgy[1]
-        sky_pixels = [epsilon * iota for h=1:img.H, w=1:img.W]
+        #epsilon    = img.sky[1, 1]
+        #iota       = img.nelec_per_nmgy[1]
+        #sky_pixels = [epsilon * iota for h=1:img.H, w=1:img.W]
+        sky_pixels = img.sky
+        println("sky image size : ", size(sky_pixels))
         push!(background_images, sky_pixels)
     end
     return background_images

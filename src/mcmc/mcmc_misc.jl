@@ -281,30 +281,20 @@ end
 """
 Generate a model image on a patch, according to that image/patch psf
 """
-function render_patch(img::Image, patch::SkyPatch, n_bodies::Vector{CatalogEntry})
-    # sky noise an gain
-    epsilon = img.sky[1, 1]
-    iota    = Float64(median(img.nelec_per_nmgy))
-    offset  = convert(Array{Float64, 1}, patch.bitmap_offset)
-
-    # create sky noise background image
-    H, W = size(patch.active_pixel_bitmap)
-    patch_pixels = [epsilon*iota for h=1:H, w=1:W]
+function render_patch_nmgy(img::Image, patch::SkyPatch, n_bodies::Vector{CatalogEntry})
+    # create sky noise background image in nmgy
+    patch_pixels = ones(size(img.sky)) .* img.sky
 
     # write star/gal model images onto patch_pixels
     for body in n_bodies
         if body.is_star
-            write_star_unit_flux(body.pos, img.psf, img.wcs, iota, patch_pixels;
-                offset = offset,
-                flux   = body.star_fluxes[img.b]
-              )
+            Model.write_star_nmgy!(body.pos, body.star_fluxes[img.b], patch,
+                patch_pixels; write_to_patch=true)
         else
-            write_galaxy_unit_flux(body.pos, img.psf, img.wcs, iota,
+            Model.write_galaxy_nmgy!(body.pos, body.gal_fluxes[img.b],
                 body.gal_frac_dev, body.gal_axis_ratio, body.gal_angle,
-                body.gal_radius_px, patch_pixels;
-                offset = offset,
-                flux   = body.gal_fluxes[img.b]
-              )
+                body.gal_radius_px, img.psf, [patch][:,:], patch_pixels;
+                write_to_patch=true)
         end
     end
     return patch_pixels
