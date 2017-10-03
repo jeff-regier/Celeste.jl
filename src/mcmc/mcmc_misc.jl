@@ -219,21 +219,6 @@ function write_star_unit_flux(pos::Array{Float64, 1},
     end
 end
 
-#function write_star_unit_flux_raw(world_pos::Array{Float64, 1},
-#                                  patch::SkyPatch,
-#                                  iota::Float64,
-#                                  pixels::Matrix{Float64};
-#                                  flux::Float64=1.)
-#    fs0m = SensitiveFloat{Float64}(length(StarPosParams), 1, false, false)
-#    H, W = size(pixels)
-#    for w in 1:W, h in 1:H
-#        hfield = patch.bitmap_offset[1] + h
-#        wfield = patch.bitmap_offset[2] + w
-#        Model.star_light_density!(fs0m, patch, hfield, wfield, world_pos, false)
-#        pixel_rate = flux * iota * fs0m.v[]
-#        pixels[h, w] += pixel_rate
-#    end
-#end
 
 """
 Add a galaxy model image to a matrix of pixels.  Defaults to unit flux.
@@ -354,29 +339,6 @@ function get_patch(the_mean::SVector{2,Float64}, H::Int, W::Int)
     h11 = max(1, hm - radius):min(H, hm + radius)
     return (w11, h11)
 end
-
-
-#########################################
-# older interface
-#########################################
-#function write_star_unit_flux(img0::Image,
-#                              pos::Array{Float64, 1},
-#                              pixels::Matrix{Float64})
-#    iota = Float64(median(img0.nelec_per_nmgy))
-#    write_star_unit_flux(pos, img0.psf, img0.wcs, iota, pixels)
-#end
-#
-#function write_galaxy_unit_flux(img0::Image,
-#                                pos::Array{Float64,1},
-#                                gal_frac_dev::Float64,
-#                                gal_ab::Float64,
-#                                gal_angle::Float64,
-#                                gal_scale::Float64,
-#                                pixels::Matrix{Float64})
-#    iota = Float64(median(img0.nelec_per_nmgy))
-#    write_galaxy_unit_flux(pos, img0.psf, img0.wcs, iota,
-#        gal_frac_dev, gal_ab, gal_angle, gal_scale, pixels)
-#end
 
 
 """
