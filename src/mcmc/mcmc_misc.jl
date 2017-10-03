@@ -103,7 +103,7 @@ function catalog_to_data_frame_row(catalog_entry; objid="truth")
 end
 
 function samples_to_dataframe(chain; is_star=true)
-    """ Turns MCMC samples (star or galaxy chain) into a dataframe of samples 
+    """ Turns MCMC samples (star or galaxy chain) into a dataframe of samples
     with parameters we can compare to Photo and VB inferences
 
     Conversions performed:
@@ -249,7 +249,7 @@ function write_galaxy_unit_flux(pos::Array{Float64, 1},
                                 pixels::Matrix{Float64};
                                 offset::Array{Float64, 1}=[0., 0.],
                                 flux::Float64=1.)
-    # write the unit-flux scaled, correctly offset galaxy shape + 
+    # write the unit-flux scaled, correctly offset galaxy shape +
     # psf convolution
     e_devs = [gal_frac_dev, 1 - gal_frac_dev]
     XiXi = Model.get_bvn_cov(gal_axis_ratio, gal_angle, gal_scale)
@@ -275,7 +275,7 @@ function write_galaxy_unit_flux_pixel(px_pos::Array{Float64, 1},
                                       gal_scale::Float64,
                                       pixels::Matrix{Float64};
                                       flux::Float64=1.)
-    # write the unit-flux scaled, correctly offset galaxy shape + 
+    # write the unit-flux scaled, correctly offset galaxy shape +
     # psf convolution
     e_devs = [gal_frac_dev, 1 - gal_frac_dev]
     XiXi = Model.get_bvn_cov(gal_axis_ratio, gal_angle, gal_scale)
@@ -356,7 +356,7 @@ end
 
 
 #########################################
-# older interface 
+# older interface
 #########################################
 function write_star_unit_flux(img0::Image,
                               pos::Array{Float64, 1},
@@ -451,7 +451,7 @@ function patch_to_image(patch::SkyPatch, img::Image; round_pixels_to_int=true)
     calibration = img.sky.calibration[Hr]
     sky_x       = img.sky.sky_x[Hr]
     sky_y       = img.sky.sky_y[Wr]
-    sky         = SkyIntensity(sky_small, sky_x, sky_y, calibration)
+    sky         = SDSSBackground(sky_small, sky_x, sky_y, calibration)
     nelec_per_nmgy = img.nelec_per_nmgy[Hr]
 
     # TODO create an adjusted WCS object
@@ -465,5 +465,3 @@ function patch_to_image(patch::SkyPatch, img::Image; round_pixels_to_int=true)
                         sky, nelec_per_nmgy, img.raw_psf_comp)
     return patch_image
 end
-
-
