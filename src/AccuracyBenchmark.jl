@@ -529,46 +529,22 @@ function serialize_psf_to_header(psf::Vector{Model.PsfComponent}, header::FITSIO
     end
 end
 
-function make_image(
-    pixels::Matrix{Float32}, band_index::Int, wcs::WCS.WCSTransform, psf::Vector{Model.PsfComponent},
-    sky_level_nmgy::Float64, nelec_per_nmgy::Float64
-)
-    height_px, width_px = size(pixels)
-    sky_intensity = Model.SkyIntensity(
-        fill(sky_level_nmgy, height_px, width_px),
-        collect(1:height_px),
-        collect(1:width_px),
-        ones(height_px),
-    )
+function make_image(pixels::Matrix{Float32}, band_index::Int,
+                    wcs::WCS.WCSTransform, psf::Vector{Model.PsfComponent},
+                    sky_level_nmgy::Real, nelec_per_nmgy::Real)
+    nx, ny = size(pixels)
 
-    # The next code block generates an SDSS-style raw_psf with just one
-    # eigenimage. That eigenimage is obtained by rendering the Celeste PSF
-    # on a grid.
-    psf_dims = (51, 51)
-    rendered_psf = zeros(psf_dims...)
-    x = Vector{Float64}(2)
-    for pc in psf
-        bvn = MultivariateNormal(convert(Array, pc.xiBar), convert(Array, pc.tauBar))
-        for w in 1:psf_dims[2], h in 1:psf_dims[1]
-            x[1] = h - 26
-            x[2] = w - 26
-            rendered_psf[h, w] += pc.alphaBar * pdf(bvn, x)
-        end
-    end
-    rendered_psf = reshape(rendered_psf, (reduce(*, psf_dims), 1))
-    raw_psf = Model.RawPSF(rendered_psf, psf_dims[1], psf_dims[2], ones(1, 1, 1))
+    # Render the PSF on a grid, to be used as a (spatially constant) PSF map.
+    psfstamp = Model.render_psf(psf, (51, 51))
 
     Model.Image(
-        height_px,
-        width_px,
         pixels,
         band_index,
         wcs,
         psf,
-        0, 0, 0, # run, camcol, field
-        sky_intensity,
-        fill(nelec_per_nmgy, height_px),
-        raw_psf,
+        fill(Float32(sky_level_nmgy), nx, ny),
+        fill(Float32(nelec_per_nmgy), nx),
+        Model.ConstantPSFMap(psfstamp)
     )
 end
 
@@ -580,8 +556,8 @@ function make_images(band_extensions::Vector{FitsImage})
             band_index,
             extension.wcs,
             make_psf_from_header(extension.header),
-            convert(Float64, extension.header["CLSKY"]),
-            convert(Float64, extension.header["CLIOTA"]),
+            extension.header["CLSKY"]::Float64,
+            extension.header["CLIOTA"]::Float64
         )
     end
 end
@@ -774,7 +750,7 @@ function parse_fits_header_from_string(header_string::AbstractString)
     header
 end
 
-function save_images_to_fits(filename::String, images::Vector{Model.Image})
+function save_images_to_fits(filename::String, images::Vector{<:Model.Image})
     println("Writing images to $filename...")
     fits_file = FITSIO.FITS(filename, "w")
     for band_image in images

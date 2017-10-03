@@ -6,31 +6,6 @@ import WCS
 const rcf = RunCamcolField(3900, 6, 269)
 
 
-"""
-Get the PSF located at a particular world location in an image.
-
-Args:
- - world_loc: A location in world coordinates.
- - img: An Image
-
-Returns:
- - An array of PsfComponent objects that represents the PSF as a mixture
-     of Gaussians.
-"""
-function get_source_psf(world_loc::Vector{Float64}, img::Image, psf_K::Int)
-    # Some stamps or simulated data have no raw psf information. In that case,
-    # just use the psf from the image.
-    if size(img.raw_psf_comp.rrows) == (0, 0)
-        # Also return a vector of empty psf params
-        return img.psf, fill(fill(NaN, length(PsfParams)), psf_K)
-    else
-        pixel_loc = WCS.world_to_pix(img.wcs, world_loc)
-        psfstamp = Model.eval_psf(img.raw_psf_comp, pixel_loc[1], pixel_loc[2])
-        return PSF.fit_raw_psf_for_celeste(psfstamp, psf_K)
-    end
-end
-
-
 function test_images()
     # A lot of tests are in a single function to avoid having to reload
     # the full image multiple times.
@@ -58,13 +33,13 @@ function test_images()
     ea_obj = make_elbo_args(images, cat_entries[obj_index:obj_index])
     vs_obj = DeterministicVI.catalog_init_source(cat_entries[obj_index])
     pixel_loc = WCS.world_to_pix(img.wcs, obj_loc)
-    original_psf_val = Model.eval_psf(img.raw_psf_comp, pixel_loc[1], pixel_loc[2])
+    original_psf_val = img.psfmap(pixel_loc[1], pixel_loc[2])
 
     original_psf_celeste =
         PSF.fit_raw_psf_for_celeste(original_psf_val, ea.psf_K)[1]
     fit_original_psf_val = PSF.get_psf_at_point(original_psf_celeste)
 
-    obj_psf = get_source_psf(vs_obj[ids.pos], img, ea.psf_K)[1]
+    obj_psf = PSF.get_source_psf(vs_obj[ids.pos], img, ea.psf_K)[1]
     obj_psf_val = PSF.get_psf_at_point(obj_psf)
 
     # The fits should match exactly.

@@ -9,13 +9,12 @@ import Celeste.PSF: get_psf_at_point, fit_psf,
        transform_psf_sensitive_float!,
        PsfOptimizer, fit_raw_psf_for_celeste, trim_psf,
        BivariateNormalDerivatives
-import Celeste.Model: eval_psf
 
 using ForwardDiff
 using StaticArrays
 
 """
-Evaluate the sum of squared difference between the raw_psf and the psf
+Evaluate the sum of squared difference between the psf stamp and the psf
 represented by psf_params, as well as the derivatives and hessians with
 respect to unconstrained parameters.
 
@@ -23,11 +22,11 @@ Returns:
   - A sensitive float for the sum of squared differences.
 """
 function evaluate_psf_fit{NumType <: Number}(
-    psf_params::Vector{Vector{NumType}}, raw_psf::Matrix{Float64},
+    psf_params::Vector{Vector{NumType}}, psfstamp::Matrix{Float64},
     calculate_gradient::Bool)
 
   K = length(psf_params)
-  x_mat = PSF.get_x_matrix_from_psf(raw_psf)
+  x_mat = PSF.get_x_matrix_from_psf(psfstamp)
 
   # TODO: allocate these outside?
   bvn_derivs = BivariateNormalDerivatives{NumType}()
@@ -38,14 +37,14 @@ function evaluate_psf_fit{NumType <: Number}(
   squared_error = SensitiveFloat{NumType}(length(PsfParams), K, true, true)
 
   PSF.evaluate_psf_fit!(
-      psf_params, raw_psf, x_mat, bvn_derivs,
+      psf_params, psfstamp, x_mat, bvn_derivs,
       log_pdf, pdf, pixel_value, squared_error, calculate_gradient)
 
   squared_error
 end
 
 
-function load_raw_psf(; x::Float64=500., y::Float64=500.)
+function load_psfstamp(; x::Float64=500., y::Float64=500.)
   run_num = 3900
   camcol_num = 6
   field_num = 269
@@ -56,10 +55,10 @@ function load_raw_psf(; x::Float64=500., y::Float64=500.)
         datadir, run_num, camcol_num, field_num,
                  run_num, camcol_num, field_num)
   psf_fits = FITSIO.FITS(psf_filename)
-  raw_psf_comp = SDSSIO.read_psf(psf_fits, BAND_LETTERS[b])
+  psfmap = SDSSIO.read_psfmap(psf_fits, BAND_LETTERS[b])
   close(psf_fits)
 
-  eval_psf(raw_psf_comp, x, y)
+  psfmap(x, y)
 end
 
 
@@ -85,7 +84,7 @@ end
 
 
 function test_psf_fit()
-  raw_psf = load_raw_psf()
+  psfstamp = load_psfstamp()
 
   # Initialize params
   K = 2
@@ -167,7 +166,7 @@ function test_psf_fit()
         psf_param_vec::Vector{NumType}, calculate_gradient::Bool)
     local psf_params = unwrap_psf_params(psf_param_vec)
     local squared_error =
-      evaluate_psf_fit(psf_params, raw_psf[keep_pixels, keep_pixels], calculate_gradient)
+      evaluate_psf_fit(psf_params, psfstamp[keep_pixels, keep_pixels], calculate_gradient)
     squared_error
   end
 
@@ -187,7 +186,7 @@ end
 
 
 function test_transform_psf_sensitive_float()
-  raw_psf = load_raw_psf()
+  psfstamp = load_psfstamp()
 
   K = 2
   psf_params = initialize_psf_params(K, for_test=true)
@@ -207,7 +206,7 @@ function test_transform_psf_sensitive_float()
     local psf_params_free = unwrap_psf_params(psf_params_free_vec)
     local psf_params = constrain_psf_params(psf_params_free, psf_transform)
     local sf = evaluate_psf_fit(
-      psf_params, raw_psf[keep_pixels, keep_pixels], calculate_gradient)
+      psf_params, psfstamp[keep_pixels, keep_pixels], calculate_gradient)
     transform_psf_sensitive_float!(
       psf_params, psf_transform, sf, sf_free, calculate_gradient)
 
@@ -223,7 +222,7 @@ function test_transform_psf_sensitive_float()
   sf_free = deepcopy(psf_fit_for_optim(psf_params_free_vec, true))
 
   expected_value =
-    evaluate_psf_fit(psf_params, raw_psf[keep_pixels, keep_pixels], false).v[]
+    evaluate_psf_fit(psf_params, psfstamp[keep_pixels, keep_pixels], false).v[]
   ad_grad = ForwardDiff.gradient(psf_fit_for_optim_val, psf_params_free_vec)
   ad_hess = ForwardDiff.hessian(psf_fit_for_optim_val, psf_params_free_vec)
 
@@ -234,31 +233,31 @@ end
 
 
 function test_psf_optimizer()
-  raw_psf = load_raw_psf()
+  psfstamp = load_psfstamp()
 
   K = 2
   psf_params = initialize_psf_params(K, for_test=false)
   psf_transform = get_psf_transform(psf_params)
   psf_optimizer = PsfOptimizer(psf_transform, K)
 
-  nm_result = fit_psf(psf_optimizer, raw_psf, psf_params)
+  nm_result = fit_psf(psf_optimizer, psfstamp, psf_params)
   psf_params_fit =
     constrain_psf_params(unwrap_psf_params(Optim.minimizer(nm_result)), psf_transform)
 
   # Could this test be tighter?
   @test 0.0 < Optim.minimum(nm_result) < 1e-3
 
-  celeste_psf = fit_raw_psf_for_celeste(raw_psf, K)[1]
+  celeste_psf = fit_raw_psf_for_celeste(psfstamp, K)[1]
   rendered_psf = get_psf_at_point(celeste_psf)
 
-  @test Optim.minimum(nm_result) ≈ sum((raw_psf - rendered_psf) .^ 2)
+  @test Optim.minimum(nm_result) ≈ sum((psfstamp - rendered_psf) .^ 2)
 
   # Make sure that re-using the optimizer gets the same results.
-  raw_psf_10_10 = load_raw_psf(x=10., y=10.)
+  psfstamp_10_10 = load_psfstamp(x=10., y=10.)
   celeste_psf_10_10_v1, psf_params_10_10_v1 =
-    fit_raw_psf_for_celeste(raw_psf_10_10, K)
+    fit_raw_psf_for_celeste(psfstamp_10_10, K)
   celeste_psf_10_10_v2, psf_params_10_10_v2 =
-    fit_raw_psf_for_celeste(raw_psf_10_10, psf_optimizer, psf_params)
+    fit_raw_psf_for_celeste(psfstamp_10_10, psf_optimizer, psf_params)
   for k=1:K
     @test psf_params_10_10_v1[k] ≈ psf_params_10_10_v2[k]
     for field in fieldnames(celeste_psf_10_10_v1[k])
@@ -269,12 +268,12 @@ end
 
 
 function test_trim_psf()
-    raw_psf = load_raw_psf()
+    psfstamp = load_psfstamp()
     trim_percent = 0.95
-    trimmed_psf = trim_psf(raw_psf; trim_percent=trim_percent)
-    @test sum(abs, trimmed_psf) >= trim_percent * sum(abs, raw_psf)
-    @test size(trimmed_psf, 1) < size(raw_psf, 1)
-    @test size(trimmed_psf, 2) < size(raw_psf, 2)
+    trimmed_psf = trim_psf(psfstamp; trim_percent=trim_percent)
+    @test sum(abs, trimmed_psf) >= trim_percent * sum(abs, psfstamp)
+    @test size(trimmed_psf, 1) < size(psfstamp, 1)
+    @test size(trimmed_psf, 2) < size(psfstamp, 2)
 end
 
 

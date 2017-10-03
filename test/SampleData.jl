@@ -2,7 +2,8 @@ module SampleData
 
 using Celeste: Model, DeterministicVI
 import Celeste: Synthetic
-import Celeste.SDSSIO: RunCamcolField, load_field_images, PlainFITSStrategy
+import Celeste.SDSSIO: RunCamcolField, load_field_images, PlainFITSStrategy,
+                       SDSSBackground
 
 using Distributions
 using StaticArrays
@@ -45,7 +46,7 @@ const sample_images = load_field_images(PlainFITSStrategy(datadir), sample_rcf)
 Turn a images and vector of catalog entries into elbo arguments
 that can be used with Celeste.
 """
-function make_elbo_args(images::Vector{Image},
+function make_elbo_args(images::Vector{<:Image},
                         catalog::Vector{CatalogEntry};
                         active_source=-1,
                         patch_radius_pix::Float64=NaN,
@@ -196,9 +197,9 @@ function gen_n_body_dataset(S::Int; patch_pixel_radius=20., perturb=true)
     # Make non-constant background.
     for b=1:5
         images[b].nelec_per_nmgy = fill(images[b].nelec_per_nmgy[1], images[b].H)
-        images[b].sky = SkyIntensity(fill(images[b].sky[1,1], images[b].H, images[b].W),
-                                     collect(1:images[b].H), collect(1:images[b].W),
-                                     ones(images[b].H))
+        images[b].sky = SDSSBackground(fill(images[b].sky[1,1], images[b].H, images[b].W),
+                                       collect(1:images[b].H), collect(1:images[b].W),
+                                       ones(images[b].H))
     end
 
     ea = make_elbo_args(

@@ -493,7 +493,7 @@ function init_elboargs(config::Config,
                        catalog::Vector{CatalogEntry},
                        target_sources::Vector{Int},
                        neighbor_map::Vector{Vector{Int}},
-                       images::Vector{Image},
+                       images::Vector{<:Image},
                        ea_vec::Vector{ElboArgs},
                        vp_vec::Vector{VariationalParams{Float64}},
                        cfg_vec::Vector{ElboConfig{DEFAULT_CHUNK,Float64}},
@@ -531,7 +531,7 @@ function init_elboargs(config::Config,
 end
 
 
-function process_sources!(images::Vector{Model.Image},
+function process_sources!(images::Vector{<:Model.Image},
                           ea_vec::Vector{ElboArgs},
                           vp_vec::Vector{VariationalParams{Float64}},
                           cfg_vec::Vector{ElboConfig{DEFAULT_CHUNK,Float64}},
@@ -564,7 +564,7 @@ function process_sources!(images::Vector{Model.Image},
     end
 end
 
-function process_sources_dynamic!(images::Vector{Model.Image},
+function process_sources_dynamic!(images::Vector{<:Model.Image},
                                   ea_vec::Vector{ElboArgs},
                                   vp_vec::Vector{VariationalParams{Float64}},
                                   cfg_vec::Vector{ElboConfig{DEFAULT_CHUNK,Float64}},
