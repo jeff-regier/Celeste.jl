@@ -14,37 +14,16 @@ using StaticArrays
 
 function write_star_nmgy!(img::Image, ce::CatalogEntry)
     p = Model.SkyPatch(img, ce, radius_override_pix=25)
-    fs0m = SensitiveFloat{Float64}(length(StarPosParams), 1, false, false)
-
-    H2, W2 = size(p.active_pixel_bitmap)
-    for w2 in 1:W2, h2 in 1:H2
-        h = p.bitmap_offset[1] + h2
-        w = p.bitmap_offset[2] + w2
-        Model.star_light_density!(fs0m, p, h, w, ce.pos, false)
-        img.pixels[h, w] += fs0m.v[] * ce.star_fluxes[img.b]
-    end
+    Model.write_star_nmgy!(ce.pos, ce.star_fluxes[img.b], p, img.pixels)
 end
 
 
 function write_galaxy_nmgy!(img::Image, ce::CatalogEntry)
-    bvn_derivs = Model.BivariateNormalDerivatives{Float64}()
-    fs1m = SensitiveFloat{Float64}(length(GalaxyPosParams), 1, false, false)
     patches = Model.get_sky_patches([img], [ce], radius_override_pix=25.0)
-    source_params = [[ce.pos[1], ce.pos[2], ce.gal_frac_dev, ce.gal_axis_ratio,
-                     ce.gal_angle, ce.gal_radius_px],]
-    star_mcs, gal_mcs = Model.load_bvn_mixtures(1, patches,
-                          source_params, [1,], length(img.psf), 1,
-                          calculate_gradient=false,
-                          calculate_hessian=false)
-    p = patches[1]
-    H2, W2 = size(p.active_pixel_bitmap)
-    for w2 in 1:W2, h2 in 1:H2
-        # (h2, w2) index the local patch, while (h, w) index the image
-        h = p.bitmap_offset[1] + h2
-        w = p.bitmap_offset[2] + w2
-        Model.populate_gal_fsm!(fs1m, bvn_derivs, 1, h, w, false, p.wcs_jacobian, gal_mcs)
-        img.pixels[h, w] += fs1m.v[] * ce.gal_fluxes[img.b]
-    end
+    println("writing gal synthetic", typeof(patches))
+    Model.write_galaxy_nmgy!(ce.pos, ce.gal_fluxes[img.b],
+      ce.gal_frac_dev, ce.gal_axis_ratio, ce.gal_angle, ce.gal_radius_px,
+      img.psf, patches, img.pixels)
 end
 
 
