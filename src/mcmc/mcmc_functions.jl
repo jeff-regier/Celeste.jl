@@ -1,12 +1,12 @@
 """
 Make all star inference functiouns: prior, loglike, log (unnormalized) posterior.
 """
-function make_star_inference_functions(imgs::Array{Image},
+function make_star_inference_functions(imgs::Vector,
           entry::CatalogEntry;
           pos_delta::Array{Float64, 1}=[2., 2.],
           patches::Array{SkyPatch, 1}=nothing,
           background_images::Array{Array{Float64, 2}, 1}=nothing)
-    # position log prior --- same for both star and galaxy (constrains to a 
+    # position log prior --- same for both star and galaxy (constrains to a
     # small window around the existing catalog location.  Because the range
     # of RA,DEC values is so small, numerical underflow becomes an issue in
     # the slice sampler.  The generic parameter representation of the (ra,dec)
@@ -51,7 +51,7 @@ end
 """
 Make all star inference functiouns: prior, loglike, log (unnormalized) posterior.
 """
-function make_gal_inference_functions(imgs::Array{Image},
+function make_gal_inference_functions(imgs::Vector,
           entry::CatalogEntry;
           pos_delta::Array{Float64, 1}=[2., 2.],
           patches::Array{SkyPatch, 1}=nothing,
@@ -103,10 +103,10 @@ Args:
   patches...
   background_images...
   pos_transform....
-  use_raw_psf: use patch provided raw psf that interpolates on a grid as 
+  use_raw_psf: use patch provided raw psf that interpolates on a grid as
     appearance model, not the MOG approximation
 """
-function make_star_loglike(imgs::Array{Image};
+function make_star_loglike(imgs::Vector;
                            patches::Array{SkyPatch, 1}=nothing,
                            background_images::Array{Array{Float64, 2}, 1}=nothing,
                            pos_transform::Function=nothing,
@@ -196,7 +196,7 @@ Args:
   pos_delta: (optional) determines how much ra/dec we allow the sampler
     to drift away from pos0
 
-Note on Galaxy Shapes: the `gal_scale` parameter is in pixels.  The 
+Note on Galaxy Shapes: the `gal_scale` parameter is in pixels.  The
   Celeste parameterization sigma^2_{cel} is slightly different from the
   Photo and SDSS parameterization for :half_light_radius_px (sigma^2_{sdss}).
   The two have the following relationship:
@@ -210,7 +210,7 @@ Note on Galaxy Shapes: the `gal_scale` parameter is in pixels.  The
 
   Also note that the scale prior defined below is over sigma^2_{cel}.
 """
-function make_gal_loglike(imgs::Array{Image};
+function make_gal_loglike(imgs::Vector;
                           patches::Array{SkyPatch, 1}=nothing,
                           background_images::Array{Array{Float64, 2}, 1}=nothing,
                           pos_transform::Function=nothing)
@@ -405,7 +405,7 @@ function sample_galaxy_shape()
 end
 
 
-function make_empty_background_images(imgs::Array{Image})
+function make_empty_background_images(imgs::Vector)
     background_images = []
     for img in imgs
         # sky pixel intensity (sky image)
@@ -418,7 +418,7 @@ function make_empty_background_images(imgs::Array{Image})
 end
 
 
-function compute_lgamma_sum(imgs::Array{Image}, active_bitmaps)
+function compute_lgamma_sum(imgs::Vector, active_bitmaps)
     lgamma_const = 0.
     for ii in 1:length(imgs)
         img, active_bitmap = imgs[ii], active_bitmaps[ii]
@@ -511,7 +511,7 @@ end
 """
 create vectorized star log flux log like function with multiple images
 """
-function make_logflux_loglike(imgs::Array{Image},
+function make_logflux_loglike(imgs::Vector,
                               pos::Array{Float64, 1};
                               is_star = true,
                               gal_frac_dev::Float64 = .5,

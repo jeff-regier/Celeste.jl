@@ -8,7 +8,7 @@ to estimate the marginal likelihood of each model and posterior samples
 simultaneously
 """
 function run_ais(entry::CatalogEntry,
-                 imgs::Array{Image},
+                 imgs::Vector,
                  patches::Array{SkyPatch, 2},
                  background_images::Array{Array{Float64, 2}, 1},
                  pos_delta::Array{Float64, 1}=[2., 2.];
@@ -25,7 +25,7 @@ function run_ais(entry::CatalogEntry,
     ###################
     # run star MCMC   #
     ###################
-    star_loglike, star_logprior, star_logpost, sample_star_prior, ra_lim, dec_lim, uniform_to_deg, deg_to_uniform = 
+    star_loglike, star_logprior, star_logpost, sample_star_prior, ra_lim, dec_lim, uniform_to_deg, deg_to_uniform =
           MCMC.make_star_inference_functions(imgs, entry;
                                         patches=patches[1, :],
                                         background_images=background_images,
@@ -50,7 +50,7 @@ function run_ais(entry::CatalogEntry,
     ####################
     # run galaxy AIS   #
     ####################
-    gal_loglike, gal_logprior, gal_logpost, sample_gal_prior, ra_lim, dec_lim, uniform_to_deg, deg_to_uniform = 
+    gal_loglike, gal_logprior, gal_logpost, sample_gal_prior, ra_lim, dec_lim, uniform_to_deg, deg_to_uniform =
           MCMC.make_gal_inference_functions(imgs, entry;
                                         patches=patches[1, :],
                                         background_images=background_images,
@@ -113,7 +113,7 @@ end
 Run single source MCMC chain
 """
 function run_mcmc(entry::CatalogEntry,
-                  imgs::Array{Image},
+                  imgs::Vector,
                   patches::Array{SkyPatch, 2},
                   background_images::Array{Array{Float64, 2}, 1},
                   pos_delta::Array{Float64, 1}=[1., 1.];
@@ -123,7 +123,7 @@ function run_mcmc(entry::CatalogEntry,
             imgs[1].H, "x", imgs[1].W)
     println("  catalog type: ", entry.is_star ? "star" : "galaxy")
 
-    # position log prior --- same for both star and galaxy (constrains to a 
+    # position log prior --- same for both star and galaxy (constrains to a
     # small window around the existing catalog location
     #imgs, pos_delta, num_samples, print_skip = patch_images, [1., 1.], 200, 20
     pos_logprior, ra_lim, dec_lim = MCMC.make_location_prior(
@@ -282,4 +282,3 @@ function consolidate_samples(reslist; objids=nothing)
     gal_summary   = vcat(gal_summary...)
     return star_summary, gal_summary, joint_summary
 end
-

@@ -459,9 +459,8 @@ function patch_to_image(patch::SkyPatch, img::Image; round_pixels_to_int=true)
     #wcs[:crpix] = wcs[:crpix] - patch.bitmap_offset
 
     # instantiate a smaller patch image
-    patch_image = Image(H, W, patch_pixels, img.b, img.wcs,
+    patch_image = Image(patch_pixels, img.b, img.wcs,
                         patch.psf,
-                        img.run_num, img.camcol_num, img.field_num,
-                        sky, nelec_per_nmgy, img.raw_psf_comp)
+                        sky, nelec_per_nmgy, img.psfmap)
     return patch_image
 end
