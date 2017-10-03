@@ -68,6 +68,100 @@ filename(p::Mask) = "fpM-$(dec(p.rcf.run,6))-$(p.band)$(p.rcf.camcol)-$(dec(p.rc
 filename(p::FieldExtents) = "field_extents.fits"
 
 
+# -----------------------------------------------------------------------------
+# IO Strategies, these are specification objects fed in from external
+
+abstract type IOStrategy end
+
+struct PlainFITSStrategy <: IOStrategy
+    stagedir::String
+    dirlayout::Symbol
+    compressed::Bool
+    # Could be a string or rcf -> stagedir function
+    rcf_stagedir
+    slurp::Bool
+end
+PlainFITSStrategy(stagedir::String, slurp::Bool = false) = PlainFITSStrategy(stagedir, :celeste, false, stagedir, slurp)
+
+function slurp_fits(fname)
+    is_linux() || is_bsd() || error("Slurping not implemented on this OS")
+    # Do this with explicit POSIX calls, to make sure to avoid
+    # any well-intended, but ultimately unhelpful intermediate
+    # buffering.
+    fd = ccall(:open, Cint, (Ptr{UInt8}, Cint, Cint), fname, Base.Filesystem.JL_O_RDONLY, 0)
+    systemerror("open($fname)", fd == -1)
+    stat_struct = zeros(UInt8, ccall(:jl_sizeof_stat, Int32, ()))
+    # Can't use Base.stat because threading
+    ret = ccall(:jl_fstat, Cint, (Cint, Ptr{UInt8}), fd, stat_struct)
+    ret == 0 || throw(Base.UVError("stat",r))
+    size = Base.Filesystem.StatStruct(stat_struct).size
+    data = Array{UInt8}(size)
+    rsize = ccall(:read, Cint, (Cint, Ptr{UInt8}, Csize_t), fd, data, size)
+    systemerror("read", rsize != size)
+    r = ccall(:close, Cint, (Cint,), fd)
+    systemerror("close", r == -1)
+    data
+end
+
+function compute_fname(strategy::PlainFITSStrategy, img::SDSSImageDesc)
+    isa(img, FieldExtents) && return (joinpath(strategy.stagedir, filename(img)), nothing)
+    imgrcf = rcf(img)
+    basedir = isa(strategy.rcf_stagedir, String) ? strategy.rcf_stagedir : strategy.rcf_stagedir(imgrcf)
+    if strategy.dirlayout == :celeste
+        subdir = "$basedir/$(imgrcf.run)/$(imgrcf.camcol)"
+        !isa(img, PhotoField) && (subdir = joinpath(subdir, string(imgrcf.field)))
+    elseif strategy.dirlayout == :sdss
+        if typeof(img) <: Union{Mask, PsField}
+            # Photometric reductions
+            subdir = joinpath(basedir, "boss/photo/redux/301", "$(imgrcf.run)/objcs/$(imgrcf.camcol)")
+        elseif typeof(img) <: PhotoField
+            subdir = joinpath(basedir, "boss/photoObj/301", "$(imgrcf.run)")
+        elseif typeof(img) <: PhotoObj
+            subdir = joinpath(basedir, "boss/photoObj/301", "$(imgrcf.run)/$(imgrcf.camcol)")
+        elseif typeof(img) <: Frame
+            subdir = joinpath(basedir, "boss/photoObj/frames/301", "$(imgrcf.run)/$(imgrcf.camcol)")
+        end
+    end
+    fname = joinpath(subdir, filename(img))
+    compression = nothing
+    (strategy.compressed && isa(img, Frame)) && (fname *= ".bz2"; compression = Bzip2Decompression())
+    (strategy.compressed && isa(img, Mask)) && (fname *= ".gz"; compression = GzipDecompression())
+    fname, compression
+end
+
+function readFITS(strategy::PlainFITSStrategy, img::SDSSImageDesc)
+    fname, compression = compute_fname(strategy, img)
+    if strategy.slurp || compression != nothing
+        data = slurp_fits(fname)
+        (compression != nothing) && (data = transcode(compression, data))
+        return FITSIO.FITS(data)
+    else
+        return FITSIO.FITS(fname)
+    end
+end
+
+abstract type NetworkIoStrategy <: IOStrategy; end
+
+struct MasterRPCStrategy <: NetworkIoStrategy
+    remote_strategy::IOStrategy
+end
+
+function readRawData(strategy, img)
+    fname, compression = compute_fname(strategy, img)
+    data = slurp_fits(fname)
+    data, compression
+end
+
+function readFITS(strategy::MasterRPCStrategy, img::SDSSImageDesc)
+    data, compression = remotecall_fetch(readRawData, 1, strategy.remote_strategy, img)
+    (compression != nothing) && (data = transcode(compression, data))
+    return FITSIO.FITS(data)
+end
+
+
+# -----------------------------------------------------------------------------
+# Background / sky
+
 """
     SDSSBackground(sky_small, sky_x, sky_y, calibration) <: AbstractArray{Float32,2}
 
@@ -164,6 +258,7 @@ function read_sky(hdu::FITSIO.TableHDU)
 
     return sky_small, sky_x, sky_y
 end
+
 
 """
 read_frame(fname)
@@ -384,107 +479,72 @@ function read_psfmap(fitsfile::FITSIO.FITS, band::Char)
     return SDSSPSFMap(rrows, rnrow, rncol, cmat)
 end
 
+
 # -----------------------------------------------------------------------------
 # Image-related functions
 
-
-struct RawImage
-    rcf::RunCamcolField
-    b::Int  # band index
-    pixels::Matrix{Float32} # in nMgy, sky-subtracted and calibrated
-    calibration::Vector{Float32}
-    sky::SDSSBackground
-    wcs::WCS.WCSTransform
-    gain::Float32
-    psfmap::SDSSPSFMap
-end
-
-
 """
-Read a SDSS run/camcol/field into a vector of RawImages
+    load_field_images(strategy::IOStrategy, rcf::RunCamcolField)
+
+Read a SDSS run/camcol/field into a vector of 5 Celeste Images (one in each
+SDSS bandpass).
 """
-function load_raw_images(strategy, rcf::RunCamcolField, drop_quickly::Bool = false)
+function load_field_images(strategy::IOStrategy, rcf::RunCamcolField)
     # read gain for each band
     gains = read_field_gains(strategy, rcf)
 
     # open FITS file containing PSF for each band
     psffile = readFITS(strategy, PsField(rcf))
 
-    raw_images = Vector{RawImage}(5)
+    images = Vector{Image}(5)
 
     for (b, band) in enumerate(['u', 'g', 'r', 'i', 'z'])
         # load image data
-        r = parse_image(strategy, rcf, b, psffile, band, gains)
-        if !drop_quickly
-            raw_images[b] = r
+        pixels, calibration, sky, wcs = read_frame(strategy, rcf, band)
+
+        # read mask and apply it to pixel data
+        mask_xranges, mask_yranges = read_mask(strategy, rcf, band)
+        for i=1:length(mask_xranges)
+            pixels[mask_xranges[i], mask_yranges[i]] = NaN
         end
+
+        psfmap = read_psfmap(psffile, band)
+
+        # fit Celeste PSF at center of image
+        nx, ny = size(pixels)
+        psfstamp = psfmap(nx / 2., ny / 2.)
+        celeste_psf = PSF.fit_raw_psf_for_celeste(psfstamp, 2)[1]
+
+        nelec_per_nmgy = gains[band] ./ calibration
+
+        # scale pixels to raw electron counts
+        @assert length(nelec_per_nmgy) == nx
+        @inbounds for j=1:ny, i=1:nx
+            pixels[i, j] = nelec_per_nmgy[i] * (pixels[i, j] + sky[i, j])
+        end
+
+        images[b] = Image(pixels, b, wcs, celeste_psf, sky, nelec_per_nmgy,
+                          psfmap)
+
     end
+
     close(psffile)
 
-    return raw_images
-end
-
-function parse_image(strategy, rcf, b, psffile, band, gains)
-    # load image data
-    pixels, calibration, sky, wcs = read_frame(strategy, rcf, band)
-
-    # read mask
-    mask_xranges, mask_yranges = read_mask(strategy, rcf, band)
-
-    # apply mask
-    for i=1:length(mask_xranges)
-        pixels[mask_xranges[i], mask_yranges[i]] = NaN
-    end
-
-    # read the psf
-    psfmap = read_psfmap(psffile, band)
-
-    # Set it to use a constant background but include the non-constant data.
-    r = RawImage(rcf, b,
-                 pixels, calibration, sky, wcs,
-                 gains[band], psfmap)
-    r
+    return images
 end
 
 
-"""
-Load all the images for multiple rcfs
-"""
-function load_raw_images(strategy, rcfs::Vector{RunCamcolField}, drop_quickly::Bool = false)
-    raw_images = RawImage[]
-
+function load_field_images(strategy::IOStrategy,
+                           rcfs::Vector{RunCamcolField})
+    images = Image[]
     for rcf in rcfs
-        #Log.info("loading images for $rcf")
-        rcf_raw_images = SDSSIO.load_raw_images(strategy, rcf, drop_quickly)
-        append!(raw_images, rcf_raw_images)
+        append!(images, load_field_images(strategy, rcf))
     end
-
-    raw_images
+    return images
 end
 
-
-"""
-Converts a raw image to an image by fitting the PSF, a mixture of Gaussians.
-"""
-function convert(::Type{Image}, r::RawImage)
-    H, W = size(r.pixels)
-
-    psfstamp = r.psfmap(H / 2., W / 2.)
-    celeste_psf = PSF.fit_raw_psf_for_celeste(psfstamp, 2)[1]
-
-    # scale pixels to raw electron counts
-    @assert size(r.pixels, 1) == length(r.calibration)
-    @inbounds for j=1:size(r.pixels, 2), i=1:size(r.pixels, 1)
-        sky_ij = r.sky[i, j]
-        r.pixels[i, j] = (r.gain / r.calibration[i]) * (r.pixels[i, j] + sky_ij)
-    end
-
-    nelec_per_nmgy = r.gain ./ r.calibration
-
-    Image(r.pixels, r.b, r.wcs, celeste_psf,
-          r.sky, nelec_per_nmgy, r.psfmap)
-end
-
+# -----------------------------------------------------------------------------
+# Catalogs
 
 """
 Read a source catalog from an SDSS \"photoObj\" FITS file for a given
@@ -760,119 +820,6 @@ function read_photoobj_files(strategy, fts::Vector{RunCamcolField};
     end
 
     return assemble_catalog(rawcatalogs; duplicate_policy=duplicate_policy)
-end
-
-# IO Strategies, these are specification objects fed in from external
-abstract type IOStrategy end
-
-struct PlainFITSStrategy <: IOStrategy
-    stagedir::String
-    dirlayout::Symbol
-    compressed::Bool
-    # Could be a string or rcf -> stagedir function
-    rcf_stagedir
-    slurp::Bool
-end
-PlainFITSStrategy(stagedir::String, slurp::Bool = false) = PlainFITSStrategy(stagedir, :celeste, false, stagedir, slurp)
-
-function slurp_fits(fname)
-    is_linux() || is_bsd() || error("Slurping not implemented on this OS")
-    # Do this with explicit POSIX calls, to make sure to avoid
-    # any well-intended, but ultimately unhelpful intermediate
-    # buffering.
-    fd = ccall(:open, Cint, (Ptr{UInt8}, Cint, Cint), fname, Base.Filesystem.JL_O_RDONLY, 0)
-    systemerror("open($fname)", fd == -1)
-    stat_struct = zeros(UInt8, ccall(:jl_sizeof_stat, Int32, ()))
-    # Can't use Base.stat because threading
-    ret = ccall(:jl_fstat, Cint, (Cint, Ptr{UInt8}), fd, stat_struct)
-    ret == 0 || throw(Base.UVError("stat",r))
-    size = Base.Filesystem.StatStruct(stat_struct).size
-    data = Array{UInt8}(size)
-    rsize = ccall(:read, Cint, (Cint, Ptr{UInt8}, Csize_t), fd, data, size)
-    systemerror("read", rsize != size)
-    r = ccall(:close, Cint, (Cint,), fd)
-    systemerror("close", r == -1)
-    data
-end
-
-function compute_fname(strategy::PlainFITSStrategy, img::SDSSImageDesc)
-    isa(img, FieldExtents) && return (joinpath(strategy.stagedir, filename(img)), nothing)
-    imgrcf = rcf(img)
-    basedir = isa(strategy.rcf_stagedir, String) ? strategy.rcf_stagedir : strategy.rcf_stagedir(imgrcf)
-    if strategy.dirlayout == :celeste
-        subdir = "$basedir/$(imgrcf.run)/$(imgrcf.camcol)"
-        !isa(img, PhotoField) && (subdir = joinpath(subdir, string(imgrcf.field)))
-    elseif strategy.dirlayout == :sdss
-        if typeof(img) <: Union{Mask, PsField}
-            # Photometric reductions
-            subdir = joinpath(basedir, "boss/photo/redux/301", "$(imgrcf.run)/objcs/$(imgrcf.camcol)")
-        elseif typeof(img) <: PhotoField
-            subdir = joinpath(basedir, "boss/photoObj/301", "$(imgrcf.run)")
-        elseif typeof(img) <: PhotoObj
-            subdir = joinpath(basedir, "boss/photoObj/301", "$(imgrcf.run)/$(imgrcf.camcol)")
-        elseif typeof(img) <: Frame
-            subdir = joinpath(basedir, "boss/photoObj/frames/301", "$(imgrcf.run)/$(imgrcf.camcol)")
-        end
-    end
-    fname = joinpath(subdir, filename(img))
-    compression = nothing
-    (strategy.compressed && isa(img, Frame)) && (fname *= ".bz2"; compression = Bzip2Decompression())
-    (strategy.compressed && isa(img, Mask)) && (fname *= ".gz"; compression = GzipDecompression())
-    fname, compression
-end
-
-function readFITS(strategy::PlainFITSStrategy, img::SDSSImageDesc)
-    fname, compression = compute_fname(strategy, img)
-    if strategy.slurp || compression != nothing
-        data = slurp_fits(fname)
-        (compression != nothing) && (data = transcode(compression, data))
-        return FITSIO.FITS(data)
-    else
-        return FITSIO.FITS(fname)
-    end
-end
-
-abstract type NetworkIoStrategy <: IOStrategy; end
-
-struct MasterRPCStrategy <: NetworkIoStrategy
-    remote_strategy::IOStrategy
-end
-
-function readRawData(strategy, img)
-    fname, compression = compute_fname(strategy, img)
-    data = slurp_fits(fname)
-    data, compression
-end
-
-function readFITS(strategy::MasterRPCStrategy, img::SDSSImageDesc)
-    data, compression = remotecall_fetch(readRawData, 1, strategy.remote_strategy, img)
-    (compression != nothing) && (data = transcode(compression, data))
-    return FITSIO.FITS(data)
-end
-
-
-"""
-Read a SDSS run/camcol/field into an array of Images.
-"""
-function load_field_images(strategy::IOStrategy, rcfs, drop_quickly::Bool = false)
-    raw_images = SDSSIO.load_raw_images(strategy, rcfs, drop_quickly)
-
-    N = length(raw_images)
-    images = Vector{Image}(N)
-
-    drop_quickly && return images
-
-    #Threads.@threads for n in 1:N
-    for n in 1:N
-        try
-            images[n] = convert(Image, raw_images[n])
-        catch exc
-            Log.exception(exc)
-            rethrow()
-        end
-    end
-
-    return images
 end
 
 

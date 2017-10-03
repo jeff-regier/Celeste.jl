@@ -200,7 +200,7 @@ end
 """
     detect_sources(images)
 
-Detect sources in a set of (possibly overlapping) `RawImage`s and combine
+Detect sources in a set of (possibly overlapping) `Image`s and combine
 duplicates.
 
 # Returns
@@ -211,28 +211,27 @@ duplicates.
 
 # Notes
 
-Here, we're dealing with the `RawImage` type, which is SDSS-specific. The
-pixel values are already sky subtracted (and calibrated), so we don't have to
-background subtract. However, we still run a background analysis, just to
-determine the rough image noise for the purposes of thresholding.
-
-This could be slightly suboptimal in terms of
-selecting faint sources: If the image noise varies significantly
-across the image, the threshold might be too high or too low in some
-places. However, we don't really trust the variable background RMS without
-first masking sources. (We could add this.)
+We're using sky subtracted (and calibrated) image data, but, we still
+run a background analysis, just to determine the rough image noise for
+the purposes of setting a threshold. This could be slightly suboptimal
+in terms of selecting faint sources: If the image noise varies
+significantly across the image, the threshold might be too high or too
+low in some places. However, we don't really trust the variable
+background RMS without first masking sources. (We could add this.)
 """
-function detect_sources(images::Vector{SDSSIO.RawImage})
+function detect_sources(images::Vector{Image})
 
     catalog = Vector{CatalogEntry}()
     source_radii = Vector{Float64}()
 
     for image in images
 
+        calpixels = Model.calibrated_pixels(image)
+
         # Run background, just to get background rms.
-        bkg = SEP.Background(image.pixels; boxsize=(256, 256),
+        bkg = SEP.Background(calpixels; boxsize=(256, 256),
                              filtersize=(3, 3))
-        sep_catalog = SEP.extract(image.pixels, 1.3; noise=SEP.global_rms(bkg))
+        sep_catalog = SEP.extract(calpixels, 1.3; noise=SEP.global_rms(bkg))
 
         # convert pixel coordinates to world coordinates
         pixcoords = Array{Float64}(2, length(sep_catalog.x))
@@ -363,10 +362,10 @@ function infer_init_new(rcfs::Vector{RunCamcolField},
 
     try
         # Read in images for all RCFs
-        raw_images = SDSSIO.load_raw_images(strategy, rcfs)
+        images = SDSSIO.load_field_images(strategy, rcfs)
 
-        # detect sources on all raw images (before background added back)
-        catalog, source_radii = detect_sources(raw_images)
+        # detect sources on all images
+        catalog, source_radii = detect_sources(images)
 
         # Get indices of entries in the RA/Dec range of interest.
         # (Some images can have regions that are outside the box, so not
@@ -378,14 +377,6 @@ function infer_init_new(rcfs::Vector{RunCamcolField},
         Log.info("$(Time(now())): $(length(catalog)) primary sources, ",
                  "$(length(target_sources)) target sources in $(box.ramin), ",
                  "$(box.ramax), $(box.decmin), $(box.decmax)")
-
-        # convert raw images to images
-        try
-            images = [convert(Image, raw_image) for raw_image in raw_images]
-        catch exc
-            Log.exception(exc)
-            rethrow()
-        end
 
     catch ex
         Log.exception(ex)
