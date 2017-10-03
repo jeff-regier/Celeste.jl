@@ -163,12 +163,21 @@ function make_star_loglike(imgs::Vector;
 
             # sum per-pixel likelihood contribution
             for h in 1:img.H, w in 1:img.W
+                rate_hw    = src_pixels[h, w]
+                if isinf(rate_hw)
+                    return -Inf
+                end
                 pixel_data = img.pixels[h,w]
                 is_active  = active_bitmap[h, w]
                 if !isnan(pixel_data) && is_active
-                    rate_hw = src_pixels[h, w]
-                    #ll += poisson_lnpdf(pixel_data, rate_hw)
                     ll += (pixel_data*log(rate_hw) - rate_hw)
+                    #if isnan(ll)
+                    #    println("found nan in star loglike!")
+                    #    println("rate: ", rate_hw)
+                    #    println("pixel_data: ", pixel_data)
+                    #    println("Bflux: ", bflux)
+                    #    throw("NOOOOOO")
+                    #end
                 end
             end
         end
@@ -286,10 +295,13 @@ function make_gal_loglike(imgs::Vector;
 
             # sum per-pixel likelihood contribution
             for h in 1:img.H, w in 1:img.W
+                rate_hw = src_pixels[h, w]
+                if isinf(rate_hw)
+                    return -Inf
+                end
                 pixel_data = img.pixels[h,w]
                 is_active  = active_bitmap[h,w]
                 if !isnan(pixel_data) && is_active
-                    rate_hw = src_pixels[h, w]
                     #ll += poisson_lnpdf(pixel_data, rate_hw)
                     ll += (pixel_data*log(rate_hw) - rate_hw)
                 end
