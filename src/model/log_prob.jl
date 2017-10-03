@@ -260,7 +260,7 @@ function construct_prior()
         LogNormal(pp.flux_mean[2], sqrt(pp.flux_var[2])),
         Categorical(pp.k[:,2]),
         [MvNormal(pp.color_mean[:,k,2], pp.color_cov[:,:,k,2]) for k in 1:NUM_COLOR_COMPONENTS],
-        LogNormal(0, 10),
+        LogNormal(pp.gal_radius_px_mean, sqrt(pp.gal_radius_px_var)),
         Beta(1, 1),
         Beta(1, 1))
 
