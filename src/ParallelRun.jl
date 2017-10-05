@@ -262,7 +262,7 @@ function detect_sources(images::Vector{Image})
             gal_fluxes = fill(NaN, NUM_BANDS)
             gal_fluxes[image.b] = sep_catalog.flux[i]
 
-            gal_axis_ratio = sep_catalog.a[i] / sep_catalog.b[i]
+            gal_axis_ratio = sep_catalog.b[i] / sep_catalog.a[i]
 
             # SEP angle is CCW from +x axis and in [-pi/2, pi/2].
             # Add offset of x axis from N to make angle CCW from N
@@ -350,39 +350,24 @@ end
 New version of infer_init() that uses detect_sources() instead of SDSS
 photoObj catalog for initialization.
 """
-function infer_init_new(rcfs::Vector{RunCamcolField},
-                        strategy::SDSSIO.IOStrategy;
-                        box=BoundingBox(-1000., 1000., -1000., 1000.))
+function infer_init(images::Vector{<:Image};
+                    box=BoundingBox(-1000., 1000., -1000., 1000.))
 
     # Initialize variables to empty vectors in case try block fails
-    catalog = CatalogEntry[]
-    source_radii = Float64[]
     target_sources = Int[]
-    images = Image[]
 
-    try
-        # Read in images for all RCFs
-        images = SDSSIO.load_field_images(strategy, rcfs)
+    # detect sources on all images
+    catalog, source_radii = detect_sources(images)
 
-        # detect sources on all images
-        catalog, source_radii = detect_sources(images)
-
-        # Get indices of entries in the RA/Dec range of interest.
-        # (Some images can have regions that are outside the box, so not
-        # all sources are necessarily in the box.)
-        entry_in_range = entry->((box.ramin < entry.pos[1] < box.ramax) &&
-                                 (box.decmin < entry.pos[2] < box.decmax))
-        target_sources = find(entry_in_range, catalog)
-
-        Log.info("$(Time(now())): $(length(catalog)) primary sources, ",
-                 "$(length(target_sources)) target sources in $(box.ramin), ",
-                 "$(box.ramax), $(box.decmin), $(box.decmax)")
-
-    catch ex
-        Log.exception(ex)
-        empty!(target_sources)
-        rethrow()
-    end
+    # Get indices of entries in the RA/Dec range of interest.
+    # (Some images can have regions that are outside the box, so not
+    # all sources are necessarily in the box.)
+    entry_in_range = entry->((box.ramin < entry.pos[1] < box.ramax) &&
+                             (box.decmin < entry.pos[2] < box.decmax))
+    target_sources = find(entry_in_range, catalog)
+    Log.info("$(Time(now())): $(length(catalog)) sources, ",
+             "$(length(target_sources)) target sources in $(box.ramin), ",
+             "$(box.ramax), $(box.decmin), $(box.decmax)")
 
     # build neighbor map based on source radii
     neighbor_map = Vector{Int64}[Int64[] for s in target_sources]
@@ -403,55 +388,7 @@ function infer_init_new(rcfs::Vector{RunCamcolField},
         end
     end
 
-    return catalog, target_sources, neighbor_map, images
-end
-
-
-"""
-Given a list of RCFs, load the catalogs, determine the target sources,
-load the images, and build the neighbor map.
-"""
-function infer_init(rcfs::Vector{RunCamcolField},
-                    strategy::SDSSIO.IOStrategy;
-                    box=BoundingBox(-1000., 1000., -1000., 1000.),
-                    primary_initialization=true)
-    catalog = Vector{CatalogEntry}()
-    target_sources = Vector{Int}()
-    neighbor_map = Vector{Vector{Int}}()
-    images = Vector{Image}()
-
-    # Read all primary objects in these fields.
-    duplicate_policy = primary_initialization ? :primary : :first
-
-    for rcf in rcfs
-        this_cat = SDSSIO.read_photoobj_files(strategy, [rcf],
-                                              duplicate_policy=duplicate_policy)
-        append!(catalog, this_cat)
-    end
-
-    # Get indices of entries in the RA/Dec range of interest.
-    entry_in_range = entry->((box.ramin < entry.pos[1] < box.ramax) &&
-                             (box.decmin < entry.pos[2] < box.decmax))
-    target_sources = find(entry_in_range, catalog)
-
-    Log.info("$(Time(now())): $(length(catalog)) primary sources, ",
-             "$(length(target_sources)) target sources in $(box.ramin), ",
-             "$(box.ramax), $(box.decmin), $(box.decmax)")
-
-    # Load images and neighbor map for target sources
-    if length(target_sources) > 0
-        # Read in images for all (run, camcol, field).
-        try
-            images = SDSSIO.load_field_images(strategy, rcfs)
-        catch ex
-            Log.exception(ex)
-            empty!(target_sources)
-        end
-
-        neighbor_map = ParallelRun.find_neighbors(target_sources, catalog, images)
-    end
-
-    return catalog, target_sources, neighbor_map, images
+    return catalog, target_sources, neighbor_map
 end
 
 
@@ -719,9 +656,10 @@ function infer_box(strategy, box::BoundingBox, outdir::String)
     @time begin
         # Get vector of (run, camcol, field) triplets overlapping this patch
         rcfs = get_overlapping_fields(box, strategy)
-        catalog, target_sources, neighbor_map, images =
-            infer_init(rcfs, strategy; box=box, primary_initialization=true)
-        results = one_node_joint_infer(catalog, target_sources, neighbor_map, images)
+        images = SDSSIO.load_field_images(strategy, rcfs)
+        catalog, target_sources, neighbor_map = infer_init(images; box=box)
+        results = one_node_joint_infer(catalog, target_sources, neighbor_map,
+                                       images)
         save_results(outdir, box, results)
     end
 end

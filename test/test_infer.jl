@@ -12,8 +12,9 @@ using Celeste.ParallelRun
     box = ParallelRun.BoundingBox(164.39, 164.41, 39.11, 39.13)
     rcfs = [RunCamcolField(3900, 6, 269),]
     strategy = PlainFITSStrategy(datadir)
-    ctni = ParallelRun.infer_init(rcfs, strategy; box=box)
-    result = ParallelRun.one_node_single_infer(ctni...; config=Config(2.0, 3, 2), do_vi=false)
+    images = SDSSIO.load_field_images(strategy, rcfs)
+    c, t, n = ParallelRun.infer_init(images; box=box)
+    result = ParallelRun.one_node_single_infer(c, t, n, images; config=Config(2.0, 3, 2), do_vi=false)
 end
 
 
@@ -30,8 +31,9 @@ end
     box = ParallelRun.BoundingBox(164.39, 164.41, 39.11, 39.13)
     rcfs = [RunCamcolField(3900, 6, 269),]
     strategy = PlainFITSStrategy(datadir)
-    ctni = ParallelRun.infer_init(rcfs, strategy; box=box)
-    result = ParallelRun.one_node_single_infer(ctni...)
+    images = SDSSIO.load_field_images(strategy, rcfs)
+    c, t, n = ParallelRun.infer_init(images; box=box)
+    result = ParallelRun.one_node_single_infer(c, t, n, images)
 end
 
 

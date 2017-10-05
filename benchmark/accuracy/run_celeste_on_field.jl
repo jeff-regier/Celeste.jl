@@ -33,9 +33,8 @@ ArgumentParse.add_argument(
 )
 ArgumentParse.add_argument(
     parser,
-    "catalog_csv",
-    help="CSV catalog for initialization",
-    required=true,
+    "--initialization-catalog",
+    help="CSV catalog for initialization. Default is to initialize by source detection.",
 )
 parsed_args = ArgumentParse.parse_args(parser, ARGS)
 
@@ -50,29 +49,39 @@ else
 end
 @assert length(images) == 5
 
-catalog_data = AccuracyBenchmark.read_catalog(parsed_args["catalog_csv"])
-if parsed_args["use-full-initialization"]
-    @printf("Using full initialization from %s\n", parsed_args["catalog_csv"])
+if haskey(parsed_args, "initialization-catalog")
+    catalog_data = AccuracyBenchmark.read_catalog(parsed_args["initialization-catalog"])
+    if parsed_args["use-full-initialization"]
+        println("Using full initialization from ", parsed_args["initialization-catalog"])
+    end
+    catalog_entries = AccuracyBenchmark.make_initialization_catalog(
+        catalog_data, parsed_args["use-full-initialization"])
+    target_sources = collect(1:length(catalog_entries))
+    neighbor_map = ParallelRun.find_neighbors(target_sources, catalog_entries,
+                                              images)
+else
+    catalog_entries, target_sources, neighbor_map =
+        ParallelRun.infer_init(images)
 end
-catalog_entries = AccuracyBenchmark.make_initialization_catalog(
-    catalog_data,
-    parsed_args["use-full-initialization"],
-)
+
 @printf("Loaded %d sources...\n", length(catalog_entries))
 
 if haskey(parsed_args, "limit-num-sources")
-    target_sources = collect(1:parsed_args["limit-num-sources"])
-else
-    target_sources = collect(1:length(catalog_entries))
+    nsources = min(parsed_args["limit-num-sources"], length(target_sources))
+    target_sources = target_sources[1:nsources]
 end
 
-results = AccuracyBenchmark.run_celeste(
-    Config(25.0),
-    catalog_entries,
-    target_sources,
-    images,
-    use_joint_inference=parsed_args["joint"],
-)
+config = Config(25.0)
+if parsed_args["joint"]
+    results = ParallelRun.one_node_joint_infer(catalog_entries, target_sources,
+                                               neighbor_map, images,
+                                               config=config)
+else
+    results = ParallelRun.one_node_single_infer(catalog_entries, target_sources,
+                                                neighbor_map, images,
+                                                config=config)
+end
+
 results_df = AccuracyBenchmark.celeste_to_df(results)
 
 csv_filename = joinpath(OUTPUT_DIRECTORY, @sprintf("%s_predictions.csv", catalog_label))

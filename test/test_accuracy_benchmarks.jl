@@ -22,12 +22,12 @@ import Celeste: Model
     # see http://legacysurvey.org/viewer/jpeg-cutout/?ra=0.5130&dec=0.5358&zoom=16&layer=sdss2
     target_sources = [8,]
 
-    results = AccuracyBenchmark.run_celeste(
-        Celeste.Config(),
-        catalog_entries,
-        target_sources,
-        images,
-    )
+    neighbor_map = ParallelRun.find_neighbors(target_sources, catalog_entries,
+                                              images)
+    results = ParallelRun.one_node_single_infer(catalog_entries,
+                                                target_sources,
+                                                neighbor_map, images,
+                                                config=Celeste.Config())
     results_df = AccuracyBenchmark.celeste_to_df(results)
 
     coadd_path = joinpath(datadir, "coadd_for_4263_5_119.fit")
