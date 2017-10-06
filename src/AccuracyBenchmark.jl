@@ -1012,33 +1012,5 @@ function score_uncertainty(uncertainty_df::DataFrame)
     end
 end
 
-################################################################################
-# Utilities
-################################################################################
-
-# Run Celeste with any combination of single/joint inference
-function run_celeste(
-    config::Config, catalog_entries, target_sources, images;
-    use_joint_inference=false,
-)
-    neighbor_map = ParallelRun.find_neighbors(target_sources, catalog_entries, images)
-    if use_joint_inference
-        ParallelRun.one_node_joint_infer(
-            catalog_entries,
-            target_sources,
-            neighbor_map,
-            images,
-            config=config,
-        )
-    else
-        ParallelRun.one_node_single_infer(
-            catalog_entries,
-            target_sources,
-            neighbor_map,
-            images,
-            config=config,
-        )
-    end
-end
 
 end # module AccuracyBenchmark
