@@ -14,13 +14,14 @@ function run_ais(entry::CatalogEntry,
                  pos_delta::Array{Float64, 1}=[2., 2.];
                  num_samples::Int=2,
                  num_temperatures::Int=50,
-                 print_skip::Int=20)
+                 print_skip::Int=20,
+                 num_samples_per_chain::Int=25)
     println("\nRunning AIS on with patch size ", imgs[1].H, "x", imgs[1].W)
     println("  catalog type: ", entry.is_star ? "star" : "galaxy")
     println("  num images  : ", length(imgs))
     n_active = sum([sum(p.active_pixel_bitmap) for p in patches[1, :]]) / length(patches[1,:])
     println("  num active pixels per patch: ", n_active)
-    #imgs, pos_delta, num_samples, print_skip, num_temperatures = patch_images, [1., 1.], 3, 1, 10
+    #imgs, pos_delta, num_samples, print_skip, num_temperatures, num_samples_per_chain = patch_images, [1., 1.], 3, 1, 10, 25
 
     ###################
     # run star MCMC   #
@@ -41,7 +42,18 @@ function run_ais(entry::CatalogEntry,
                                     schedule=star_schedule,
                                     num_samps=num_samples,
                                     num_samples_per_step=1)
-    lnZ = res_star[:lnZ]
+    star_chains, star_chain_lls = [], []
+    for i in 1:size(res_star[:zsamps], 2)
+        println("    star chain ", i, " of ", size(res_star[:zsamps], 2))
+        star_chain, star_lls = MCMC.slicesample_chain(star_logpost,
+            res_star[:zsamps][:,1], num_samples_per_chain;
+            print_skip=Int64(num_samples_per_chain/5), verbose=false)
+        push!(star_chains, star_chain)
+        push!(star_chain_lls, star_lls)
+    end
+    res_star[:zsamps]    = transpose(vcat(star_chains...))
+    res_star[:zsamp_lls] = vcat(star_chain_lls...)
+    lnZ  = res_star[:lnZ]
     lnZs = res_star[:lnZ_bootstrap]
     lo, hi = percentile(lnZs, 2.5), percentile(lnZs, 97.5)
     @printf "STAR AIS estimate : %2.4f [%2.3f, %2.3f]\n" lnZ lo hi
@@ -55,13 +67,27 @@ function run_ais(entry::CatalogEntry,
                                         patches=patches[1, :],
                                         background_images=background_images,
                                         pos_delta=pos_delta)
-
+    th_cat = MCMC.parameters_from_catalog(entry; is_star=false)
+    th_rand = sample_gal_prior()
+    println("gal loglike  at CATALOG vs PRIOR : ", gal_loglike(th_cat), ", ", gal_loglike(th_rand))
+    println("gal logprior at CATALOG vs PRIOR : ", gal_logprior(th_cat), ", ", gal_logprior(th_rand))
     gal_schedule = MCMC.sigmoid_schedule(num_temperatures; rad=4)
     res_gal = MCMC.ais_slicesample(gal_logpost, gal_logprior,
                                    sample_gal_prior;
                                    schedule=gal_schedule,
                                    num_samps=num_samples,
                                    num_samples_per_step=1)
+    gal_chains, gal_chain_lls = [], []
+    for i in 1:size(res_gal[:zsamps], 2)
+        println("    gal chain ", i, " of ", size(res_gal[:zsamps], 2))
+        gal_chain, gal_lls = MCMC.slicesample_chain(gal_logpost,
+            res_gal[:zsamps][:,1], num_samples_per_chain;
+            print_skip=Int64(num_samples_per_chain/5), verbose=false)
+        push!(gal_chains, gal_chain)
+        push!(gal_chain_lls, gal_lls)
+    end
+    res_gal[:zsamps]    = transpose(vcat(gal_chains...))
+    res_gal[:zsamp_lls] = vcat(gal_chain_lls...)
     lnZ = res_gal[:lnZ]
     lnZs = res_gal[:lnZ_bootstrap]
     lo, hi = percentile(lnZs, 2.5), percentile(lnZs, 97.5)
@@ -98,10 +124,10 @@ function run_ais(entry::CatalogEntry,
 
     # store objid (for concatenation)
     mcmc_results = Dict("star_samples" => star_chain,
-                        "star_lls"     => res_star[:lnZsamps],
+                        "star_lls"     => res_star[:zsamp_lls], #[res_star[:lnZsamps],
                         "star_bootstrap"=> res_star[:lnZ_bootstrap],
                         "gal_samples"  => gal_chain,
-                        "gal_lls"      => res_gal[:lnZsamps],
+                        "gal_lls"      => res_gal[:zsamp_lls], #res_gal[:lnZsamps],
                         "gal_bootstrap" => res_gal[:lnZ_bootstrap],
                         "type_samples" => type_chain,
                         "ave_pstar"    => ave_pstar)

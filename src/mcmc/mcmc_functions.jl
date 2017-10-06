@@ -302,7 +302,6 @@ function make_gal_loglike(imgs::Vector;
                 pixel_data = img.pixels[h,w]
                 is_active  = active_bitmap[h,w]
                 if !isnan(pixel_data) && is_active
-                    #ll += poisson_lnpdf(pixel_data, rate_hw)
                     ll += (pixel_data*log(rate_hw) - rate_hw)
                 end
             end
