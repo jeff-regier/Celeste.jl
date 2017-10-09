@@ -503,8 +503,8 @@ function process_source_mcmc(config::Config,
                     for i in 1:length(images)]
 
     # render a background image on the active source (first in list)
-    background_images = [MCMC.render_patch(images[i], patches[1, i], neighbors)
-                         for i in 1:length(images)]
+    background_images = [MCMC.render_patch_nmgy(patch_images[i], patches[1, i], neighbors)
+                         for i in 1:length(patch_images)]
 
     # run mcmc sampler on this image/patch/background initialized at entry
     if use_ais

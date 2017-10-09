@@ -219,21 +219,6 @@ function write_star_unit_flux(pos::Array{Float64, 1},
     end
 end
 
-function write_star_unit_flux_raw(world_pos::Array{Float64, 1},
-                                  patch::SkyPatch,
-                                  iota::Float64,
-                                  pixels::Matrix{Float64};
-                                  flux::Float64=1.)
-    fs0m = SensitiveFloat{Float64}(length(StarPosParams), 1, false, false)
-    H, W = size(pixels)
-    for w in 1:W, h in 1:H
-        hfield = patch.bitmap_offset[1] + h
-        wfield = patch.bitmap_offset[2] + w
-        Model.star_light_density!(fs0m, patch, hfield, wfield, world_pos, false)
-        pixel_rate = flux * iota * fs0m.v[]
-        pixels[h, w] += pixel_rate
-    end
-end
 
 """
 Add a galaxy model image to a matrix of pixels.  Defaults to unit flux.
@@ -266,6 +251,7 @@ function write_galaxy_unit_flux(pos::Array{Float64, 1},
     end
 end
 
+
 function write_galaxy_unit_flux_pixel(px_pos::Array{Float64, 1},
                                       psf::Array{Model.PsfComponent,1},
                                       iota::Float64,
@@ -295,33 +281,23 @@ end
 """
 Generate a model image on a patch, according to that image/patch psf
 """
-function render_patch(img::Image, patch::SkyPatch, n_bodies::Vector{CatalogEntry})
-    # sky noise an gain
-    epsilon = img.sky[1, 1]
-    iota    = Float64(median(img.nelec_per_nmgy))
-    offset  = convert(Array{Float64, 1}, patch.bitmap_offset)
-
-    # create sky noise background image
-    H, W = size(patch.active_pixel_bitmap)
-    patch_pixels = [epsilon*iota for h=1:H, w=1:W]
+function render_patch_nmgy(img::Image, patch::SkyPatch, n_bodies::Vector{CatalogEntry})
+    # create sky noise background image in nmgy
+    patch_pixels = ones(Float32, size(img.sky)) .* img.sky
 
     # write star/gal model images onto patch_pixels
     for body in n_bodies
         if body.is_star
-            write_star_unit_flux(body.pos, img.psf, img.wcs, iota, patch_pixels;
-                offset = offset,
-                flux   = body.star_fluxes[img.b]
-              )
+            Model.write_star_nmgy!(body.pos, body.star_fluxes[img.b], patch,
+                patch_pixels; write_to_patch=true)
         else
-            write_galaxy_unit_flux(body.pos, img.psf, img.wcs, iota,
+            Model.write_galaxy_nmgy!(body.pos, body.gal_fluxes[img.b],
                 body.gal_frac_dev, body.gal_axis_ratio, body.gal_angle,
-                body.gal_radius_px, patch_pixels;
-                offset = offset,
-                flux   = body.gal_fluxes[img.b]
-              )
+                body.gal_radius_px, img.psf, [patch][:,:], patch_pixels;
+                write_to_patch=true)
         end
     end
-    return patch_pixels
+    return Array{Float64}(patch_pixels)
 end
 
 
@@ -352,29 +328,6 @@ function get_patch(the_mean::SVector{2,Float64}, H::Int, W::Int)
     w11 = max(1, wm - radius):min(W, wm + radius)
     h11 = max(1, hm - radius):min(H, hm + radius)
     return (w11, h11)
-end
-
-
-#########################################
-# older interface
-#########################################
-function write_star_unit_flux(img0::Image,
-                              pos::Array{Float64, 1},
-                              pixels::Matrix{Float64})
-    iota = Float64(median(img0.nelec_per_nmgy))
-    write_star_unit_flux(pos, img0.psf, img0.wcs, iota, pixels)
-end
-
-function write_galaxy_unit_flux(img0::Image,
-                                pos::Array{Float64,1},
-                                gal_frac_dev::Float64,
-                                gal_ab::Float64,
-                                gal_angle::Float64,
-                                gal_scale::Float64,
-                                pixels::Matrix{Float64})
-    iota = Float64(median(img0.nelec_per_nmgy))
-    write_galaxy_unit_flux(pos, img0.psf, img0.wcs, iota,
-        gal_frac_dev, gal_ab, gal_angle, gal_scale, pixels)
 end
 
 

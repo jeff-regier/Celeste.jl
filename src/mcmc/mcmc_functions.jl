@@ -109,8 +109,7 @@ Args:
 function make_star_loglike(imgs::Vector;
                            patches::Array{SkyPatch, 1}=nothing,
                            background_images::Array{Array{Float64, 2}, 1}=nothing,
-                           pos_transform::Function=nothing,
-                           use_raw_psf=false)
+                           pos_transform::Function=nothing)
     # create background images --- sky noise and neighbors if there
     if background_images == nothing
         background_images = make_empty_background_images(imgs)
@@ -131,9 +130,6 @@ function make_star_loglike(imgs::Vector;
     # as a sum, so we can compute it here and cache it
     lgamma_const = compute_lgamma_sum(imgs, active_bitmaps)
 
-    # create iota vecs --- number of elecs per nanomaggy fo reach image
-    nelec_per_nmgy_vec = [Float64(median(img.nelec_per_nmgy)) for img in imgs]
-
     # create function to return
     function star_loglike(th::Array{Float64, 1})
 
@@ -150,30 +146,38 @@ function make_star_loglike(imgs::Vector;
             # sky pixel intensity (sky image)
             background = background_images[ii]
 
-            # create and cache unit flux src image
-            src_pixels = zeros(img.H, img.W)
-            iota = nelec_per_nmgy_vec[ii]
-            if use_raw_psf
-                write_star_unit_flux_raw(pos, patches[ii], iota, src_pixels)
-            else
-                write_star_unit_flux(pos, img.psf, img.wcs, iota, src_pixels,
-                                     offset=offsets[:,ii])
-            end
-
             # band-specific flux --- do bounds check
             bflux = exp(lnfluxes[img.b])
             if isinf(bflux)  # if bflux overflows, then return -Inf logprob
                 return -Inf
             end
 
+            # create source flux image
+            src_pixels = zeros(Float32, img.H, img.W)
+            Model.write_star_nmgy!(pos, bflux, patches[ii], src_pixels;
+                                   write_to_patch=true)
+
+            # add background, convert flux to ave elec count
+            src_pixels += background
+            src_pixels .*= img.nelec_per_nmgy
+
             # sum per-pixel likelihood contribution
             for h in 1:img.H, w in 1:img.W
+                rate_hw    = src_pixels[h, w]
+                if isinf(rate_hw)
+                    return -Inf
+                end
                 pixel_data = img.pixels[h,w]
                 is_active  = active_bitmap[h, w]
                 if !isnan(pixel_data) && is_active
-                    rate_hw = background[h,w] + bflux*src_pixels[h,w]
-                    #ll += poisson_lnpdf(pixel_data, rate_hw)
                     ll += (pixel_data*log(rate_hw) - rate_hw)
+                    #if isnan(ll)
+                    #    println("found nan in star loglike!")
+                    #    println("rate: ", rate_hw)
+                    #    println("pixel_data: ", pixel_data)
+                    #    println("Bflux: ", bflux)
+                    #    throw("NOOOOOO")
+                    #end
                 end
             end
         end
@@ -239,13 +243,13 @@ function make_gal_loglike(imgs::Vector;
         lnfluxes, unc_pos, ushape = th[1:5], th[6:7], th[8:end]
         pos   = constrain_pos(unc_pos)
         gal_frac_dev, gal_ab, gal_angle, gal_scale = ushape
-        @printf "lnfluxes     = %s \n" string(lnfluxes)
-        @printf "pos (ra,dec) = %2.4f, %2.4f \n" pos[1] pos[2]
-        @printf "gal shape:\n"
-        @printf "  frac_dev   = %2.4f \n" gal_frac_dev
-        @printf "  ab ratio   = %2.4f \n" gal_ab
-        @printf "  angle      = %2.4f \n" gal_angle
-        @printf "  scale      = %2.4f \n" gal_scale
+        Log.info(@sprintf "lnfluxes     = %s \n" string(lnfluxes))
+        Log.info(@sprintf "pos (ra,dec) = %2.4f, %2.4f \n" pos[1] pos[2])
+        Log.info(@sprintf "gal shape:\n")
+        Log.info(@sprintf "  frac_dev   = %2.4f \n" gal_frac_dev)
+        Log.info(@sprintf "  ab ratio   = %2.4f \n" gal_ab)
+        Log.info(@sprintf "  angle      = %2.4f \n" gal_angle)
+        Log.info(@sprintf "  scale      = %2.4f \n" gal_scale)
     end
 
     # make galaxy log like function
@@ -269,26 +273,35 @@ function make_gal_loglike(imgs::Vector;
             # sky pixel intensity (sky image)
             background = background_images[ii]
 
-            # create and cache unit flux src image
-            src_pixels = zeros(img.H, img.W)
-            px_pos     = WCS.world_to_pix(img.wcs, pos) - offsets[:,ii]
-            write_galaxy_unit_flux_pixel(px_pos, img.psf,
-                Float64(median(img.nelec_per_nmgy)),
-                gal_frac_dev, gal_ab, gal_angle, gal_scale, src_pixels)
-
             # image specific flux
             bflux = exp(lnfluxes[img.b])
             if isinf(bflux)
                 return -Inf
             end
 
+            # create and cache unit flux src image
+            src_pixels = zeros(Float32, img.H, img.W)
+            Model.write_galaxy_nmgy!(pos, bflux, gal_frac_dev, gal_ab,
+                gal_angle, gal_scale, img.psf, [patches[ii]][:,:], src_pixels;
+                write_to_patch=true)
+
+            #src_pixels2 = zeros(img.H, img.W)
+            #write_galaxy_unit_flux(pos, img.psf, img.wcs, 1.,
+            #    gal_frac_dev, gal_ab, gal_angle, gal_scale, src_pixels2; flux=bflux)
+            #println("gal is approx", isapprox(src_pixels, src_pixels2))
+            #println("  ... rmse", mean( (src_pixels .- src_pixels2).^2 ))
+            src_pixels += background
+            src_pixels .*= img.nelec_per_nmgy
+
             # sum per-pixel likelihood contribution
             for h in 1:img.H, w in 1:img.W
+                rate_hw = src_pixels[h, w]
+                if isinf(rate_hw)
+                    return -Inf
+                end
                 pixel_data = img.pixels[h,w]
                 is_active  = active_bitmap[h,w]
                 if !isnan(pixel_data) && is_active
-                    rate_hw = background[h,w] + bflux*src_pixels[h,w]
-                    #ll += poisson_lnpdf(pixel_data, rate_hw)
                     ll += (pixel_data*log(rate_hw) - rate_hw)
                 end
             end
@@ -322,8 +335,8 @@ function make_location_prior(img::Image,
     # lower and upper bounds on the ra/dec
     ra_lo, ra_hi   = sort([pos0_world_lower[1], pos0_world_upper[1]])
     dec_lo, dec_hi = sort([pos0_world_lower[2], pos0_world_upper[2]])
-    @printf " ... limiting RA  to [%2.5f, %2.5f] \n" ra_lo ra_hi
-    @printf " ... limiting DEC to [%2.5f, %2.5f] \n" dec_lo dec_hi
+    Log.info(@sprintf " ... limiting RA  to [%2.5f, %2.5f]" ra_lo ra_hi)
+    Log.info(@sprintf " ... limiting DEC to [%2.5f, %2.5f]" dec_lo dec_hi)
 
     # corresponding uniform log likelihoods
     llra  = log(1./(ra_hi - ra_lo))
@@ -382,13 +395,14 @@ function make_gal_logprior()
         llangle = -log(pi)
         llscale = logpdf(prior.galaxy.gal_radius_px, gal_scale)
         if isinf(llangle)
-          println(" angle bad!")
+          throw(" angle bad!")
         end
         if isinf(llscale)
-          println(" scale bad!")
+          throw(" scale bad!")
         end
         ll = MCMC.logflux_logprior(lnfluxes; is_star=false) + llangle + llscale
         return ll
+
     end
     return gal_logprior
 end
@@ -409,9 +423,11 @@ function make_empty_background_images(imgs::Vector)
     background_images = []
     for img in imgs
         # sky pixel intensity (sky image)
-        epsilon    = img.sky[1, 1]
-        iota       = img.nelec_per_nmgy[1]
-        sky_pixels = [epsilon * iota for h=1:img.H, w=1:img.W]
+        #epsilon    = img.sky[1, 1]
+        #iota       = img.nelec_per_nmgy[1]
+        #sky_pixels = [epsilon * iota for h=1:img.H, w=1:img.W]
+        sky_pixels = img.sky
+        Log.info("sky image size : ", size(sky_pixels))
         push!(background_images, sky_pixels)
     end
     return background_images

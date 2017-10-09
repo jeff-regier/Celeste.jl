@@ -344,3 +344,58 @@ function accum_galaxy_pos!(fs1m::SensitiveFloat{T},
         end
     end # if is_active_source
 end
+
+
+function write_star_nmgy!(world_pos::Array{Float64,1},
+                          flux::Float64,
+                          patch::SkyPatch,
+                          pixels::Matrix{Float32};
+                          write_to_patch::Bool=false)
+    fs0m = SensitiveFloat{Float64}(length(StarPosParams), 1, false, false)
+    H2, W2 = size(patch.active_pixel_bitmap)
+    for w2 in 1:W2, h2 in 1:H2
+        h = patch.bitmap_offset[1] + h2
+        w = patch.bitmap_offset[2] + w2
+        Model.star_light_density!(fs0m, patch, h, w, world_pos, false)
+        if write_to_patch
+            pixels[h2, w2] += fs0m.v[] * flux
+        else
+            pixels[h, w] += fs0m.v[] * flux
+        end
+    end
+end
+
+
+function write_galaxy_nmgy!(world_pos::Array{Float64,1},
+                            flux::Float64,
+                            gal_frac_dev::Float64,
+                            gal_axis_ratio::Float64,
+                            gal_angle::Float64,
+                            gal_radius_px::Float64,
+                            psf::Array{Model.PsfComponent,1},
+                            patches::Array{SkyPatch, 2},
+                            pixels::Matrix{Float32};
+                            write_to_patch::Bool=false)
+    bvn_derivs = Model.BivariateNormalDerivatives{Float64}()
+    fs1m = SensitiveFloat{Float64}(length(GalaxyPosParams), 1, false, false)
+    source_params = [[world_pos[1], world_pos[2], gal_frac_dev, gal_axis_ratio,
+                     gal_angle, gal_radius_px],]
+    star_mcs, gal_mcs = Model.load_bvn_mixtures(1, patches,
+                          source_params, [1,], length(psf), 1,
+                          calculate_gradient=false,
+                          calculate_hessian=false)
+    p = patches[1]
+    H2, W2 = size(p.active_pixel_bitmap)
+    for w2 in 1:W2, h2 in 1:H2
+        # (h2, w2) index the local patch, while (h, w) index the image
+        h = p.bitmap_offset[1] + h2
+        w = p.bitmap_offset[2] + w2
+        Model.populate_gal_fsm!(fs1m, bvn_derivs, 1, h, w, false, p.wcs_jacobian, gal_mcs)
+        if write_to_patch
+            pixels[h2, w2] += fs1m.v[] * flux
+        else
+            pixels[h, w] += fs1m.v[] * flux
+        end
+    end
+end
+
