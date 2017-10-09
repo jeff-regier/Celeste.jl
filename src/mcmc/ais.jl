@@ -45,7 +45,7 @@ function ais(lnpdf, lnpdf0, step, z0;
         # unpack previous and current temperatures
         tprev, tcurr = schedule[ti-1], schedule[ti]
         if ti % 25 == 0
-            Log.info(@sprintf "  temp %2.3f (%d/%d): logpost = %2.4f  logprior = %2.4f\n" tcurr ti length(schedule) lnpdf(z) lnpdf0(z))
+            Log.info(@sprintf "  temp %2.3f (%d/%d): logpost = %2.4f  logprior = %2.4f" tcurr ti length(schedule) lnpdf(z) lnpdf0(z))
         end
 
         # generate zt | zt-1 using tcurr --- this leaves the distribution
@@ -126,7 +126,7 @@ function ais_slicesample(logposterior::Function,
     zsamps = zeros(D, num_samps)
     wsamps = zeros(num_samps)
     for n in 1:num_samps
-        Log.info(@sprintf "ais samp %d / %d\n" n num_samps)
+        Log.info(@sprintf "ais samp %d / %d" n num_samps)
         z0   = prior_sample()
         #step = (z, lnpdf) -> MCMC.slicesample(z, lnpdf)
         z, w, llrats, _ = ais(logposterior, logprior, step, z0; schedule=schedule)
