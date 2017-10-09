@@ -283,7 +283,7 @@ Generate a model image on a patch, according to that image/patch psf
 """
 function render_patch_nmgy(img::Image, patch::SkyPatch, n_bodies::Vector{CatalogEntry})
     # create sky noise background image in nmgy
-    patch_pixels = ones(size(img.sky)) .* img.sky
+    patch_pixels = ones(Float32, size(img.sky)) .* img.sky
 
     # write star/gal model images onto patch_pixels
     for body in n_bodies
@@ -297,7 +297,7 @@ function render_patch_nmgy(img::Image, patch::SkyPatch, n_bodies::Vector{Catalog
                 write_to_patch=true)
         end
     end
-    return patch_pixels
+    return Array{Float64}(patch_pixels)
 end
 
 

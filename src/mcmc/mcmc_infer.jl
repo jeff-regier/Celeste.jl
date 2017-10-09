@@ -16,11 +16,11 @@ function run_ais(entry::CatalogEntry,
                  num_temperatures::Int=50,
                  print_skip::Int=20,
                  num_samples_per_chain::Int=25)
-    println("\nRunning AIS on with patch size ", imgs[1].H, "x", imgs[1].W)
-    println("  catalog type: ", entry.is_star ? "star" : "galaxy")
-    println("  num images  : ", length(imgs))
+    Log.info("\nRunning AIS on with patch size $(imgs[1].H) x $(imgs[1].W)")
+    Log.info("  catalog type: $(entry.is_star ? "star" : "galaxy")")
+    Log.info("  num images  : $(length(imgs))")
     n_active = sum([sum(p.active_pixel_bitmap) for p in patches[1, :]]) / length(patches[1,:])
-    println("  num active pixels per patch: ", n_active)
+    Log.info("  num active pixels per patch: $(n_active)")
     #imgs, pos_delta, num_samples, print_skip, num_temperatures, num_samples_per_chain = patch_images, [1., 1.], 3, 1, 10, 25
 
     ###################
@@ -34,8 +34,8 @@ function run_ais(entry::CatalogEntry,
 
     th_cat = [log.(entry.star_fluxes)..., deg_to_uniform(entry.pos)...]
     th_rand = sample_star_prior()
-    println("star loglike at CATALOG vs PRIOR : ", star_loglike(th_cat), ", ", star_loglike(th_rand))
-    println("star logprior at CATALOG vs PRIOR : ", star_logprior(th_cat), ", ", star_logprior(th_rand))
+    Log.info("star loglike at CATALOG vs PRIOR : ", star_loglike(th_cat), ", ", star_loglike(th_rand))
+    Log.info("star logprior at CATALOG vs PRIOR : ", star_logprior(th_cat), ", ", star_logprior(th_rand))
     star_schedule = MCMC.sigmoid_schedule(num_temperatures; rad=4)
     res_star = MCMC.ais_slicesample(star_logpost, star_logprior,
                                     sample_star_prior;
@@ -44,7 +44,7 @@ function run_ais(entry::CatalogEntry,
                                     num_samples_per_step=1)
     star_chains, star_chain_lls = [], []
     for i in 1:size(res_star[:zsamps], 2)
-        println("    star chain ", i, " of ", size(res_star[:zsamps], 2))
+        Log.info("    star chain ", i, " of ", size(res_star[:zsamps], 2))
         star_chain, star_lls = MCMC.slicesample_chain(star_logpost,
             res_star[:zsamps][:,1], num_samples_per_chain;
             print_skip=Int64(num_samples_per_chain/5), verbose=false)
@@ -56,8 +56,8 @@ function run_ais(entry::CatalogEntry,
     lnZ  = res_star[:lnZ]
     lnZs = res_star[:lnZ_bootstrap]
     lo, hi = percentile(lnZs, 2.5), percentile(lnZs, 97.5)
-    @printf "STAR AIS estimate : %2.4f [%2.3f, %2.3f]\n" lnZ lo hi
-    @printf "  CI width : %2.5f \n" (hi-lo)
+    Log.info(@sprintf "STAR AIS estimate : %2.4f [%2.3f, %2.3f]\n" lnZ lo hi)
+    Log.info(@sprintf "  CI width : %2.5f \n" (hi-lo))
 
     ####################
     # run galaxy AIS   #
@@ -69,8 +69,8 @@ function run_ais(entry::CatalogEntry,
                                         pos_delta=pos_delta)
     th_cat = MCMC.parameters_from_catalog(entry; is_star=false)
     th_rand = sample_gal_prior()
-    println("gal loglike  at CATALOG vs PRIOR : ", gal_loglike(th_cat), ", ", gal_loglike(th_rand))
-    println("gal logprior at CATALOG vs PRIOR : ", gal_logprior(th_cat), ", ", gal_logprior(th_rand))
+    Log.info("gal loglike  at CATALOG vs PRIOR : ", gal_loglike(th_cat), ", ", gal_loglike(th_rand))
+    Log.info("gal logprior at CATALOG vs PRIOR : ", gal_logprior(th_cat), ", ", gal_logprior(th_rand))
     gal_schedule = MCMC.sigmoid_schedule(num_temperatures; rad=4)
     res_gal = MCMC.ais_slicesample(gal_logpost, gal_logprior,
                                    sample_gal_prior;
@@ -79,7 +79,7 @@ function run_ais(entry::CatalogEntry,
                                    num_samples_per_step=1)
     gal_chains, gal_chain_lls = [], []
     for i in 1:size(res_gal[:zsamps], 2)
-        println("    gal chain ", i, " of ", size(res_gal[:zsamps], 2))
+        Log.info("    gal chain ", i, " of ", size(res_gal[:zsamps], 2))
         gal_chain, gal_lls = MCMC.slicesample_chain(gal_logpost,
             res_gal[:zsamps][:,1], num_samples_per_chain;
             print_skip=Int64(num_samples_per_chain/5), verbose=false)
@@ -91,8 +91,8 @@ function run_ais(entry::CatalogEntry,
     lnZ = res_gal[:lnZ]
     lnZs = res_gal[:lnZ_bootstrap]
     lo, hi = percentile(lnZs, 2.5), percentile(lnZs, 97.5)
-    @printf "GAL AIS estimate : %2.4f [%2.3f, %2.3f]\n" lnZ lo hi
-    @printf "  CI width : %2.5f \n" (hi-lo)
+    Log.info(@sprintf "GAL AIS estimate : %2.4f [%2.3f, %2.3f]\n" lnZ lo hi)
+    Log.info(@sprintf "  CI width : %2.5f \n" (hi-lo))
 
     #########################################################
     # Compute prob star vs gal based on marginal likelihood #
@@ -110,7 +110,7 @@ function run_ais(entry::CatalogEntry,
         type_chain[n] = lnprob_star - lnsum
     end
     ave_pstar = Model.logsumexp(type_chain) - log(length(type_chain))
-    println("  source p-star = ", exp(ave_pstar))
+    Log.info("  source p-star = ", exp(ave_pstar))
 
     ####################################################################
     # convert positions to RA/Dec and organize chains into dataframes  #
@@ -145,9 +145,9 @@ function run_mcmc(entry::CatalogEntry,
                   pos_delta::Array{Float64, 1}=[1., 1.];
                   num_samples::Int=500,
                   print_skip::Int=20)
-    println("\nRunning mcmc on entry with patch size ",
+    Log.info("\nRunning mcmc on entry with patch size ",
             imgs[1].H, "x", imgs[1].W)
-    println("  catalog type: ", entry.is_star ? "star" : "galaxy")
+    Log.info("  catalog type: ", entry.is_star ? "star" : "galaxy")
 
     # position log prior --- same for both star and galaxy (constrains to a
     # small window around the existing catalog location
@@ -178,9 +178,9 @@ function run_mcmc(entry::CatalogEntry,
     #th_cat = MCMC.parameters_from_catalog(entry, unconstrain_pos; is_star=true)
     #th_rand = [th_cat[1:5]..., [.001, .001]...]
     th_rand = th_cat + .0001*randn(length(th_cat))
-    println("loglike at true initial position: ", star_loglike(th_cat))
-    println("loglike at random prior position: ", star_loglike(th_rand))
-    println("logprior at true position:        ", star_logprior(th_cat))
+    Log.info("loglike at true initial position: ", star_loglike(th_cat))
+    Log.info("loglike at random prior position: ", star_loglike(th_rand))
+    Log.info("logprior at true position:        ", star_logprior(th_cat))
 
     # draw MCMC samples
     star_chain, star_lls = MCMC.slicesample_chain(star_logpost, th_cat,
@@ -202,9 +202,9 @@ function run_mcmc(entry::CatalogEntry,
     # test at catalog initialized position vs shifted --- eye test
     th_cat = MCMC.parameters_from_catalog(entry; is_star=false)
     th_rand = th_cat + .00001*randn(length(th_cat))
-    println("gal ll at Catalog vs Shifted : ",
+    Log.info("gal ll at Catalog vs Shifted : ",
         gal_loglike(th_cat), " vs. ", gal_loglike(th_rand))
-    println("gal lnprior at true initial pos:  ", gal_logprior(th_cat))
+    Log.info("gal lnprior at true initial pos:  ", gal_logprior(th_cat))
     th_cat[1:5] = th_rand[1:5]
 
     function gal_logpost(th)
@@ -240,17 +240,11 @@ function run_mcmc(entry::CatalogEntry,
         type_chain[n] = lnjoint_star - lnsum
     end
     ave_pstar = Model.logsumexp(type_chain) - log(length(gal_lls))
-    println("  source p-star = ", exp(ave_pstar))
+    Log.info("  source p-star = ", exp(ave_pstar))
 
     ####################################################################
     # convert positions to RA/Dec and organize chains into dataframes  #
     ####################################################################
-    #for n in 1:size(star_chain)[1]
-    #    star_chain[n,6:7] = constrain_pos(star_chain[n,6:7])
-    #end
-    #for n in 1:size(gal_chain)[1]
-    #    gal_chain[n,6:7] = constrain_pos(gal_chain[n,6:7])
-    #end
     star_chain = MCMC.samples_to_dataframe(star_chain; is_star=true)
     gal_chain = MCMC.samples_to_dataframe(gal_chain; is_star=false)
 

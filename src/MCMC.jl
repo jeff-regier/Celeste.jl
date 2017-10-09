@@ -4,7 +4,7 @@ using Celeste: Model, Transform, SensitiveFloats
 import Celeste.Model: SkyPatch, Image
 import Celeste.SDSSIO: SDSSBackground
 using Distributions, StatsBase, DataFrames, StaticArrays, WCS
-import Celeste: Config
+import Celeste: Config, Log
 
 # TODO move these to model/log_prob.jl
 star_param_names = ["lnr", "cug", "cgr", "cri", "ciz", "ra", "dec"]
