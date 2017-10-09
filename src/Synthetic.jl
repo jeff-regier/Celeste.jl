@@ -20,7 +20,6 @@ end
 
 function write_galaxy_nmgy!(img::Image, ce::CatalogEntry)
     patches = Model.get_sky_patches([img], [ce], radius_override_pix=25.0)
-    println("writing gal synthetic", typeof(patches))
     Model.write_galaxy_nmgy!(ce.pos, ce.gal_fluxes[img.b],
       ce.gal_frac_dev, ce.gal_axis_ratio, ce.gal_angle, ce.gal_radius_px,
       img.psf, patches, img.pixels)
