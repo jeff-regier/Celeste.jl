@@ -243,13 +243,13 @@ function make_gal_loglike(imgs::Vector;
         lnfluxes, unc_pos, ushape = th[1:5], th[6:7], th[8:end]
         pos   = constrain_pos(unc_pos)
         gal_frac_dev, gal_ab, gal_angle, gal_scale = ushape
-        @printf "lnfluxes     = %s \n" string(lnfluxes)
-        @printf "pos (ra,dec) = %2.4f, %2.4f \n" pos[1] pos[2]
-        @printf "gal shape:\n"
-        @printf "  frac_dev   = %2.4f \n" gal_frac_dev
-        @printf "  ab ratio   = %2.4f \n" gal_ab
-        @printf "  angle      = %2.4f \n" gal_angle
-        @printf "  scale      = %2.4f \n" gal_scale
+        Log.info(@sprintf "lnfluxes     = %s \n" string(lnfluxes))
+        Log.info(@sprintf "pos (ra,dec) = %2.4f, %2.4f \n" pos[1] pos[2])
+        Log.info(@sprintf "gal shape:\n")
+        Log.info(@sprintf "  frac_dev   = %2.4f \n" gal_frac_dev)
+        Log.info(@sprintf "  ab ratio   = %2.4f \n" gal_ab)
+        Log.info(@sprintf "  angle      = %2.4f \n" gal_angle)
+        Log.info(@sprintf "  scale      = %2.4f \n" gal_scale)
     end
 
     # make galaxy log like function
@@ -335,8 +335,8 @@ function make_location_prior(img::Image,
     # lower and upper bounds on the ra/dec
     ra_lo, ra_hi   = sort([pos0_world_lower[1], pos0_world_upper[1]])
     dec_lo, dec_hi = sort([pos0_world_lower[2], pos0_world_upper[2]])
-    @printf " ... limiting RA  to [%2.5f, %2.5f] \n" ra_lo ra_hi
-    @printf " ... limiting DEC to [%2.5f, %2.5f] \n" dec_lo dec_hi
+    Log.info(@sprintf " ... limiting RA  to [%2.5f, %2.5f] \n" ra_lo ra_hi)
+    Log.info(@sprintf " ... limiting DEC to [%2.5f, %2.5f] \n" dec_lo dec_hi)
 
     # corresponding uniform log likelihoods
     llra  = log(1./(ra_hi - ra_lo))
@@ -395,10 +395,10 @@ function make_gal_logprior()
         llangle = -log(pi)
         llscale = logpdf(prior.galaxy.gal_radius_px, gal_scale)
         if isinf(llangle)
-          println(" angle bad!")
+          throw(" angle bad!")
         end
         if isinf(llscale)
-          println(" scale bad!")
+          throw(" scale bad!")
         end
         ll = MCMC.logflux_logprior(lnfluxes; is_star=false) + llangle + llscale
         return ll
@@ -427,7 +427,7 @@ function make_empty_background_images(imgs::Vector)
         #iota       = img.nelec_per_nmgy[1]
         #sky_pixels = [epsilon * iota for h=1:img.H, w=1:img.W]
         sky_pixels = img.sky
-        println("sky image size : ", size(sky_pixels))
+        Log.info("sky image size : ", size(sky_pixels))
         push!(background_images, sky_pixels)
     end
     return background_images
