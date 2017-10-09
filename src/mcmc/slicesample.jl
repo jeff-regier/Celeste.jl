@@ -213,7 +213,7 @@ function slicesample_chain(lnpdf, th, N;
     samps = zeros(N, D)
     lls   = zeros(N)
     tic()
-    Log.info(@sprintf "  iter : \t loglike \n")
+    Log.info(@sprintf "  iter : \t loglike")
     for n in 1:N
         th, ll = slicesample(th, lnpdf;
                              doubling_step=true,
@@ -222,7 +222,7 @@ function slicesample_chain(lnpdf, th, N;
         samps[n,:] = th
         lls[n]     = ll
         if mod(n, print_skip) == 0
-            Log.info(@sprintf "   %d   : \t %2.4f \n" n ll)
+            Log.info(@sprintf "   %d   : \t %2.4f" n ll)
         end
     end
     elapsed = toc()
