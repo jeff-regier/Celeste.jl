@@ -6,16 +6,23 @@ using Interpolations
 
 
 """
-Attributes of the patch of sky surrounding a single
-celestial object in a single image.
+    SkyPatch(img::Image, ce:CatalogEntry; radius_override_pix=NaN)
 
-Attributes:
-  - center: The approximate source location in world coordinates
-  - radius_pix: The width of the influence of the object in pixel coordinates
-  - psf: The point spread function in this region of the sky
-  - wcs_jacobian: The jacobian of the WCS transform in this region of the
-                  sky for each band
-  - pixel_center: The pixel location of center in each band.
+Attributes of the patch of sky surrounding a single celestial object `ce`
+in a single image `img`. If `radius_override_pix` is not NaN, it will be
+used for the `radius_pix` attribute.
+
+# Attributes:
+- `center`: The approximate source location in world coordinates
+- `radius_pix`: The width of the influence of the object in pixel coordinates
+- `psf`: The point spread function in this region of the sky
+- `itp_psf`
+- `wcs_jacobian`: The jacobian of the WCS transform in this region of the
+                  sky for each band.
+- `pixel_center`: The pixel location of center in each band.
+- `bitmap_offset`: Lower left corner index offset.
+- `active_pixel_bitmap`: Boolean mask denoting which pixels in the patch are
+                         considered when processing the source.
 """
 struct SkyPatch
     center::Vector{Float64}
