@@ -508,7 +508,7 @@ function init_elboargs(config::Config,
         ids_local = vcat([entry_id], neighbor_ids)
 
         patches = Model.get_sky_patches(images, cat_local)
-        ParallelRun.load_active_pixels!(config, images, patches)
+        load_active_pixels!(config, images, patches)
         # Load vp with shared target source params, and also vp
         # that doesn't share target source params
         vp = Vector{Float64}[haskey(ts_vp, x) ?
