@@ -154,19 +154,6 @@ function load_active_pixels!(config::Config,
     end
 end
 
-# legacy wrapper
-function load_active_pixels!(images::Vector{<:Image},
-                             patches::Matrix{SkyPatch};
-                             exclude_nan=true,
-                             noise_fraction=0.5)
-    load_active_pixels!(
-        Config(),
-        images,
-        patches,
-        exclude_nan=exclude_nan,
-        noise_fraction=noise_fraction,
-    )
-end
 
 # The range of image pixels in a vector of patches
 function get_active_pixel_range(
