@@ -4,13 +4,21 @@ using DataFrames
 
 import Celeste: GalsimBenchmark
 
-GALSIM_CASES_EXERCISED = [
-    "simple_star",
-    "star_with_noise",
-    "angle_and_axis_ratio_1",
-    "galaxy_with_all",
-    "galaxy_with_noise",
-]
+
+if test_long_running
+    GALSIM_CASES_EXERCISED = [
+        "simple_star",
+        "star_with_noise",
+        "angle_and_axis_ratio_1",
+        "galaxy_with_all",
+        "galaxy_with_noise",
+    ]
+else
+    GALSIM_CASES_EXERCISED = [
+        "star_with_noise",
+    ]
+end
+
 
 function assert_estimates_are_close(benchmark_results)
     for row in eachrow(benchmark_results)
