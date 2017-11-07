@@ -418,8 +418,8 @@ function bad_sky(ce, images)
     img = images[img_index]
     p = Model.SkyPatch(img, ce)
 
-    h = p.bitmap_offset[1] + round(Int, p.radius_pix)
-    w = p.bitmap_offset[2] + round(Int, p.radius_pix)
+    h = max(1, min(round(Int, p.pixel_center[1]), size(img.pixels, 1)))
+    w = max(1, min(round(Int, p.pixel_center[1]), size(img.pixels, 2)))
     claimed_sky = img.sky[h, w] * img.nelec_per_nmgy[h]
 
     # the "super" patch below contains the original patch as well as a lot of
@@ -474,7 +474,7 @@ end
 
 
 """
-Run MCMC to process a source.  Returns 
+Run MCMC to process a source.  Returns
 """
 function process_source_mcmc(config::Config,
                              ts::Int,
