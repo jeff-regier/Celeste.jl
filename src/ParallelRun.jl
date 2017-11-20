@@ -515,6 +515,9 @@ function process_source_mcmc(config::Config,
         mcmc_results = MCMC.run_mcmc(entry, patch_images, patches, background_images)
     end
 
+    # check if the sky is bad --- record for later
+    mcmc_results["is_sky_bad"] = bad_sky(entry, images)
+
     # summary
     return mcmc_results
 end
