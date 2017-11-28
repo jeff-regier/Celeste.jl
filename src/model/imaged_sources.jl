@@ -28,7 +28,7 @@ used for the `radius_pix` attribute.
                          considered when processing the source.
 """
 struct SkyPatch
-    center::Vector{Float64}
+    world_center::Vector{Float64}
     radius_pix::Float64
 
     psf::Vector{PsfComponent}
@@ -129,7 +129,6 @@ function SkyPatch(img::Image, box::Box)
              SVector(hmin, wmin),
              active_pixel_bitmap)
 end
-
 
 
 function get_sky_patches(images::Vector{<:Image},

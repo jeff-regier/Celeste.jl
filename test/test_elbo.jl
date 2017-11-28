@@ -73,8 +73,8 @@ end
     # has a radius at least as large as both the height and the
     # width of image 3, and that its center is within the image
     @test p.radius_pix >= 23
-    @test 0.5 <= p.center[1] <= 20.5
-    @test 0.5 <= p.center[2] <= 23.5
+    @test 0.5 <= p.world_center[1] <= 20.5
+    @test 0.5 <= p.world_center[2] <= 23.5
 
     # this patch is huge, the bottom left corner should be the
     # bottom left of the image
