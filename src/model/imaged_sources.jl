@@ -4,6 +4,9 @@ using Interpolations
 # rather than for sources in the abstract, in physical units,
 # and rather than for images alone (that's image_model.jl).
 
+# A contiguous box in a 2-d array.
+const Box = Tuple{UnitRange{Int}, UnitRange{Int}}
+
 
 """
     SkyPatch(img::Image, ce:CatalogEntry; radius_override_pix=NaN)
@@ -82,6 +85,51 @@ function SkyPatch(img::Image, ce::CatalogEntry; radius_override_pix=NaN)
              SVector(hmin, wmin),
              active_pixel_bitmap)
 end
+
+
+# construct `SkyPatch` from box of pixels on image.
+function SkyPatch(img::Image, box::Box)
+    # Crop off-image portion of box. Completely off-image boxes are
+    # allowed and internally indicated with a range of 1:0 or H+1:H
+    # (an empty range, but still a legal index to image pixels).
+    box = (clamp(first(box[1]), 1, img.H+1):
+           clamp(last(box[1]), 0, img.H),
+           clamp(first(box[2]), 1, img.W+1):
+           clamp(last(box[2]), 0, img.W))
+
+    # Get linear WCS transform at center of box.
+    pixel_center = [(first(box[1]) + last(box[1])) / 2
+                    (first(box[2]) + last(box[2])) / 2]
+    world_center = pix_to_world(img.wcs, pixel_center)
+    wcs_jacobian = pixel_world_jacobian(img.wcs, pixel_center)
+
+    # active pixel bitmap: make masked (NaN) pixels non-active
+    box_offset = SVector(first(box[1]) - 1, first(box[2]) - 1)
+    active_pixel_bitmap = [!isnan(img.pixels[x, y])
+                           for x in box[1], y in box[2]]
+
+    grid_psf = img.psfmap(pixel_center[1], pixel_center[2])
+    grid_psf[:, :] = max.(grid_psf, 0.0)
+    grid_psf += 1e-6
+    grid_psf /= sum(grid_psf)
+    # The following transformation is like softplus. Its inv always returns a
+    # positive value. Without this transformation, even if the psf over the
+    # grid_psf is positive, the iterpolation of grid with bicubic splines often
+    # has negative values.
+    grid_psf[:, :] = softpluslike.(grid_psf)
+
+    itp_psf = interpolate(grid_psf, BSpline(Cubic(Line())), OnGrid())
+
+    SkyPatch(world_center,
+             0.0,  # not used
+             img.psf,
+             itp_psf,
+             wcs_jacobian,
+             pixel_center,
+             SVector(hmin, wmin),
+             active_pixel_bitmap)
+end
+
 
 
 function get_sky_patches(images::Vector{<:Image},
