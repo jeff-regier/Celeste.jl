@@ -8,6 +8,32 @@ using Interpolations
 const Box = Tuple{UnitRange{Int}, UnitRange{Int}}
 
 
+function _dilate_range(range::UnitRange{Int}, factor::Float64)
+    delta = round(Int, factor * length(range) / 2)
+    return (first(range) - delta):(last(range) + delta)
+end
+
+dilate_box(box::Box, factor::Float64) = (_dilate_range(box[1], factor),
+                                         _dilate_range(box[2], factor))
+
+_enclose_ranges(range1::UnitRange{Int}, range2::UnitRange{Int}) =
+    min(first(range1), first(range2)):max(last(range1), last(range2))
+
+enclose_boxes(box1::Box, box2::Box) = (_enclose_ranges(box1[1], box2[1]),
+                                       _enclose_ranges(box1[2], box2[2]))
+
+_intersect_ranges(range1::UnitRange{Int}, range2::UnitRange{Int}) =
+    max(first(range1), first(range2)):min(last(range1), last(range2))
+
+intersect_boxes(box1::Box, box2::Box) = (_intersect_ranges(box1[1], box2[1]),
+                                         _intersect_ranges(box1[2], box2[2]))
+
+_ranges_overlap(range1::UnitRange{Int}, range2::UnitRange{Int}) =
+    (first(range1) <= last(range2)) && (first(range2) <= last(range1))
+
+boxes_overlap(box1::Box, box2::Box) = (_ranges_overlap(box1[1], box2[1]) &&
+                                       _ranges_overlap(box1[2], box2[2]))
+
 """
     SkyPatch(img::Image, ce:CatalogEntry; radius_override_pix=NaN)
 
@@ -17,7 +43,6 @@ used for the `radius_pix` attribute.
 
 # Attributes:
 - `center`: The approximate source location in world coordinates
-- `radius_pix`: The width of the influence of the object in pixel coordinates
 - `psf`: The point spread function in this region of the sky
 - `itp_psf`
 - `wcs_jacobian`: The jacobian of the WCS transform in this region of the
@@ -28,8 +53,8 @@ used for the `radius_pix` attribute.
                          considered when processing the source.
 """
 struct SkyPatch
+    box::Box
     world_center::Vector{Float64}
-    radius_pix::Float64
 
     psf::Vector{PsfComponent}
     itp_psf::AbstractInterpolation
@@ -76,14 +101,19 @@ function SkyPatch(img::Image, ce::CatalogEntry; radius_override_pix=NaN)
 
     itp_psf = interpolate(grid_psf, BSpline(Cubic(Line())), OnGrid())
 
-    SkyPatch(world_center,
-             radius_pix,
+    box = ((hmin+1):(hmin+H2), (wmin+1):(wmin+W2))
+    SkyPatch(box,
+             world_center,
              img.psf,
              itp_psf,
              wcs_jacobian,
              pixel_center,
              SVector(hmin, wmin),
              active_pixel_bitmap)
+end
+
+function Base.show(io::IO, patch::SkyPatch)
+    print(io, "$(length(patch.box[1]))×$(length(patch.box[2])) SkyPatch at $(patch.box)")
 end
 
 
@@ -100,7 +130,7 @@ function SkyPatch(img::Image, box::Box)
     # Get linear WCS transform at center of box.
     pixel_center = [(first(box[1]) + last(box[1])) / 2
                     (first(box[2]) + last(box[2])) / 2]
-    world_center = pix_to_world(img.wcs, pixel_center)
+    world_center = WCS.pix_to_world(img.wcs, pixel_center)
     wcs_jacobian = pixel_world_jacobian(img.wcs, pixel_center)
 
     # active pixel bitmap: make masked (NaN) pixels non-active
@@ -120,15 +150,60 @@ function SkyPatch(img::Image, box::Box)
 
     itp_psf = interpolate(grid_psf, BSpline(Cubic(Line())), OnGrid())
 
-    SkyPatch(world_center,
-             0.0,  # not used
+    SkyPatch(box,
+             world_center,
              img.psf,
              itp_psf,
              wcs_jacobian,
              pixel_center,
-             SVector(hmin, wmin),
+             box_offset,
              active_pixel_bitmap)
 end
+
+
+"""
+    box_around_point(wcs, world_center, box_radius)
+
+Choose patch indexes given center world coordinates and a box "radius" in
+pixels.
+"""
+function box_around_point(wcs::WCS.WCSTransform, world_center::Vector{Float64},
+                          pixel_radius::Real)
+    pixel_center = WCS.world_to_pix(wcs, world_center)
+
+    xmin = round(Int, pixel_center[1] - pixel_radius)
+    xmax = round(Int, pixel_center[1] + pixel_radius)
+    ymin = round(Int, pixel_center[2] - pixel_radius)
+    ymax = round(Int, pixel_center[2] + pixel_radius)
+
+    return (xmin:xmax, ymin:ymax)
+end
+
+
+
+"""
+    box_from_catalog(img::Image, ce::CatalogEntry, scale)
+
+Return a box extent based on `CatalogEntry` and `Image` parameters,
+optionally scaled by a multiplicative factor `scale`. This is
+useful when initialing an `ImagePatch` from a catalog rather than detections.
+"""
+function box_from_catalog(img::Image, ce::CatalogEntry;
+                          width_scale=1.0, max_radius=25)
+
+    pixel_radius = choose_patch_radius(ce, img; width_scale=width_scale,
+                                       max_radius=max_radius)
+    pixel_center = WCS.world_to_pix(img.wcs, ce.pos)
+
+    xmin = round(Int, pixel_center[1] - pixel_radius)
+    xmax = round(Int, pixel_center[1] + pixel_radius)
+    ymin = round(Int, pixel_center[2] - pixel_radius)
+    ymax = round(Int, pixel_center[2] + pixel_radius)
+
+    return (xmin:xmax, ymin:ymax)
+end
+
+
 
 
 function get_sky_patches(images::Vector{<:Image},
@@ -139,9 +214,12 @@ function get_sky_patches(images::Vector{<:Image},
     patches = Matrix{SkyPatch}(S, N)
 
     for n in 1:N, s in 1:S
-        patches[s, n] = SkyPatch(images[n],
-                                 catalog[s],
-                                 radius_override_pix=radius_override_pix)
+        box = (isnan(radius_override_pix)?
+               box_from_catalog(images[n], catalog[s]; width_scale=1.2):
+               box_around_point(images[n].wcs, catalog[s].pos,
+                                radius_override_pix))
+        pixel_center = WCS.world_to_pix(images[n].wcs, catalog[s].pos)
+        patches[s, n] = SkyPatch(images[n], box)
     end
 
     patches
