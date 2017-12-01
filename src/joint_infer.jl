@@ -509,7 +509,7 @@ function init_elboargs(config::Config,
         cat_local = vcat([entry], neighbors)
         ids_local = vcat([entry_id], neighbor_ids)
 
-        # Limit patches to just teh active source and its neighbors.
+        # Limit patches to just the active source and its neighbors.
         patches = patches[ids_local, :]
 
         # Load vp with shared target source params, and also vp

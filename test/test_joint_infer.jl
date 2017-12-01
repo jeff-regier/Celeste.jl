@@ -12,8 +12,11 @@ load_ea_from_source
 Helper function to load elbo args for a particular source
 """
 function load_ea_from_source(target_source, target_sources, catalog, images, all_vps)
+
+    patches = Model.get_sky_patches(images, catalog)
+
     # Get neighbors of the source from which to load elbo args.
-    neighbor_map = ParallelRun.find_neighbors([target_source], catalog, images)
+    neighbor_ids = Model.find_neighbors(patches, target_source)
 
     # Create a dictionary to the optimized parameters.
     target_source_variational_params = Dict{Int64, Array{Float64}}()
@@ -21,13 +24,17 @@ function load_ea_from_source(target_source, target_sources, catalog, images, all
         target_source_variational_params[cur_source] = all_vps[indx]
     end
 
+    patches = Model.get_sky_patches(images, catalog)
+    
+    # Get neighbors of the source from which to load elbo args.
+    neighbor_ids = Model.find_neighbors(patches, target_source)
+
     # Load neighbors, patches and variational parameters
-    neighbors = catalog[neighbor_map[1]]
     entry = catalog[target_source]
+    neighbors = catalog[neighbor_ids]
+    ids_local = vcat([target_source], neighbor_ids)
     cat_local = vcat([entry], neighbors)
-    patches = Model.get_sky_patches(images, cat_local)
-    ParallelRun.load_active_pixels!(images, patches)
-    ids_local = vcat([target_source], neighbor_map[1])
+    patches = patches[ids_local, :]  # limit patches to catalog
     vp = [haskey(target_source_variational_params, x) ?
           target_source_variational_params[x] :
           DeterministicVI.catalog_init_source(catalog[x]) for x in ids_local]
@@ -107,11 +114,6 @@ function compute_obj_value(results,
 
     # it may be better to pass `patches` as an argument to `compute_obj_value`.
     patches = Model.get_sky_patches(images, catalog[target_sources])
-
-    # if we don't call `load_active_pixels!`, these patches will be different
-    # than the patches we used for optimizing---and then the objective
-    # function could also be slightly different
-    ParallelRun.load_active_pixels!(images, patches)
 
     # this works since we're just generating patches for active_sources.
     # if instead you pass patches for all sources, then instead we'd used
