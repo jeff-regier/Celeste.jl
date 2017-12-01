@@ -20,11 +20,12 @@ import Celeste: Model
     catalog_entries = AccuracyBenchmark.make_initialization_catalog(primary_df2, true)
     # entry 8 is a star near [0.513037, 0.535631],
     # see http://legacysurvey.org/viewer/jpeg-cutout/?ra=0.5130&dec=0.5358&zoom=16&layer=sdss2
-    target_sources = [8,]
+    target_sources = [8]
 
-    neighbor_map = ParallelRun.find_neighbors(target_sources, catalog_entries,
-                                              images)
+    patches = Model.get_sky_patches(images, catalog_entries)
+    neighbor_map = [Model.find_neighbors(patches, i) for i in target_sources]
     results = ParallelRun.one_node_single_infer(catalog_entries,
+                                                patches,
                                                 target_sources,
                                                 neighbor_map, images,
                                                 config=Celeste.Config())
@@ -54,7 +55,7 @@ end
 
 @testset "color calculations" begin
     @test isapprox(AccuracyBenchmark.color_from_fluxes(15.0, 20.0), log(20 / 15))
-    @test isna(AccuracyBenchmark.color_from_fluxes(15.0, 0.0))
+    @test ismissing(AccuracyBenchmark.color_from_fluxes(15.0, 0.0))
     fluxes = AccuracyBenchmark.fluxes_from_colors(10.0, [-1.0, 0.0, 1.0, 2.0])
     @test isapprox(fluxes[1], exp(1.0) * 10.0)
     @test isapprox(fluxes[2], 10.0)
@@ -122,14 +123,14 @@ end
     function make_data()
         (
             DataFrame(
-                gal_radius_px=10.0,
-                gal_frac_dev=0.99,
-                gal_axis_ratio=0.8,
+                gal_radius_px=Union{Float64, Missing}[10.0],
+                gal_frac_dev=Union{Float64, Missing}[0.99],
+                gal_axis_ratio=Union{Float64, Missing}[0.8],
             ),
             DataFrame(
-                gal_axis_ratio=0.5,
-                gal_angle_deg=10.0,
-                dec=0.0,
+                gal_axis_ratio=Union{Float64, Missing}[0.5],
+                gal_angle_deg=Union{Float64, Missing}[10.0],
+                dec=Union{Float64, Missing}[0.0],
             )
         )
     end
@@ -147,11 +148,11 @@ end
     @test !check_row()
 
     truth, error = make_data()
-    error[1, :gal_axis_ratio] = NA
+    error[1, :gal_axis_ratio] = missing
     @test !check_row()
 
     truth, error = make_data()
-    truth[1, :gal_radius_px] = NA
+    truth[1, :gal_radius_px] = missing
     @test check_row()
 
     truth, error = make_data()

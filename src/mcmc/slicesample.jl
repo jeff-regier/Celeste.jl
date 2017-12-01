@@ -212,7 +212,7 @@ function slicesample_chain(lnpdf, th, N;
     D = length(th)
     samps = zeros(N, D)
     lls   = zeros(N)
-    tic()
+    t0 = time_ns()
     Log.info(@sprintf "  iter : \t loglike")
     for n in 1:N
         th, ll = slicesample(th, lnpdf;
@@ -225,7 +225,7 @@ function slicesample_chain(lnpdf, th, N;
             Log.info(@sprintf "   %d   : \t %2.4f" n ll)
         end
     end
-    elapsed = toc()
+    elapsed = 1e9 * (time_ns() - t0)
     Log.info(@sprintf "%2.3f ms per sample (%d samples in %2.3f seconds) \n" 1000*(elapsed/N) N elapsed)
     return samps, lls
 end
