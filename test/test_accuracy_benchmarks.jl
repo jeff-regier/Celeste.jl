@@ -20,11 +20,12 @@ import Celeste: Model
     catalog_entries = AccuracyBenchmark.make_initialization_catalog(primary_df2, true)
     # entry 8 is a star near [0.513037, 0.535631],
     # see http://legacysurvey.org/viewer/jpeg-cutout/?ra=0.5130&dec=0.5358&zoom=16&layer=sdss2
-    target_sources = [8,]
+    target_sources = [8]
 
-    neighbor_map = ParallelRun.find_neighbors(target_sources, catalog_entries,
-                                              images)
+    patches = Model.get_sky_patches(images, catalog_entries)
+    neighbor_map = [Model.find_neighbors(patches, i) for i in target_sources]
     results = ParallelRun.one_node_single_infer(catalog_entries,
+                                                patches,
                                                 target_sources,
                                                 neighbor_map, images,
                                                 config=Celeste.Config())

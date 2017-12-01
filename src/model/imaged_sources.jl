@@ -7,6 +7,11 @@ using Interpolations
 # A contiguous box in a 2-d array.
 const Box = Tuple{UnitRange{Int}, UnitRange{Int}}
 
+clamp_box(box::Box, dims::Tuple{Int, Int}) =
+    (clamp(first(box[1]), 1, dims[1]+1):
+     clamp(last(box[1]), 0, dims[1]),
+     clamp(first(box[2]), 1, dims[2]+1):
+     clamp(last(box[2]), 0, dims[2]))
 
 function _dilate_range(range::UnitRange{Int}, factor::Float64)
     delta = round(Int, factor * length(range) / 2)
@@ -122,10 +127,7 @@ function SkyPatch(img::Image, box::Box)
     # Crop off-image portion of box. Completely off-image boxes are
     # allowed and internally indicated with a range of 1:0 or H+1:H
     # (an empty range, but still a legal index to image pixels).
-    box = (clamp(first(box[1]), 1, img.H+1):
-           clamp(last(box[1]), 0, img.H),
-           clamp(first(box[2]), 1, img.W+1):
-           clamp(last(box[2]), 0, img.W))
+    box = clamp_box(box, (img.H, img.W))
 
     # Get linear WCS transform at center of box.
     pixel_center = [(first(box[1]) + last(box[1])) / 2
@@ -264,4 +266,25 @@ function choose_patch_radius(ce::CatalogEntry,
     radius_req = sqrt(-2 * (obj_width ^ 2) * rhs)
 
     min(radius_req, max_radius)
+end
+
+"""
+    find_neighbors(patches, target)
+
+Return indexes of objects in `patches` whose boxes overlap the object
+at index `target` in any image. (The first and second axes of `patches`
+are over objects and images, respectively.)
+"""
+function find_neighbors(patches::Matrix{SkyPatch}, target::Int)
+    neighbors = Int[]
+    for i in 1:size(patches, 1)  # loop over objects
+        i == target && continue
+        for j in 1:size(patches, 2)  # loop over images
+            if boxes_overlap(patches[target, j].box, patches[i, j].box)
+                push!(neighbors, i)
+                break
+            end
+        end
+    end
+    return neighbors
 end

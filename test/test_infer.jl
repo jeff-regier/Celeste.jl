@@ -13,12 +13,13 @@ using Celeste.ParallelRun
     rcfs = [RunCamcolField(3900, 6, 269),]
     strategy = PlainFITSStrategy(datadir)
     images = SDSSIO.load_field_images(strategy, rcfs)
-    c, t, n = ParallelRun.infer_init(images; box=box)
-    result = ParallelRun.one_node_single_infer(c, t, n, images; config=Config(2.0, 3, 2), do_vi=false)
+
+    result = ParallelRun.infer_box(images, box; method=:single, do_vi=false,
+                                   config=Config(2.0, 3, 2))
 end
 
 
-@testset "infer_box runs" begin
+@testset "infer_box with directories runs" begin
     box = ParallelRun.BoundingBox("164.39", "164.41", "39.11", "39.13")
     rcfs = [RunCamcolField(3900, 6, 269),]
     ParallelRun.infer_box(box, datadir, datadir)
@@ -32,8 +33,7 @@ end
     rcfs = [RunCamcolField(3900, 6, 269),]
     strategy = PlainFITSStrategy(datadir)
     images = SDSSIO.load_field_images(strategy, rcfs)
-    c, t, n = ParallelRun.infer_init(images; box=box)
-    result = ParallelRun.one_node_single_infer(c, t, n, images)
+    result = ParallelRun.infer_box(images, box; method=:single, do_vi=true)
 end
 
 
@@ -135,26 +135,4 @@ end
         end
         @test all(patch_image .== sum(patch_images)[H_min:H_max, W_min:W_max])
     end
-end
-
-
-@testset "don't select a patch that is way too big" begin
-    wd = pwd()
-    cd(datadir)
-    run(`make RUN=4114 CAMCOL=3 FIELD=127`)
-    run(`make RUN=4114 CAMCOL=4 FIELD=127`)
-    cd(wd)
-
-    rcfs = [RunCamcolField(4114, 3, 127), RunCamcolField(4114, 4, 127)]
-    strategy = PlainFITSStrategy(datadir)
-    images = SDSSIO.load_field_images(strategy, rcfs)
-    catalog = SDSSIO.read_photoobj_files(strategy, rcfs)
-
-    entry_id = 429  # star at RA, Dec = (309.49754066435867, 45.54976572870953)
-
-    neighbors = ParallelRun.find_neighbors([entry_id,], catalog, images)[1]
-
-    # there's a lot near this star, but not a lot that overlaps with it, see
-    # http://skyserver.sdss.org/dr10/en/tools/explore/summary.aspx?id=0x112d1012607f050a
-    @test length(neighbors) < 5
 end

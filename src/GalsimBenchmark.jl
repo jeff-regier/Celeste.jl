@@ -6,6 +6,7 @@ import FITSIO
 import ..AccuracyBenchmark
 import ..Config
 import ..ParallelRun
+import ..Model
 
 const GALSIM_BENCHMARK_DIR = joinpath(Pkg.dir("Celeste"), "benchmark", "galsim")
 const LATEST_FITS_FILENAME_DIR = joinpath(GALSIM_BENCHMARK_DIR, "latest_filenames")
@@ -95,16 +96,19 @@ function run_benchmarks(; test_case_names=String[], joint_inference=false)
         catalog_entries = AccuracyBenchmark.make_initialization_catalog(truth_catalog_df, false)
         target_sources = collect(1:num_sources)
         config = Config(ACTIVE_PIXELS_MIN_RADIUS_PX)
-        neighbor_map = ParallelRun.find_neighbors(target_sources,
-                                                  catalog_entries, images)
+        patches = Model.get_sky_patches(images, catalog_entries)
+        neighbor_map = [Model.find_neighbors(patches, i)
+                        for i in target_sources]
 
         if joint_inference
             results = ParallelRun.one_node_joint_infer(catalog_entries,
+                                                       patches,
                                                        target_sources,
                                                        neighbor_map, images,
                                                        config=config)
         else
             results = ParallelRun.one_node_single_infer(catalog_entries,
+                                                        patches,
                                                         target_sources,
                                                         neighbor_map, images,
                                                         config=config)

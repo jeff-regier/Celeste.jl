@@ -184,6 +184,31 @@ function is_pixel_in_patch(h::Int, w::Int, p::SkyPatch)
     end
 end
 
+
+# return the world coordinates of all objects in the catalog as a 2xN matrix
+# where `result[:, i]` is the (latitude, longitude) of the i-th object.
+function _worldcoords(catalog::SEP.Catalog, wcs::WCS.WCSTransform)
+    pixcoords = Array{Float64}(2, length(catalog.x))
+    for i in eachindex(catalog.x)
+        pixcoords[1, i] = catalog.x[i]
+        pixcoords[2, i] = catalog.y[i]
+    end
+    return WCS.pix_to_world(wcs, pixcoords)
+end
+
+
+# Get angle offset between +x axis and +Dec axis (North) from a WCS transform.
+# This assumes there is no skew, meaning the x and y axes are perpindicular in
+# world coordinates. It is also only based on the CD matrix.
+function _x_vs_n_angle(wcs::WCS.WCSTransform)
+    cd = wcs[:cd]::Matrix{Float64}
+    sgn = sign(det(cd))
+    n_vs_y_rot = atan2(sgn * cd[1, 2],  sgn * cd[1, 1])  # angle of N CCW
+                                                         # from +y axis
+    return -(n_vs_y_rot + pi/2)  # angle of +x CCW from N
+end
+
+
 """
     detect_sources(images)
 
@@ -191,191 +216,139 @@ Detect sources in a set of (possibly overlapping) `Image`s and combine
 duplicates.
 
 # Returns
-
-- `catalog::Vector{CatalogEntry}`: Detected sources.
-- `source_radii::Vector{Float64}`: Radius of circle containing all of each
-  source's member pixels (degrees).
-
-# Notes
-
-We're using sky subtracted (and calibrated) image data, but, we still
-run a background analysis, just to determine the rough image noise for
-the purposes of setting a threshold. This could be slightly suboptimal
-in terms of selecting faint sources: If the image noise varies
-significantly across the image, the threshold might be too high or too
-low in some places. However, we don't really trust the variable
-background RMS without first masking sources. (We could add this.)
 """
-function detect_sources(images::Vector{Image})
+function detect_sources(images::Vector{<:Image})
 
-    catalog = Vector{CatalogEntry}()
-    source_radii = Vector{Float64}()
-
+    catalogs = SEP.Catalog[]
     for image in images
 
         calpixels = Model.calibrated_pixels(image)
 
         # Run background, just to get background rms.
+        #
+        # We're using sky subtracted (and calibrated) image data, but,
+        # we still run a background analysis, just to determine the
+        # rough image noise for the purposes of setting a
+        # threshold. This could be slightly suboptimal in terms of
+        # selecting faint sources: If the image noise varies
+        # significantly across the image, the threshold might be too
+        # high or too low in some places. However, we don't really
+        # trust the variable background RMS without first masking
+        # sources. (We could add this.)
         bkg = SEP.Background(calpixels; boxsize=(256, 256),
                              filtersize=(3, 3))
-        sep_catalog = SEP.extract(calpixels, 1.3; noise=SEP.global_rms(bkg))
-
-        # convert pixel coordinates to world coordinates
-        pixcoords = Array{Float64}(2, length(sep_catalog.x))
-        for i in eachindex(sep_catalog.x)
-            pixcoords[1, i] = sep_catalog.x[i]
-            pixcoords[2, i] = sep_catalog.y[i]
-        end
-        worldcoords = WCS.pix_to_world(image.wcs, pixcoords)
-
-        # Get angle offset between +RA axis and +x axis from the
-        # image's WCS.  This assumes there is no skew, meaning the x
-        # and y axes are perpindicular in world coordinates.
-        cd = image.wcs[:cd]
-        sgn = sign(det(cd))
-        n_vs_y_rot = atan2(sgn * cd[1, 2],  sgn * cd[1, 1])  # angle of N CCW
-                                                             # from +y axis
-        x_vs_n_rot = -(n_vs_y_rot + pi/2)  # angle of +x CCW from N
-
-        # convert sep_catalog entries to CatalogEntries
-        im_catalog = Vector{CatalogEntry}(length(sep_catalog.npix))
-        im_source_radii = Vector{Float64}(length(sep_catalog.npix))
-        for i in eachindex(sep_catalog.npix)
-
-            # For galaxy flux, use sum of all pixels above
-            # threshold. Set other band fluxes to NaN, to indicate which
-            # band the flux is measured in. We'll use this information below
-            # when merging detections in different bands.
-            gal_fluxes = fill(NaN, NUM_BANDS)
-            gal_fluxes[image.b] = sep_catalog.flux[i]
-
-            gal_axis_ratio = sep_catalog.b[i] / sep_catalog.a[i]
-
-            # SEP angle is CCW from +x axis and in [-pi/2, pi/2].
-            # Add offset of x axis from N to make angle CCW from N
-            gal_angle = sep_catalog.theta[i] + x_vs_n_rot
-
-            # A 2-d symmetric gaussian has CDF(r) =  1 - exp(-(r/sigma)^2/2)
-            # The half-light radius is then r = sigma * sqrt(2 ln(2))
-            sigma = sqrt(sep_catalog.a[i] * sep_catalog.b[i])
-            gal_radius_px = sigma * sqrt(2. * log(2.))
-
-            pos = worldcoords[:, i]
-            im_catalog[i] = CatalogEntry(pos,
-                                         false,  # is_star
-                                         Float64[],  # will replace below
-                                         gal_fluxes,
-                                         0.5,  # gal_frac_dev
-                                         gal_axis_ratio,
-                                         gal_angle,
-                                         gal_radius_px)
-
-            # get object extent in degrees from bounding box in pixels
-            xmin = sep_catalog.xmin[i]
-            xmax = sep_catalog.xmax[i]
-            ymin = sep_catalog.ymin[i]
-            ymax = sep_catalog.ymax[i]
-            corner_pixcoords = Float64[xmin xmin xmax xmax;
-                                       ymin ymax ymin ymax]
-            corners = WCS.pix_to_world(image.wcs, corner_pixcoords)
-            im_source_radii[i] =
-                maximum(angular_separation(pos[1], pos[2],
-                                           corners[1, j], corners[2, j])
-                        for j in 1:4)
-        end
-
-        # Combine the catalog for this image with the joined catalog
-        if length(catalog) == 0
-            catalog = im_catalog
-            source_radii = im_source_radii
-        else
-            # for each detection in image, find nearest match in joined catalog
-            idx, dist = match_coordinates([ce.pos[1] for ce in im_catalog],
-                                          [ce.pos[2] for ce in im_catalog],
-                                          [ce.pos[1] for ce in catalog],
-                                          [ce.pos[2] for ce in catalog])
-
-            for (i, ce) in enumerate(im_catalog)
-                # if there is an existing object within 1 arcsec,
-                # add it to the joined catalog
-                if dist[i] < (1.0 / 3600.)
-                    existing_ce = catalog[idx[i]]
-                    if isnan(existing_ce.gal_fluxes[image.b])
-                        existing_ce.gal_fluxes[image.b] =
-                            ce.gal_fluxes[image.b]
-                    end
-                    if im_source_radii[i] > source_radii[idx[i]]
-                        source_radii[idx[i]] = im_source_radii[i]
-                    end
-
-                # if not, add entry to joined catalog
-                else
-                    push!(catalog, ce)
-                    push!(source_radii, im_source_radii[i])
-                end
-            end
-        end
-    end  # loop over images
-
-    # clean up NaN flux entries in joined catalog,
-    # copy gal_fluxes to star_fluxes
-    for ce in catalog
-        minflux = minimum(f for f in ce.gal_fluxes if !isnan(f))
-        for i in eachindex(ce.gal_fluxes)
-            if isnan(ce.gal_fluxes[i])
-                ce.gal_fluxes[i] = minflux
-            end
-        end
-        ce.star_fluxes = copy(ce.gal_fluxes)
+        noise = SEP.global_rms(bkg)
+        push!(catalogs, SEP.extract(calpixels, 1.3; noise=noise))
     end
 
-    return catalog, source_radii
-end
+    # The image catalogs only have pixel positions. To match objects in
+    # different images, we need to convert these pixel positions to world
+    # coordinates in each image.
+    catalogs_worldcoords = [_worldcoords(catalog, image.wcs)
+                            for (catalog, image) in zip(catalogs, images)]
 
+    # Initialize the "joined" catalog to all the coordinates in the first
+    # image. `detections` tracks image index and object index of detections.
+    joined_ra = length(images) > 0 ? catalogs_worldcoords[1][1, :] : Float64[]
+    joined_dec = length(images) > 0 ? catalogs_worldcoords[1][2, :] : Float64[]
+    detections = (length(images) > 0 ?
+                  [[(1, j)] for j in 1:length(catalogs[1].x)] :
+                  Vector{Tuple{Int, Int}}[])
 
-"""
-New version of infer_init() that uses detect_sources() instead of SDSS
-photoObj catalog for initialization.
-"""
-function infer_init(images::Vector{<:Image};
-                    box=BoundingBox(-1000., 1000., -1000., 1000.))
-
-    # Initialize variables to empty vectors in case try block fails
-    target_sources = Int[]
-
-    # detect sources on all images
-    catalog, source_radii = detect_sources(images)
-
-    # Get indices of entries in the RA/Dec range of interest.
-    # (Some images can have regions that are outside the box, so not
-    # all sources are necessarily in the box.)
-    entry_in_range = entry->((box.ramin < entry.pos[1] < box.ramax) &&
-                             (box.decmin < entry.pos[2] < box.decmax))
-    target_sources = find(entry_in_range, catalog)
-    Log.info("$(Time(now())): $(length(catalog)) sources, ",
-             "$(length(target_sources)) target sources in $(box.ramin), ",
-             "$(box.ramax), $(box.decmin), $(box.decmax)")
-
-    # build neighbor map based on source radii
-    neighbor_map = Vector{Int64}[Int64[] for s in target_sources]
-    for ts in 1:length(target_sources)
-        s = target_sources[ts]
-        ce = catalog[s]
-        ce_rad = source_radii[s]
-
-        for s2 in 1:length(catalog)
-            s2 == s && continue
-            ce2 = catalog[s2]
-            dist = angular_separation(ce.pos[1], ce.pos[2],
-                                      ce2.pos[1], ce2.pos[2])
-
-            if dist < source_radii[s] + source_radii[s2]
-                push!(neighbor_map[ts], s2)
+    # Search for matches in remaining images
+    for i in 2:length(images)
+        ra = catalogs_worldcoords[i][1, :]
+        dec = catalogs_worldcoords[i][2, :]
+        idx, dist = match_coordinates(ra, dec, joined_ra, joined_dec)
+        for j in eachindex(idx)
+            # If there is an object in the joined catalog within 1 arcsec,
+            # add the (image, object) index to detections for that object.
+            # Otherwise, add the position and (image, object) index as a new
+            # object in the joined catalog.
+            if dist[j] < (1.0 / 3600.0)
+                push!(detections[idx[j]], (i, j))
+            else
+                push!(joined_ra, ra[j])
+                push!(joined_dec, dec[j])
+                push!(detections, [(i, j)])
             end
         end
     end
 
-    return catalog, target_sources, neighbor_map
+    # Initialize joined output catalog and patches
+    nobjects = length(joined_ra)
+    result = Array{CatalogEntry}(nobjects)
+    patches = Array{SkyPatch}(nobjects, length(images))
+
+    # Precalculate some angles
+    x_vs_n_angles = [_x_vs_n_angle(image.wcs) for image in images]
+
+    # Loop over output catalog:
+    # - Create catalog entry based on "best" detection.
+    # - Create patches based on detection in each image.
+    for i in 1:nobjects
+        world_center = [joined_ra[i], joined_dec[i]]
+
+        # which detection in each band is the "best" (has most pixels)
+        # We use this to initialize flux in each band
+        best = fill((0, 0), NUM_BANDS)
+        npix = fill(0, NUM_BANDS)
+        for (j, catidx) in detections[i]
+            b = images[j].b
+            np = catalogs[j].npix[catidx]
+            if np > npix[b]
+                best[b] = (j, catidx)
+                npix[b] = np
+            end
+        end
+
+        # set gal_fluxes (and star_fluxes) to best detection flux or 0 if not
+        # detected.
+        gal_fluxes = [j != 0 ? catalogs[j].flux[catidx] : 0.0
+                      for (j, catidx) in best]
+        star_fluxes = copy(gal_fluxes)
+
+        # use the single best band for shape parameters
+        j, catidx = best[indmax(npix)]
+        gal_axis_ratio = catalogs[j].b[catidx] / catalogs[j].a[catidx]
+
+        # SEP angle is CCW from +x axis and in [-pi/2, pi/2].
+        # Add offset of x axis from N to make angle CCW from N
+        gal_angle = catalogs[j].theta[catidx] + x_vs_n_angles[j]
+
+        # A 2-d symmetric gaussian has CDF(r) =  1 - exp(-(r/sigma)^2/2)
+        # The half-light radius is then r = sigma * sqrt(2 ln(2))
+        sigma = sqrt(catalogs[j].a[catidx] * catalogs[j].b[catidx])
+        gal_radius_px = sigma * sqrt(2.0 * log(2.0))
+
+        result[i] = CatalogEntry(world_center,
+                                 false,  # is_star
+                                 star_fluxes,
+                                 gal_fluxes,
+                                 0.5,  # gal_frac_dev
+                                 gal_axis_ratio,
+                                 gal_angle,
+                                 gal_radius_px)
+
+        # create patches based on detections
+        for (j, catidx) in detections[i]
+            box = (Int(catalogs[j].xmin[catidx]):Int(catalogs[j].xmax[catidx]),
+                   Int(catalogs[j].ymin[catidx]):Int(catalogs[j].ymax[catidx]))
+            box = Model.dilate_box(box, 0.2)
+            minbox = Model.box_around_point(images[j].wcs, world_center, 5.0)
+            patches[i, j] = SkyPatch(images[j], Model.enclose_boxes(box, minbox))
+        end
+
+        # fill patches for images where there was no detection
+        for j in 1:length(images)
+            if !isassigned(patches, i, j)
+                box = Model.box_around_point(images[j].wcs, world_center, 5.0)
+                patches[i, j] = SkyPatch(images[j], box)
+            end
+        end
+    end
+
+    return result, patches
 end
 
 
@@ -403,18 +376,17 @@ function bad_sky(ce, images)
     end
 
     img = images[img_index]
-    p = Model.SkyPatch(img, ce)
 
-    h = max(1, min(round(Int, p.pixel_center[1]), size(img.pixels, 1)))
-    w = max(1, min(round(Int, p.pixel_center[1]), size(img.pixels, 2)))
+    # Get sky at location of the object
+    pixel_center = WCS.world_to_pix(img.wcs, ce.pos)
+    h = max(1, min(round(Int, pixel_center[1]), size(img.pixels, 1)))
+    w = max(1, min(round(Int, pixel_center[2]), size(img.pixels, 2)))
+
     claimed_sky = img.sky[h, w] * img.nelec_per_nmgy[h]
 
-    # the "super" patch below contains the original patch as well as a lot of
-    # background
-    sp = Model.SkyPatch(img, ce, radius_override_pix=50)
-    H2, W2 = size(sp.active_pixel_bitmap)
-    h_range = (sp.bitmap_offset[1] + 1):(sp.bitmap_offset[1] + H2)
-    w_range = (sp.bitmap_offset[2] + 1):(sp.bitmap_offset[2] + W2)
+    # Determine background in a 50-pixel radius box around the object
+    box = Model.box_around_point(img.wcs, ce.pos, 50.0)
+    h_range, w_range = Model.clamp_box(box, (img.H, img.W))
     observed_sky = median(filter(!isnan, img.pixels[h_range, w_range]))
 
     # A 5 photon-per-pixel disparity can really add up if the light sources
@@ -430,6 +402,7 @@ Used only for one_node_single_infer, not one_node_joint_infer.
 function process_source(config::Config,
                         ts::Int,
                         catalog::Vector{CatalogEntry},
+                        patches::Matrix{SkyPatch},
                         target_sources::Vector{Int},
                         neighbor_map::Vector{Vector{Int}},
                         images::Vector{<:Image})
@@ -444,8 +417,9 @@ function process_source(config::Config,
     entry = catalog[s]
     cat_local = vcat([entry], neighbors)
 
-    patches = Model.get_sky_patches(images, cat_local)
-    load_active_pixels!(config, images, patches)
+    # Limit patches to just the active source and its neighbors.
+    idxs = vcat([s], neighbor_map[ts])
+    patches = patches[idxs, :]
 
     vp = DeterministicVI.init_sources([1], cat_local)
     ea = DeterministicVI.ElboArgs(images, patches, [1])
@@ -466,9 +440,10 @@ Run MCMC to process a source.  Returns
 function process_source_mcmc(config::Config,
                              ts::Int,
                              catalog::Vector{CatalogEntry},
+                             patches::Matrix{SkyPatch},
                              target_sources::Vector{Int},
                              neighbor_map::Vector{Vector{Int}},
-                             images::Vector{Image};
+                             images::Vector{<:Image};
                              use_ais::Bool=true)
     # subselect source, select active source and neighbor set
     s = target_sources[ts]
@@ -480,10 +455,9 @@ function process_source_mcmc(config::Config,
         Log.warn(msg)
     end
 
-    # 1. handle SkyPatch subsampling for the active source `entry`
-    cat_local = vcat([entry], neighbors)
-    patches = Model.get_sky_patches(images, cat_local)
-    load_active_pixels!(config, images, patches)
+    # Limit patches to just the active source and its neighbors.
+    idxs = vcat([s], neighbor_map[ts])
+    patches = patches[idxs, :]
 
     # create smaller images for the MCMC sampler to use
     patch_images = [MCMC.patch_to_image(patches[1, i], images[i])
@@ -512,6 +486,7 @@ Use multiple threads to process each target source with the specified
 callback and write the results to a file.
 """
 function one_node_single_infer(catalog::Vector{CatalogEntry},
+                               patches::Matrix{SkyPatch},
                                target_sources::Vector{Int},
                                neighbor_map::Vector{Vector{Int}},
                                images::Vector{<:Image};
@@ -542,11 +517,13 @@ function one_node_single_infer(catalog::Vector{CatalogEntry},
 
             try
                 if do_vi
-                    result = process_source(config, ts, catalog, target_sources,
-                                            neighbor_map, images)
+                    result = process_source(config, ts, catalog, patches,
+                                            target_sources, neighbor_map,
+                                            images)
                 else
                     result = process_source_mcmc(config, ts, catalog,
-                        target_sources, neighbor_map, images)
+                                                 patches, target_sources,
+                                                 neighbor_map, images)
                 end
 
                 lock(results_lock)
@@ -634,22 +611,52 @@ save_results(outdir, box, results) =
     save_results(outdir, box.ramin, box.ramax, box.decmin, box.decmax, results)
 
 
-"""
-called from main entry point.
-"""
+function infer_box(images::Vector{<:Image}, box::BoundingBox; method=:joint,
+                   do_vi=true, config=Config())
+    # detect sources on all the images
+    catalog, patches = detect_sources(images)
+
+    # Get indices of entries in the RA/Dec range of interest.
+    # (Some images can have regions that are outside the box, so not
+    # all sources are necessarily in the box.)
+    entry_in_range = entry->((box.ramin < entry.pos[1] < box.ramax) &&
+                             (box.decmin < entry.pos[2] < box.decmax))
+    target_ids = find(entry_in_range, catalog)
+
+    # find objects with patches overlapping
+    neighbor_map = [Model.find_neighbors(patches, id)
+                    for id in target_ids]
+
+    if method == :joint
+        results = one_node_joint_infer(catalog, patches, target_ids,
+                                       neighbor_map, images; config=config)
+    elseif method == :single
+        results = one_node_single_infer(catalog, patches, target_ids,
+                                        neighbor_map, images; do_vi=do_vi,
+                                        config=config)
+    else
+        error("unknown method: $method")
+    end
+    return results
+end
+
+
+# Called from main entry point.
 function infer_box(strategy, box::BoundingBox, outdir::String)
     Log.info("processing box $(box.ramin), $(box.ramax), $(box.decmin), ",
              "$(box.decmax) with $(nthreads()) threads")
     @time begin
         # Get vector of (run, camcol, field) triplets overlapping this patch
+        # and load images for them.
         rcfs = get_overlapping_fields(box, strategy)
         images = SDSSIO.load_field_images(strategy, rcfs)
-        catalog, target_sources, neighbor_map = infer_init(images; box=box)
-        results = one_node_joint_infer(catalog, target_sources, neighbor_map,
-                                       images)
+
+        results = infer_box(images, box)
+
         save_results(outdir, box, results)
     end
 end
+
 
 function infer_box(box::BoundingBox, stagedir::String, outdir::String)
     strategy = PlainFITSStrategy(stagedir)

@@ -401,7 +401,8 @@ Returns:
 
 - Vector of OptimizedSource results
 """
-function one_node_joint_infer(catalog, target_sources, neighbor_map, images;
+function one_node_joint_infer(catalog, patches, target_sources, neighbor_map,
+                              images;
                               cyclades_partition::Bool=true,
                               batch_size::Int=7000,
                               within_batch_shuffling::Bool=true,
@@ -427,7 +428,7 @@ function one_node_joint_infer(catalog, target_sources, neighbor_map, images;
     thread_initialize_sources_assignment::Vector{Vector{Vector{Int64}}} = partition_equally(n_threads, n_sources)
 
     initialize_elboargs_sources!(config, ea_vec, vp_vec, cfg_vec, thread_initialize_sources_assignment,
-                                 catalog, target_sources, neighbor_map, images,
+                                 catalog, patches, target_sources, neighbor_map, images,
                                  target_source_variational_params)
 
     #thread_sources_assignment = partition_box(n_threads, target_sources,
@@ -464,14 +465,14 @@ end
 
 function initialize_elboargs_sources!(config::Config, ea_vec, vp_vec, cfg_vec,
                                       thread_initialize_sources_assignment,
-                                      catalog, target_sources, neighbor_map, images,
+                                      catalog, patches, target_sources, neighbor_map, images,
                                       target_source_variational_params;
                                       termination_callback=nothing)
     Threads.@threads for i in 1:nthreads()
         try
             for batch in 1:length(thread_initialize_sources_assignment[i])
                 for source_index in thread_initialize_sources_assignment[i][batch]
-                    init_elboargs(config, source_index, catalog, target_sources,
+                    init_elboargs(config, source_index, catalog, patches, target_sources,
                                   neighbor_map, images, ea_vec, vp_vec, cfg_vec,
                                   target_source_variational_params;
                                   termination_callback=termination_callback)
@@ -491,6 +492,7 @@ Initialize elbo args for the specified target source.
 function init_elboargs(config::Config,
                        ts::Int,
                        catalog::Vector{CatalogEntry},
+                       patches::Matrix{SkyPatch},
                        target_sources::Vector{Int},
                        neighbor_map::Vector{Vector{Int}},
                        images::Vector{<:Image},
@@ -507,8 +509,9 @@ function init_elboargs(config::Config,
         cat_local = vcat([entry], neighbors)
         ids_local = vcat([entry_id], neighbor_ids)
 
-        patches = Model.get_sky_patches(images, cat_local)
-        load_active_pixels!(config, images, patches)
+        # Limit patches to just teh active source and its neighbors.
+        patches = patches[ids_local, :]
+
         # Load vp with shared target source params, and also vp
         # that doesn't share target source params
         vp = Vector{Float64}[haskey(ts_vp, x) ?
