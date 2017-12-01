@@ -30,7 +30,7 @@ function extract_catalog_from_header(header::FITSIO.FITSHeader)
             if haskey(header, key)
                 header[key]
             else
-                NA
+                missing
             end
         end
         DataFrame(

@@ -22,7 +22,7 @@ end
 
 function assert_estimates_are_close(benchmark_results)
     for row in eachrow(benchmark_results)
-        if isna(row[:truth])
+        if ismissing(row[:truth])
             continue
         end
         if row[:variable] == :is_star
@@ -31,8 +31,6 @@ function assert_estimates_are_close(benchmark_results)
             maximum_error = 0.2
         elseif row[:variable] == :gal_angle_deg
             maximum_error = 5
-        #elseif !isna(row[1, :error_sds])
-        #    maximum_error = 2.5 * row[1, :error_sds]
         else
             maximum_error = 0.2 * abs(row[:truth])
         end

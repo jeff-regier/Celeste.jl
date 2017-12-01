@@ -5,6 +5,7 @@ using Distributions
 import FITSIO
 using StaticArrays
 import WCS
+import CSV
 
 import ..Config
 import ..DeterministicVI
@@ -83,7 +84,7 @@ end
 
 function read_catalog(csv_file::String)
     @printf("Reading '%s'...\n", csv_file)
-    catalog_df = readtable(csv_file)
+    catalog_df = CSV.read(csv_file, rows_for_type_detect=100)
     assert_columns_are_present(catalog_df, CATALOG_COLUMNS)
     catalog_df
 end
@@ -91,7 +92,7 @@ end
 function write_catalog(csv_file::String, catalog_df::DataFrame)
     assert_columns_are_present(catalog_df, CATALOG_COLUMNS)
     @printf("Writing '%s'...\n", csv_file)
-    writetable(csv_file, catalog_df)
+    CSV.write(csv_file, catalog_df)
 end
 
 function append_hash_to_file(filename::String)
@@ -134,7 +135,7 @@ end
 
 function color_from_fluxes(flux1::AbstractFloat, flux2::AbstractFloat)
     if flux1 <= 0 || flux2 <= 0
-        NA
+        missing
     else
         log(flux2 / flux1)
     end
@@ -301,21 +302,16 @@ function load_primary(rcf::SDSSIO.RunCamcolField, stagedir::String)
     return result
 end
 
-function fluxes_from_colors(flux_r_nmgy::Float64, colors::DataVector{Float64})
+function fluxes_from_colors(flux_r_nmgy::Float64, colors::AbstractVector)
     @assert length(colors) == 4
     color_ratios = exp.(colors)
-    fluxes = DataArray(Float64, 5)
+    fluxes = similar(colors, 5)
     fluxes[3] = flux_r_nmgy
     fluxes[4] = fluxes[3] * color_ratios[3]
     fluxes[5] = fluxes[4] * color_ratios[4]
     fluxes[2] = fluxes[3] / color_ratios[2]
     fluxes[1] = fluxes[2] / color_ratios[1]
     fluxes
-end
-
-function fluxes_from_colors(flux_r_nmgy::Float64, colors::Vector{Float64})
-    fluxes = fluxes_from_colors(flux_r_nmgy, DataArray{Float64}(colors))
-    convert(Vector{Float64}, fluxes)
 end
 
 function get_median_fluxes(variational_params::Vector{Float64}, source_type::Int64)
@@ -595,19 +591,15 @@ function make_catalog_entry(x_position_world_coords::Float64,
     )
 end
 
-ensure_small_flux(value) = (isna(value) || value <= 0) ? 1e-6 : value
+ensure_small_flux(value) = (ismissing(value) || value <= 0) ? 1e-6 : value
 
-na_to_default(value, default) = isna(value) ? default : value
+na_to_default(value, default) = ismissing(value) ? default : value
 
 function make_catalog_entry(row::DataFrameRow)
-    colors = DataArray{Float64}(DataArray(Any[
-        row[:color_ug],
-        row[:color_gr],
-        row[:color_ri],
-        row[:color_iz],
-    ]))
+    colors = Union{Float64, Missing}[row[:color_ug], row[:color_gr],
+                                     row[:color_ri], row[:color_iz]]
     fluxes = fluxes_from_colors(row[:flux_r_nmgy], colors)
-    fluxes = convert(Vector{Float64}, ensure_small_flux.(fluxes))
+    fluxes = ensure_small_flux.(fluxes)
     gal_axis_ratio = na_to_default(row[:gal_axis_ratio], 0.8)
     Model.CatalogEntry(
         [row[:ra], row[:dec]],
@@ -785,10 +777,6 @@ function degrees_to_diff(a, b)
     min.(angle_between, 180 - angle_between)
 end
 
-# When a dataframe column only has NA values it gets an NAtype rather
-# than a Float64 type, and abs no longer works
-import Base.abs
-abs(x::DataArrays.DataArray{DataArrays.NAtype,1}) = NA
 
 """
 Given two results data frame, one containing ground truth (i.e Coadd)
@@ -802,8 +790,8 @@ function get_error_df(truth::DataFrame, predicted::DataFrame)
 
     predicted_galaxy = predicted[:is_star] .< .5
     true_galaxy = truth[:is_star] .< .5
-    errors[:missed_stars] = ifelse.(!true_galaxy, predicted_galaxy, NA)
-    errors[:missed_galaxies] = ifelse.(true_galaxy, !predicted_galaxy, NA)
+    errors[:missed_stars] = ifelse.(.!true_galaxy, predicted_galaxy, missing)
+    errors[:missed_galaxies] = ifelse.(true_galaxy, .!predicted_galaxy, missing)
 
     errors[:position] =
         (ARCSEC_PER_DEGREE / SDSS_ARCSEC_PER_PIXEL) .*
@@ -834,21 +822,21 @@ function get_error_df(truth::DataFrame, predicted::DataFrame)
 end
 
 function is_good_row(truth_row::DataFrameRow, error_row::DataFrameRow, column_name::Symbol)
-    if isna(error_row[column_name]) || isnan(error_row[column_name])
+    if ismissing(error_row[column_name]) || isnan(error_row[column_name])
         return false
-    elseif !isna(truth_row[:gal_radius_px]) && truth_row[:gal_radius_px] > 20
+    elseif !ismissing(truth_row[:gal_radius_px]) && truth_row[:gal_radius_px] > 20
         return false
     end
 
     if column_name in [:gal_axis_ratio, :gal_radius_px, :gal_angle_deg,
                        :gal_frac_dev]
-        has_mixture_weight = !isna(truth_row[:gal_frac_dev])
+        has_mixture_weight = !ismissing(truth_row[:gal_frac_dev])
         if has_mixture_weight && (0.05 < truth_row[:gal_frac_dev] < 0.95)
             return false
         end
     end
     if column_name == :gal_angle_deg
-        if !isna(truth_row[:gal_axis_ratio]) && truth_row[:gal_axis_ratio] > .6
+        if !ismissing(truth_row[:gal_axis_ratio]) && truth_row[:gal_axis_ratio] > .6
             return false
         end
     end
@@ -862,14 +850,15 @@ function filter_rows(truth::DataFrame, errors::DataFrame, column_name::Symbol)
     end
 end
 
-function score_column(errors::DataArray)
+function score_column(errors::AbstractVector)
     DataFrame(
         N=length(errors),
         first=mean(errors),
     )
 end
 
-function score_column(first_errors::DataArray, second_errors::DataArray)
+function score_column(first_errors::AbstractVector,
+                      second_errors::AbstractVector)
     @assert length(first_errors) == length(second_errors)
     scores = score_column(first_errors)
     scores[:second] = mean(second_errors)
@@ -987,7 +976,7 @@ function get_uncertainty_df(truth::DataFrame, predictions::DataFrame)
     matched_truth[:log_flux_err] = errors[1]
     matched_truth[:log_flux_stderr] = std_errs[1]
     matched_truth[:flux_r_celeste] = matched_predictions[:flux_r_nmgy]
-    writetable("stderr.csv", matched_truth)
+    CSV.write("stderr.csv", matched_truth)
 
     mapreduce(vcat, zip(names, errors, std_errs)) do values
         name, error, std_err = values
@@ -1000,7 +989,7 @@ end
 function score_uncertainty(uncertainty_df::DataFrame)
     mapreduce(vcat, groupby(uncertainty_df, :name)) do group_df
         abs_error_sds = abs.(group_df[:error] ./ group_df[:posterior_std_err])
-        abs_error_sds = abs_error_sds[.!isna.(abs_error_sds)]
+        abs_error_sds = abs_error_sds[.!ismissing.(abs_error_sds)]
         DataFrame(
             field=group_df[1, :name],
             within_half_sd=mean(abs_error_sds .<= 1/2),

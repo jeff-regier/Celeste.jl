@@ -55,7 +55,7 @@ end
 
 @testset "color calculations" begin
     @test isapprox(AccuracyBenchmark.color_from_fluxes(15.0, 20.0), log(20 / 15))
-    @test isna(AccuracyBenchmark.color_from_fluxes(15.0, 0.0))
+    @test ismissing(AccuracyBenchmark.color_from_fluxes(15.0, 0.0))
     fluxes = AccuracyBenchmark.fluxes_from_colors(10.0, [-1.0, 0.0, 1.0, 2.0])
     @test isapprox(fluxes[1], exp(1.0) * 10.0)
     @test isapprox(fluxes[2], 10.0)
@@ -123,14 +123,14 @@ end
     function make_data()
         (
             DataFrame(
-                gal_radius_px=10.0,
-                gal_frac_dev=0.99,
-                gal_axis_ratio=0.8,
+                gal_radius_px=Union{Float64, Missing}[10.0],
+                gal_frac_dev=Union{Float64, Missing}[0.99],
+                gal_axis_ratio=Union{Float64, Missing}[0.8],
             ),
             DataFrame(
-                gal_axis_ratio=0.5,
-                gal_angle_deg=10.0,
-                dec=0.0,
+                gal_axis_ratio=Union{Float64, Missing}[0.5],
+                gal_angle_deg=Union{Float64, Missing}[10.0],
+                dec=Union{Float64, Missing}[0.0],
             )
         )
     end
@@ -148,11 +148,11 @@ end
     @test !check_row()
 
     truth, error = make_data()
-    error[1, :gal_axis_ratio] = NA
+    error[1, :gal_axis_ratio] = missing
     @test !check_row()
 
     truth, error = make_data()
-    truth[1, :gal_radius_px] = NA
+    truth[1, :gal_radius_px] = missing
     @test check_row()
 
     truth, error = make_data()
