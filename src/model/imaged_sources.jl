@@ -39,20 +39,20 @@ _ranges_overlap(range1::UnitRange{Int}, range2::UnitRange{Int}) =
 boxes_overlap(box1::Box, box2::Box) = (_ranges_overlap(box1[1], box2[1]) &&
                                        _ranges_overlap(box1[2], box2[2]))
 
+
 """
     SkyPatch(img::Image, ce:CatalogEntry; radius_override_pix=NaN)
 
-Attributes of the patch of sky surrounding a single celestial object `ce`
-in a single image `img`. If `radius_override_pix` is not NaN, it will be
-used for the `radius_pix` attribute.
+Attributes of a subsection of an Image around a point of interest.
 
 # Attributes:
-- `center`: The approximate source location in world coordinates
-- `psf`: The point spread function in this region of the sky
-- `itp_psf`
+- `box`: The pixel range in the image.
+- `psf`: The point spread function in the center of the image
+- `itp_psf`: The point spread function in this region
 - `wcs_jacobian`: The jacobian of the WCS transform in this region of the
                   sky for each band.
-- `pixel_center`: The pixel location of center in each band.
+- `world_center`: A reference position in world coordinates.
+- `pixel_center`: A reference position in pixel coordinates.
 - `bitmap_offset`: Lower left corner index offset.
 - `active_pixel_bitmap`: Boolean mask denoting which pixels in the patch are
                          considered when processing the source.
@@ -70,52 +70,6 @@ struct SkyPatch
     active_pixel_bitmap::Matrix{Bool}
 end
 
-
-function SkyPatch(img::Image, ce::CatalogEntry; radius_override_pix=NaN)
-    world_center = ce.pos
-    pixel_center = WCS.world_to_pix(img.wcs, world_center)
-    wcs_jacobian = pixel_world_jacobian(img.wcs, pixel_center)
-    radius_pix = choose_patch_radius(ce, img, width_scale=1.2)
-    @assert radius_pix <= 25
-    if !isnan(radius_override_pix)
-        radius_pix = radius_override_pix
-    end
-
-    hmin = max(0, floor(Int, pixel_center[1] - radius_pix - 1))
-    hmax = min(img.H - 1, ceil(Int, pixel_center[1] + radius_pix - 1))
-    wmin = max(0, floor(Int, pixel_center[2] - radius_pix - 1))
-    wmax = min(img.W - 1, ceil(Int, pixel_center[2] + radius_pix - 1))
-
-    # some light sources are so far from some images that they don't
-    # overlap at all
-    H2 = max(0, hmax - hmin + 1)
-    W2 = max(0, wmax - wmin + 1)
-
-    # all pixels are active by default
-    active_pixel_bitmap = trues(H2, W2)
-
-    grid_psf = img.psfmap(pixel_center[1], pixel_center[2])
-    grid_psf[:, :] = max.(grid_psf, 0.0)
-    grid_psf += 1e-6
-    grid_psf /= sum(grid_psf)
-    # The following transformation is like softplus. Its inv always returns a
-    # positive value. Without this transformation, even if the psf over the
-    # grid_psf is positive, the iterpolation of grid with bicubic splines often
-    # has negative values.
-    grid_psf[:, :] = softpluslike.(grid_psf)
-
-    itp_psf = interpolate(grid_psf, BSpline(Cubic(Line())), OnGrid())
-
-    box = ((hmin+1):(hmin+H2), (wmin+1):(wmin+W2))
-    SkyPatch(box,
-             world_center,
-             img.psf,
-             itp_psf,
-             wcs_jacobian,
-             pixel_center,
-             SVector(hmin, wmin),
-             active_pixel_bitmap)
-end
 
 function Base.show(io::IO, patch::SkyPatch)
     print(io, "$(length(patch.box[1]))×$(length(patch.box[2])) SkyPatch at $(patch.box)")
