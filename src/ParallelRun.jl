@@ -72,7 +72,7 @@ end
     detect_sources(images)
 
 Detect sources in a set of (possibly overlapping) `Image`s and combine
-duplicates. Returns a catalog and a 2-d array of `SkyPatch`.
+duplicates. Returns a catalog and a 2-d array of `ImagePatch`.
 
 """
 function detect_sources(images::Vector{<:Image})
@@ -136,7 +136,7 @@ function detect_sources(images::Vector{<:Image})
     # Initialize joined output catalog and patches
     nobjects = length(joined_ra)
     result = Array{CatalogEntry}(nobjects)
-    patches = Array{SkyPatch}(nobjects, length(images))
+    patches = Array{ImagePatch}(nobjects, length(images))
 
     # Precalculate some angles
     x_vs_n_angles = [_x_vs_n_angle(image.wcs) for image in images]
@@ -194,14 +194,14 @@ function detect_sources(images::Vector{<:Image})
                    Int(catalogs[j].ymin[catidx]):Int(catalogs[j].ymax[catidx]))
             box = Model.dilate_box(box, 0.2)
             minbox = Model.box_around_point(images[j].wcs, world_center, 5.0)
-            patches[i, j] = SkyPatch(images[j], Model.enclose_boxes(box, minbox))
+            patches[i, j] = ImagePatch(images[j], Model.enclose_boxes(box, minbox))
         end
 
         # fill patches for images where there was no detection
         for j in 1:length(images)
             if !isassigned(patches, i, j)
                 box = Model.box_around_point(images[j].wcs, world_center, 5.0)
-                patches[i, j] = SkyPatch(images[j], box)
+                patches[i, j] = ImagePatch(images[j], box)
             end
         end
     end
@@ -260,7 +260,7 @@ Used only for one_node_single_infer, not one_node_joint_infer.
 function process_source(config::Config,
                         ts::Int,
                         catalog::Vector{CatalogEntry},
-                        patches::Matrix{SkyPatch},
+                        patches::Matrix{ImagePatch},
                         target_sources::Vector{Int},
                         neighbor_map::Vector{Vector{Int}},
                         images::Vector{<:Image})
@@ -298,7 +298,7 @@ Run MCMC to process a source.  Returns
 function process_source_mcmc(config::Config,
                              ts::Int,
                              catalog::Vector{CatalogEntry},
-                             patches::Matrix{SkyPatch},
+                             patches::Matrix{ImagePatch},
                              target_sources::Vector{Int},
                              neighbor_map::Vector{Vector{Int}},
                              images::Vector{<:Image};
@@ -344,7 +344,7 @@ Use multiple threads to process each target source with the specified
 callback and write the results to a file.
 """
 function one_node_single_infer(catalog::Vector{CatalogEntry},
-                               patches::Matrix{SkyPatch},
+                               patches::Matrix{ImagePatch},
                                target_sources::Vector{Int},
                                neighbor_map::Vector{Vector{Int}},
                                images::Vector{<:Image};

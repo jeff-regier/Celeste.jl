@@ -14,7 +14,7 @@ using StaticArrays
 
 function write_star_nmgy!(img::Image, ce::CatalogEntry)
     box = Model.box_around_point(img.wcs, ce.pos, 25)
-    p = Model.SkyPatch(img, box)
+    p = Model.ImagePatch(img, box)
     Model.write_star_nmgy!(ce.pos, ce.star_fluxes[img.b], p, img.pixels)
 end
 

@@ -179,7 +179,7 @@ struct ElboArgs
 
     # subimages is a better name for patches: regions of an image
     # around a particular light source
-    patches::Matrix{SkyPatch}
+    patches::Matrix{ImagePatch}
 
     # the sources to optimize
     active_sources::Vector{Int}
@@ -191,7 +191,7 @@ end
 
 function ElboArgs(
             images::Vector{<:Image},
-            patches::Matrix{SkyPatch},
+            patches::Matrix{ImagePatch},
             active_sources::Vector{Int};
             psf_K::Int=2,
             include_kl::Bool=true)

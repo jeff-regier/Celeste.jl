@@ -492,7 +492,7 @@ Initialize elbo args for the specified target source.
 function init_elboargs(config::Config,
                        ts::Int,
                        catalog::Vector{CatalogEntry},
-                       patches::Matrix{SkyPatch},
+                       patches::Matrix{ImagePatch},
                        target_sources::Vector{Int},
                        neighbor_map::Vector{Vector{Int}},
                        images::Vector{<:Image},

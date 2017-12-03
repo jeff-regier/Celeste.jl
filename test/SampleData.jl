@@ -65,7 +65,7 @@ function empty_model_params(S::Int)
     vp = [DeterministicVI.generic_init_source([ 0., 0. ]) for s in 1:S]
     ElboArgs(Image[],
              vp,
-             Matrix{SkyPatch}(S, 0),
+             Matrix{ImagePatch}(S, 0),
              collect(1:S))
 end
 

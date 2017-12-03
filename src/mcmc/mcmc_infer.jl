@@ -9,7 +9,7 @@ simultaneously
 """
 function run_ais(entry::CatalogEntry,
                  imgs::Vector,
-                 patches::Array{SkyPatch, 2},
+                 patches::Array{ImagePatch, 2},
                  background_images::Array{Array{Float64, 2}, 1},
                  pos_delta::Array{Float64, 1}=[2., 2.];
                  num_samples::Int=2,
@@ -140,7 +140,7 @@ Run single source MCMC chain
 """
 function run_mcmc(entry::CatalogEntry,
                   imgs::Vector,
-                  patches::Array{SkyPatch, 2},
+                  patches::Array{ImagePatch, 2},
                   background_images::Array{Array{Float64, 2}, 1},
                   pos_delta::Array{Float64, 1}=[1., 1.];
                   num_samples::Int=500,

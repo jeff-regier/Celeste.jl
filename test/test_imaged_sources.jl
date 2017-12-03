@@ -1,4 +1,4 @@
-using Celeste.Model: boxes_overlap, SkyPatch, box_from_catalog, find_neighbors
+using Celeste.Model: boxes_overlap, ImagePatch, box_from_catalog, find_neighbors
 using Celeste.SDSSIO
 using Base.Test
 
@@ -22,7 +22,7 @@ end
     images = SDSSIO.load_field_images(strategy, rcfs)
     catalog = SDSSIO.read_photoobj_files(strategy, rcfs)
 
-    patches = [SkyPatch(img, box_from_catalog(img, entry))
+    patches = [ImagePatch(img, box_from_catalog(img, entry))
                for entry in catalog, img in images]
 
     entry_id = 429  # star at RA, Dec = (309.49754066435867, 45.54976572870953)

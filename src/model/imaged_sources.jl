@@ -41,7 +41,7 @@ boxes_overlap(box1::Box, box2::Box) = (_ranges_overlap(box1[1], box2[1]) &&
 
 
 """
-    SkyPatch(img::Image, ce:CatalogEntry; radius_override_pix=NaN)
+    ImagePatch(img::Image, ce:CatalogEntry; radius_override_pix=NaN)
 
 Attributes of a subsection of an Image around a point of interest.
 
@@ -57,7 +57,7 @@ Attributes of a subsection of an Image around a point of interest.
 - `active_pixel_bitmap`: Boolean mask denoting which pixels in the patch are
                          considered when processing the source.
 """
-struct SkyPatch
+struct ImagePatch
     box::Box
     world_center::Vector{Float64}
 
@@ -71,13 +71,13 @@ struct SkyPatch
 end
 
 
-function Base.show(io::IO, patch::SkyPatch)
-    print(io, "$(length(patch.box[1]))×$(length(patch.box[2])) SkyPatch at $(patch.box)")
+function Base.show(io::IO, patch::ImagePatch)
+    print(io, "$(length(patch.box[1]))×$(length(patch.box[2])) ImagePatch at $(patch.box)")
 end
 
 
-# construct `SkyPatch` from box of pixels on image.
-function SkyPatch(img::Image, box::Box)
+# construct `ImagePatch` from box of pixels on image.
+function ImagePatch(img::Image, box::Box)
     # Crop off-image portion of box. Completely off-image boxes are
     # allowed and internally indicated with a range of 1:0 or H+1:H
     # (an empty range, but still a legal index to image pixels).
@@ -106,7 +106,7 @@ function SkyPatch(img::Image, box::Box)
 
     itp_psf = interpolate(grid_psf, BSpline(Cubic(Line())), OnGrid())
 
-    SkyPatch(box,
+    ImagePatch(box,
              world_center,
              img.psf,
              itp_psf,
@@ -167,7 +167,7 @@ function get_sky_patches(images::Vector{<:Image},
                          radius_override_pix=NaN)
     N = length(images)
     S = length(catalog)
-    patches = Matrix{SkyPatch}(S, N)
+    patches = Matrix{ImagePatch}(S, N)
 
     for n in 1:N, s in 1:S
         box = (isnan(radius_override_pix)?
@@ -175,7 +175,7 @@ function get_sky_patches(images::Vector{<:Image},
                box_around_point(images[n].wcs, catalog[s].pos,
                                 radius_override_pix))
         pixel_center = WCS.world_to_pix(images[n].wcs, catalog[s].pos)
-        patches[s, n] = SkyPatch(images[n], box)
+        patches[s, n] = ImagePatch(images[n], box)
     end
 
     patches
@@ -229,7 +229,7 @@ Return indexes of objects in `patches` whose boxes overlap the object
 at index `target` in any image. (The first and second axes of `patches`
 are over objects and images, respectively.)
 """
-function find_neighbors(patches::Matrix{SkyPatch}, target::Int)
+function find_neighbors(patches::Matrix{ImagePatch}, target::Int)
     neighbors = Int[]
     for i in 1:size(patches, 1)  # loop over objects
         i == target && continue

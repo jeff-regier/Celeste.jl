@@ -10,7 +10,7 @@ using ..BivariateNormals: BivariateNormalDerivatives, BvnComponent,
                           GalaxySigmaDerivs, get_bvn_cov, eval_bvn_pdf!,
                           get_bvn_derivs!, transform_bvn_derivs!
 using ..Model
-using ..Model: SkyPatch, BvnBundle
+using ..Model: ImagePatch, BvnBundle
 import ..Celeste: Const, @aliasscope, @unroll_loop
 using ..SensitiveFloats
 import ..Log

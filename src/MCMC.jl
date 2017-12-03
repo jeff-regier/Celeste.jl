@@ -1,7 +1,7 @@
 module MCMC
 
 using Celeste: Model, Transform, SensitiveFloats
-import Celeste.Model: SkyPatch, Image
+import Celeste.Model: ImagePatch, Image
 import Celeste.SDSSIO: SDSSBackground
 using Distributions, StatsBase, DataFrames, StaticArrays, WCS
 import Celeste: Config, Log
