@@ -335,8 +335,8 @@ function make_location_prior(img::Image,
     # lower and upper bounds on the ra/dec
     ra_lo, ra_hi   = sort([pos0_world_lower[1], pos0_world_upper[1]])
     dec_lo, dec_hi = sort([pos0_world_lower[2], pos0_world_upper[2]])
-    Log.info(@sprintf " ... limiting RA  to [%2.5f, %2.5f]" ra_lo ra_hi)
-    Log.info(@sprintf " ... limiting DEC to [%2.5f, %2.5f]" dec_lo dec_hi)
+    Log.info(@sprintf " ... limiting RA  to [%3.5f, %3.5f]" ra_lo ra_hi)
+    Log.info(@sprintf " ... limiting DEC to [%3.5f, %3.5f]" dec_lo dec_hi)
 
     # corresponding uniform log likelihoods
     llra  = log(1./(ra_hi - ra_lo))
