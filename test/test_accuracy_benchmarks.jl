@@ -23,7 +23,8 @@ import Celeste: Model
     target_sources = [8]
 
     patches = Model.get_sky_patches(images, catalog_entries)
-    neighbor_map = [Model.find_neighbors(patches, i) for i in target_sources]
+    neighbor_map = Dict(i=>Model.find_neighbors(patches, i)
+                        for i in target_sources)
     results = ParallelRun.one_node_single_infer(catalog_entries,
                                                 patches,
                                                 target_sources,

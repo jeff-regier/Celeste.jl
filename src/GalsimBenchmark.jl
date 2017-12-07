@@ -97,8 +97,8 @@ function run_benchmarks(; test_case_names=String[], joint_inference=false)
         target_sources = collect(1:num_sources)
         config = Config(ACTIVE_PIXELS_MIN_RADIUS_PX)
         patches = Model.get_sky_patches(images, catalog_entries)
-        neighbor_map = [Model.find_neighbors(patches, i)
-                        for i in target_sources]
+        neighbor_map = Dict(i=>Model.find_neighbors(patches, i)
+                            for i in target_sources)
 
         if joint_inference
             results = ParallelRun.one_node_joint_infer(catalog_entries,

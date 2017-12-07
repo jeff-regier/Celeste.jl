@@ -32,21 +32,17 @@ Return a Cyclades partitioning or an equal partitioning of the target
 sources.
 """
 function partition_box(npartitions::Int, target_sources::Vector{Int},
-                       neighbor_map::Vector{Vector{Int}}, ea_vec;
+                       neighbor_map::Dict{Int,Vector{Int}}, ea_vec;
                        cyclades_partition=true,
                        batch_size=7000)
     if cyclades_partition
-        cyclades_neighbor_map = Dict{Int64,Vector{Int64}}()
-        for (index, neighbors) in enumerate(neighbor_map)
-            cyclades_neighbor_map[target_sources[index]] = neighbors
-        end
         #return partition_cyclades(npartitions, target_sources,
-        #                          cyclades_neighbor_map,
+        #                          neighbor_map,
         #                          batch_size=batch_size)
         #return partition_cyclades_dynamic(target_sources,
-        #                                  cyclades_neighbor_map,
+        #                                  neighbor_map,
         #                                  batch_size=batch_size)
-	return partition_cyclades_dynamic_auto_batchsize(target_sources, cyclades_neighbor_map, ea_vec)
+	return partition_cyclades_dynamic_auto_batchsize(target_sources, neighbor_map, ea_vec)
     else
         return partition_equally(npartitions, length(target_sources))
     end
@@ -70,7 +66,7 @@ Partitions sources via the cyclades algorithm. Finds the batch size which return
 - target_sources - array of target sources. Elements should match keys of neighbor_map.
 - neighbor_map - graph of connections of sources
 """
-function partition_cyclades_dynamic_auto_batchsize(target_sources, neighbor_map, ea_vec)
+function partition_cyclades_dynamic_auto_batchsize(target_sources::Vector{Int}, neighbor_map::Dict{Int,Vector{Int}}, ea_vec)
     n_threads = nthreads()
 
     # Sample batch sizes at intervals
@@ -131,7 +127,7 @@ model over numerous iterations.
 
 catalog - the catalog of light sources
 target_sources - light sources to optimize
-neighbor_map - ligh_source index -> neighbor light_source id
+neighbor_map - light_source id -> neighbor light_source ids
 
 cyclades_partition - use the cyclades algorithm to partition into non conflicting batches for updates.
 batch_size - size of a single batch of sources for updates
@@ -237,7 +233,7 @@ function init_elboargs(config::Config,
                        catalog::Vector{CatalogEntry},
                        patches::Matrix{ImagePatch},
                        target_sources::Vector{Int},
-                       neighbor_map::Vector{Vector{Int}},
+                       neighbor_map::Dict{Int,Vector{Int}},
                        images::Vector{<:Image},
                        ea_vec::Vector{ElboArgs},
                        vp_vec::Vector{VariationalParams{Float64}},
@@ -247,7 +243,7 @@ function init_elboargs(config::Config,
     try
         entry_id = target_sources[ts]
         entry = catalog[entry_id]
-        neighbor_ids = neighbor_map[ts]
+        neighbor_ids = neighbor_map[entry_id]
         neighbors = catalog[neighbor_ids]
         cat_local = vcat([entry], neighbors)
         ids_local = vcat([entry_id], neighbor_ids)
@@ -500,21 +496,21 @@ function process_source(config::Config,
                         catalog::Vector{CatalogEntry},
                         patches::Matrix{ImagePatch},
                         target_sources::Vector{Int},
-                        neighbor_map::Vector{Vector{Int}},
+                        neighbor_map::Dict{Int,Vector{Int}},
                         images::Vector{<:Image})
-    neighbors = catalog[neighbor_map[ts]]
+    s = target_sources[ts]
+    neighbors = catalog[neighbor_map[s]]
     if length(neighbors) > 100
         msg = string("object at RA, Dec = $(entry.pos) has an excessive",
                      "number ($(length(neighbors))) of neighbors")
         Log.warn(msg)
     end
 
-    s = target_sources[ts]
     entry = catalog[s]
     cat_local = vcat([entry], neighbors)
 
     # Limit patches to just the active source and its neighbors.
-    idxs = vcat([s], neighbor_map[ts])
+    idxs = vcat([s], neighbor_map[s])
     patches = patches[idxs, :]
 
     vp = DeterministicVI.init_sources([1], cat_local)
@@ -538,13 +534,13 @@ function process_source_mcmc(config::Config,
                              catalog::Vector{CatalogEntry},
                              patches::Matrix{ImagePatch},
                              target_sources::Vector{Int},
-                             neighbor_map::Vector{Vector{Int}},
+                             neighbor_map::Dict{Int,Vector{Int}},
                              images::Vector{<:Image};
                              use_ais::Bool=true)
     # subselect source, select active source and neighbor set
     s = target_sources[ts]
     entry = catalog[s]
-    neighbors = catalog[neighbor_map[ts]]
+    neighbors = catalog[neighbor_map[s]]
     if length(neighbors) > 100
         msg = string("objid $(entry.objid) [ra: $(entry.pos)] has an excessive",
                      "number ($(length(neighbors))) of neighbors")
@@ -552,7 +548,7 @@ function process_source_mcmc(config::Config,
     end
 
     # Limit patches to just the active source and its neighbors.
-    idxs = vcat([s], neighbor_map[ts])
+    idxs = vcat([s], neighbor_map[s])
     patches = patches[idxs, :]
 
     # create smaller images for the MCMC sampler to use
@@ -584,7 +580,7 @@ callback and write the results to a file.
 function one_node_single_infer(catalog::Vector{CatalogEntry},
                                patches::Matrix{ImagePatch},
                                target_sources::Vector{Int},
-                               neighbor_map::Vector{Vector{Int}},
+                               neighbor_map::Dict{Int,Vector{Int}},
                                images::Vector{<:Image};
                                config=Config(),
                                do_vi=true)
@@ -720,8 +716,8 @@ function infer_box(images::Vector{<:Image}, box::BoundingBox; method=:joint,
     target_ids = find(entry_in_range, catalog)
 
     # find objects with patches overlapping
-    neighbor_map = [Model.find_neighbors(patches, id)
-                    for id in target_ids]
+    neighbor_map = Dict(id=>Model.find_neighbors(patches, id)
+                        for id in target_ids)
 
     if method == :joint
         results = one_node_joint_infer(catalog, patches, target_ids,
