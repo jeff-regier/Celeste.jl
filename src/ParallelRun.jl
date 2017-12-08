@@ -488,18 +488,16 @@ end
 
 
 """
-Optimize the `ts`th element of `target_sources`.
+Optimize the `s`th element in `catalog`.
 Used only for one_node_single_infer, not one_node_joint_infer.
 """
 function process_source(config::Config,
-                        ts::Int,
+                        s::Int,
                         catalog::Vector{CatalogEntry},
                         patches::Matrix{ImagePatch},
-                        target_sources::Vector{Int},
-                        neighbor_map::Dict{Int,Vector{Int}},
+                        neighbor_ids::Vector{Int},
                         images::Vector{<:Image})
-    s = target_sources[ts]
-    neighbors = catalog[neighbor_map[s]]
+    neighbors = catalog[neighbor_ids]
     if length(neighbors) > 100
         msg = string("object at RA, Dec = $(entry.pos) has an excessive",
                      "number ($(length(neighbors))) of neighbors")
@@ -510,7 +508,7 @@ function process_source(config::Config,
     cat_local = vcat([entry], neighbors)
 
     # Limit patches to just the active source and its neighbors.
-    idxs = vcat([s], neighbor_map[s])
+    idxs = vcat([s], neighbor_ids)
     patches = patches[idxs, :]
 
     vp = DeterministicVI.init_sources([1], cat_local)
@@ -518,7 +516,7 @@ function process_source(config::Config,
 
     tic()
     f_evals, max_f, max_x, nm_result = DeterministicVI.ElboMaximize.maximize!(ea, vp)
-    Log.info("#$(ts) at ($(entry.pos[1]), $(entry.pos[2])): $(toq()) secs")
+    Log.info("#$(s) at ($(entry.pos[1]), $(entry.pos[2])): $(toq()) secs")
 
     vs_opt = vp[1]
     is_sky_bad = bad_sky(entry, images)
@@ -530,17 +528,15 @@ end
 Run MCMC to process a source.  Returns
 """
 function process_source_mcmc(config::Config,
-                             ts::Int,
+                             s::Int,
                              catalog::Vector{CatalogEntry},
                              patches::Matrix{ImagePatch},
-                             target_sources::Vector{Int},
-                             neighbor_map::Dict{Int,Vector{Int}},
+                             neighbor_ids::Vector{Int},
                              images::Vector{<:Image};
                              use_ais::Bool=true)
     # subselect source, select active source and neighbor set
-    s = target_sources[ts]
     entry = catalog[s]
-    neighbors = catalog[neighbor_map[s]]
+    neighbors = catalog[neighbor_ids]
     if length(neighbors) > 100
         msg = string("objid $(entry.objid) [ra: $(entry.pos)] has an excessive",
                      "number ($(length(neighbors))) of neighbors")
@@ -548,7 +544,7 @@ function process_source_mcmc(config::Config,
     end
 
     # Limit patches to just the active source and its neighbors.
-    idxs = vcat([s], neighbor_map[s])
+    idxs = vcat([s], neighbor_ids)
     patches = patches[idxs, :]
 
     # create smaller images for the MCMC sampler to use
@@ -607,15 +603,14 @@ function one_node_single_infer(catalog::Vector{CatalogEntry},
                 break
             end
 
+            s = target_sources[ts]
             try
                 if do_vi
-                    result = process_source(config, ts, catalog, patches,
-                                            target_sources, neighbor_map,
-                                            images)
+                    result = process_source(config, s, catalog, patches,
+                                            neighbor_map[s], images)
                 else
-                    result = process_source_mcmc(config, ts, catalog,
-                                                 patches, target_sources,
-                                                 neighbor_map, images)
+                    result = process_source_mcmc(config, s, catalog, patches,
+                                                 neighbor_map[s], images)
                 end
 
                 lock(results_lock)
