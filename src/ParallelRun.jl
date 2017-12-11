@@ -418,7 +418,7 @@ end
 # Count and display the number of active and inactive pixels processed.
 function show_pixels_processed()
     n_active, n_inactive = get_pixels_processed()
-    Log.message("$(Time(now())): (active,inactive) pixels processed: \($n_active,$n_inactive\)")
+    Log.info("$(Time(now())): (active,inactive) pixels processed: \($n_active,$n_inactive\)")
 end
 
 abstract type ParallelismStrategy; end
@@ -630,7 +630,7 @@ function one_node_single_infer(catalog::Vector{CatalogEntry},
         process_sources()
     else
         ccall(:jl_threading_run, Void, (Any,), Core.svec(process_sources))
-        ccall(:jl_threading_profile, Void, ())
+        Log.LEVEL[] >= Log.INFO && ccall(:jl_threading_profile, Void, ())
     end
 
     return results
