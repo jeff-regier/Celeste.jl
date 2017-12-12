@@ -2,6 +2,7 @@ import Celeste: detect_sources
 import Celeste.Coordinates: match_coordinates
 using Celeste.SDSSIO
 
+@testset "detection" begin
 
 # Compare the initial catalog produced by detect_sources() versus the
 # SDSS primary catalog.
@@ -30,4 +31,6 @@ using Celeste.SDSSIO
     # Test that there are a bunch of coordinates that match within 0.5 arcsec
     # (This is a basic sanity check, not a very strict test.)
     @test sum(dists .< 0.5/3600.) > 600
+end
+
 end

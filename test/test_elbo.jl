@@ -8,6 +8,7 @@ import ForwardDiff.Dual
 
 import SampleData: gen_two_body_dataset, true_star_init
 
+@testset "elbo" begin
 
 @testset "calculate_G_s overwrites E_G_s, E_G2_s, and var_G_s" begin
     ea, vp, catalog = gen_two_body_dataset()
@@ -258,7 +259,7 @@ end
         vp_dual[s][i] += ForwardDiff.Dual(0, 1)
     end
 
-    @time elbo_dual = DeterministicVI.elbo(ea, vp_dual)
+    elbo_dual = DeterministicVI.elbo(ea, vp_dual)
 
     for s in 1:2, p in 1:length(ids)
         auto_hessian_column_sum = elbo_dual.d[p, s].partials[]
@@ -297,4 +298,6 @@ end
     for i in 1:20
         @test hv_manual[i] ≈ hv_auto[i] atol=abs(0.01 * hv_auto[i])
     end
+end
+
 end

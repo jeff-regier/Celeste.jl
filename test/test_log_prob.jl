@@ -1,10 +1,6 @@
 using Celeste: Model
 using Base.Test
 
-"""
-test log_prob.jl and log_prob_util.jl
-"""
-
 #####################
 ## Helper functions #
 #####################
@@ -29,9 +25,7 @@ function test_that_star_truth_is_most_likely_log_prob()
     # extract the star-specific parameters from source_states[1] for the
     # logpdf function
     star_state = Model.extract_star_state(source_states[1])
-    println(star_state)
     best_ll = star_logpdf(star_state)
-    println("Best ll ", best_ll)
 
     # perterb lnr
     lnr = star_state[1]
@@ -69,8 +63,6 @@ function test_that_gal_truth_is_most_likely_log_prob()
     # turn list of catalog entries a list of LatentStateParams
     source_states = [Model.catalog_entry_to_latent_state_params(catalog[s])
                      for s in 1:ea.S]
-    println("  active source params: ", catalog[1])
-    println("  corresponding ls    : ", source_states[1])
 
     # create logpdf function handle
     gal_logpdf, gal_logprior =
@@ -82,9 +74,7 @@ function test_that_gal_truth_is_most_likely_log_prob()
     # extract the star-specific parameters from source_states[1] for the
     # logpdf function
     gal_state = Model.extract_galaxy_state(source_states[1])
-    println(gal_state)
     best_ll = gal_logpdf(gal_state)
-    println("Best ll ", best_ll)
 
     # unpack true gal parameters
     lnr, col, pos, shape = gal_state[1], gal_state[2:5],
@@ -173,8 +163,10 @@ end
 
 
 ####################################
-test_sigmoid_logit()
-test_gal_shape_constrain()
-test_color_flux_transform()
-test_that_star_truth_is_most_likely_log_prob()
-test_that_gal_truth_is_most_likely_log_prob()
+@testset "log prob" begin
+    test_sigmoid_logit()
+    test_gal_shape_constrain()
+    test_color_flux_transform()
+    test_that_star_truth_is_most_likely_log_prob()
+    test_that_gal_truth_is_most_likely_log_prob()
+end

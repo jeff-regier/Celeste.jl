@@ -85,5 +85,5 @@ end
 results_df = AccuracyBenchmark.celeste_to_df(results)
 
 csv_filename = joinpath(OUTPUT_DIRECTORY, @sprintf("%s_predictions.csv", catalog_label))
-AccuracyBenchmark.write_catalog(csv_filename, results_df)
-AccuracyBenchmark.append_hash_to_file(csv_filename)
+csv_filename = AccuracyBenchmark.write_catalog(csv_filename, results_df; append_hash=true)
+@printf("Wrote '%s'...\n", csv_filename)

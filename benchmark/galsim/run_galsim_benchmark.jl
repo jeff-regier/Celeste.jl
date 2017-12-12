@@ -29,11 +29,11 @@ srand(12345)
 truth_catalog, single_predictions = GalsimBenchmark.run_benchmarks(
     test_case_names=test_case_names,
     joint_inference=false,
-)
+    verbose=true)
 unused, joint_predictions = GalsimBenchmark.run_benchmarks(
     test_case_names=test_case_names,
     joint_inference=true,
-)
+    verbose=true)
 
 score_df = AccuracyBenchmark.score_predictions(
     truth_catalog,

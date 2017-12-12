@@ -34,28 +34,28 @@ function assert_estimates_are_close(benchmark_results)
         else
             maximum_error = 0.2 * abs(row[:truth])
         end
-        if !isapprox(row[:truth], row[:estimate], atol=maximum_error)
-            @show row
-            @show maximum_error
-            @test false
-        else
-            @test true # just so test framework will count test cases
-        end
+        @test isapprox(row[:truth], row[:estimate],
+                       atol=maximum_error)
     end
 end
 
-@testset "GalSim benchmark tests, single-source inference" begin
-    truth, results = GalsimBenchmark.run_benchmarks(
-        test_case_names=GALSIM_CASES_EXERCISED,
-        joint_inference=false
-    )
-    assert_estimates_are_close(GalsimBenchmark.truth_comparison_df(truth, results))
-end
+@testset "galsim benchmarks" begin
+    @testset "single-source inference" begin
+        truth, results = GalsimBenchmark.run_benchmarks(
+            test_case_names=GALSIM_CASES_EXERCISED,
+            joint_inference=false
+        )
+        assert_estimates_are_close(
+            GalsimBenchmark.truth_comparison_df(truth, results))
+    end
 
-@testset "GalSim benchmark tests, joint inference" begin
-    truth, results = GalsimBenchmark.run_benchmarks(
-        test_case_names=GALSIM_CASES_EXERCISED,
-        joint_inference=true
-    )
-    assert_estimates_are_close(GalsimBenchmark.truth_comparison_df(truth, results))
+
+    @testset "GalSim benchmark tests, joint inference" begin
+        truth, results = GalsimBenchmark.run_benchmarks(
+            test_case_names=GALSIM_CASES_EXERCISED,
+            joint_inference=true
+        )
+        assert_estimates_are_close(
+            GalsimBenchmark.truth_comparison_df(truth, results))
+    end
 end

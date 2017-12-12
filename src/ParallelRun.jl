@@ -732,16 +732,15 @@ end
 function infer_box(strategy, box::BoundingBox, outdir::String)
     Log.info("processing box $(box.ramin), $(box.ramax), $(box.decmin), ",
              "$(box.decmax) with $(nthreads()) threads")
-    @time begin
-        # Get vector of (run, camcol, field) triplets overlapping this patch
-        # and load images for them.
-        rcfs = get_overlapping_fields(box, strategy)
-        images = SDSSIO.load_field_images(strategy, rcfs)
 
-        results = infer_box(images, box)
+    # Get vector of (run, camcol, field) triplets overlapping this patch
+    # and load images for them.
+    rcfs = get_overlapping_fields(box, strategy)
+    images = SDSSIO.load_field_images(strategy, rcfs)
 
-        save_results(outdir, box, results)
-    end
+    results = infer_box(images, box)
+
+    save_results(outdir, box, results)
 end
 
 

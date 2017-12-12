@@ -3,6 +3,12 @@ using DeterministicVI: KLDivergence
 using Distributions, DiffBase
 using Base.Test
 
+# need different calls for univariate vs multivariate distributions
+veclogpdf(dist::Distribution{Univariate}, samples::Vector) =
+    logpdf.(dist, samples)
+veclogpdf(dist::Distribution{Multivariate}, samples::Matrix) =
+    logpdf(dist, samples)
+
 """
 Use Monte Carlo to check whether KL(q_dist || p_dist) matches exact_kl
 
@@ -13,7 +19,8 @@ Args:
 function test_kl_value(q_dist, p_dist, exact_kl::Float64)
     sample_size = 2_000_000
     q_samples = rand(q_dist, sample_size)
-    empirical_kl_samples = logpdf(q_dist, q_samples) - logpdf(p_dist, q_samples)
+    empirical_kl_samples = (veclogpdf(q_dist, q_samples) .-
+                            veclogpdf(p_dist, q_samples))
     empirical_kl = mean(empirical_kl_samples)
     tol = 4 * std(empirical_kl_samples) / sqrt(sample_size)
     min_diff = 1e-2 * std(empirical_kl_samples) / sqrt(sample_size)
@@ -72,9 +79,10 @@ function test_subtract_kl()
     KLDivergence.subtract_kl_source!(sf, kl_result, vs, kl_helper)
 end
 
-println("Running KL divergence tests.")
-test_beta_kl_value()
-test_categorical_kl_value()
-test_diagmvn_mvn_kl_value()
-test_gaussian_kl_value()
-test_subtract_kl()
+@testset "kl" begin
+    test_beta_kl_value()
+    test_categorical_kl_value()
+    test_diagmvn_mvn_kl_value()
+    test_gaussian_kl_value()
+    test_subtract_kl()
+end

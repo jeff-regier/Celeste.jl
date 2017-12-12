@@ -17,7 +17,7 @@ end
 
 # test cyclades partitioning:
 # Makes sure cyclades partitioning correctly partitions sources.
-@testset "cyclades partitioning" begin
+@testset "partition" begin
 
     """
     The conflict pattern is a connected 4x4 grid:
@@ -86,7 +86,6 @@ end
             t1_sources = [target_sources[x] for x in source_assignment[1][batch]]
             t2_sources = [target_sources[x] for x in source_assignment[2][batch]]
             t3_sources = [target_sources[x] for x in source_assignment[3][batch]]
-            println("Batch $(batch) assignments: $t1_sources $t2_sources $t3_sources")
             @test !edges_between_sources(t1_sources, t2_sources, neighbor_map)
             @test !edges_between_sources(t1_sources, t3_sources, neighbor_map)
             @test !edges_between_sources(t2_sources, t3_sources, neighbor_map)

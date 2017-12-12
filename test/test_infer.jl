@@ -5,6 +5,7 @@ import Celeste: Config
 using Celeste.SDSSIO
 using Celeste.ParallelRun
 
+@testset "infer" begin
 
 @testset "one_node_single_infer_mcmc with a single (run, camcol, field)" begin
     # very small patch of sky that turns out to have 4 sources.
@@ -34,4 +35,6 @@ end
     strategy = PlainFITSStrategy(datadir)
     images = SDSSIO.load_field_images(strategy, rcfs)
     result = ParallelRun.infer_box(images, box; method=:single, do_vi=true)
+end
+
 end

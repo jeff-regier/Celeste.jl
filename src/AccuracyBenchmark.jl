@@ -83,29 +83,41 @@ function assert_columns_are_present(catalog_df::DataFrame, required_columns::Set
 end
 
 function read_catalog(csv_file::String)
-    @printf("Reading '%s'...\n", csv_file)
     catalog_df = CSV.read(csv_file, rows_for_type_detect=100)
     assert_columns_are_present(catalog_df, CATALOG_COLUMNS)
     catalog_df
 end
 
-function write_catalog(csv_file::String, catalog_df::DataFrame)
+function write_catalog(filename::String, catalog_df::DataFrame;
+                       append_hash=false)
     assert_columns_are_present(catalog_df, CATALOG_COLUMNS)
-    @printf("Writing '%s'...\n", csv_file)
-    CSV.write(csv_file, catalog_df)
+
+    if append_hash
+        # Serialize the data frame into an array of bytes.
+        # (CSV.write(::IO, ...) currently broken, so we use a temp file.
+        tmp = tempname()
+        CSV.write(tmp, catalog_df)
+        data = open(tmp) do f
+            read(f)
+        end
+        rm(tmp)
+
+        # Hash the bytes and add the hash string to the filename.
+        hash_string = hex(hash(data))[1:10]
+        base, extension = splitext(filename)
+        filename = @sprintf("%s_%s%s", base, hash_string, extension)
+
+        # Write out the file
+        open(filename, "w") do f
+            write(f, data)
+        end
+    else
+        CSV.write(filename, catalog_df)
+    end
+
+    return filename
 end
 
-function append_hash_to_file(filename::String)
-    contents_hash = open(filename) do stream
-        hash(read(stream))
-    end
-    hash_string = hex(contents_hash)[1:10]
-    base, extension = splitext(filename)
-    new_filename = @sprintf("%s_%s%s", base, hash_string, extension)
-    @printf("Renaming %s -> %s\n", filename, new_filename)
-    mv(filename, new_filename, remove_destination=true)
-    new_filename
-end
 
 ################################################################################
 # Read various catalogs to a common catalog DF format
@@ -454,14 +466,12 @@ struct FitsImage
 end
 
 function read_fits(filename::String)
-    println("Reading '$filename'...")
     if !isfile(filename)
         throw(BenchmarkFitsFileNotFound(filename))
     end
 
     fits = FITSIO.FITS(filename)
     try
-        println("Found $(length(fits)) extensions.")
         map(fits) do extension
             pixels = read(extension)
             header = FITSIO.read_header(extension)
@@ -773,8 +783,8 @@ ABSOLUTE_ERROR_COLUMNS = vcat(
 )
 
 function degrees_to_diff(a, b)
-    angle_between = abs(a - b) % 180
-    min.(angle_between, 180 - angle_between)
+    angle_between = abs.(a - b) .% 180
+    min.(angle_between, 180 .- angle_between)
 end
 
 
@@ -801,21 +811,21 @@ function get_error_df(truth::DataFrame, predicted::DataFrame)
                             predicted[:dec])
 
     # compare flux in both mags and nMgy for now
-    errors[:flux_r_mag] = abs(
+    errors[:flux_r_mag] = abs.(
         flux_to_mag.(truth[:flux_r_nmgy], 3)
         .- flux_to_mag.(predicted[:flux_r_nmgy], 3)
     )
-    errors[:flux_r_nmgy] = abs(
+    errors[:flux_r_nmgy] = abs.(
         truth[:flux_r_nmgy] .- predicted[:flux_r_nmgy]
     )
     errors[:gal_angle_deg] = degrees_to_diff(truth[:gal_angle_deg], predicted[:gal_angle_deg])
 
     for column_symbol in ABSOLUTE_ERROR_COLUMNS
-        errors[column_symbol] = abs(truth[column_symbol] - predicted[column_symbol])
+        errors[column_symbol] = abs.(truth[column_symbol] .- predicted[column_symbol])
     end
     for color_column in COLOR_COLUMNS
         # to match up with Stripe82Score, which used differences of mags
-        errors[color_column] *= 2.5 / log(10)
+        errors[color_column] .*= 2.5 / log(10)
     end
 
     errors

@@ -7,7 +7,7 @@ using StaticArrays
 
 using Celeste: Model, DeterministicVI
 
-import Celeste: DeterministicVI, ParallelRun
+import Celeste: DeterministicVI, ParallelRun, Log
 import Celeste: PSF, SDSSIO, SensitiveFloats, Transform
 import Celeste.SDSSIO: RunCamcolField
 
@@ -15,6 +15,7 @@ include(joinpath(Pkg.dir("Celeste"), "test", "SampleData.jl"))
 
 using SampleData
 
+Log.LEVEL[] = Log.WARN  # do not show info during tests.
 anyerrors = false
 
 wd = pwd()
@@ -38,23 +39,26 @@ if length(test_files) > 0
     testfiles = ["test_$(arg).jl" for arg in test_files]
 else
     testdir = joinpath(Pkg.dir("Celeste"), "test")
-    testfiles = filter(r"test_.*\.jl", readdir(testdir))
-end
-
-if !test_long_running
-    warn("Skipping long running tests.  ",
-         "To test everything, run tests with the flag ", long_running_flag)
-end
-
-
-for testfile in testfiles
-    try
-        println("Running ", testfile)
-        @time include(testfile)
-        println("\t\033[1m\033[32mPASSED\033[0m: $(testfile)")
-    catch e
-        anyerrors = true
-        println("\t\033[1m\033[31mFAILED\033[0m: $(testfile)")
-        rethrow()  # Fail fast.
+    testfiles = filter(r"^test_.*\.jl$", readdir(testdir))
+    if !test_long_running
+        info("Skipping stripe82 tests without --long-running flag.")
+        testfiles = setdiff(testfiles, ["test_stripe82.jl"])
     end
 end
+
+timing_info = Any[]
+for testfile in testfiles
+        _, t, bytes, gctime, memallocs = @timed include(testfile)
+        push!(timing_info, (t, bytes, gctime, memallocs))
+end
+
+println("\nTiming info:")
+totaltime = 0.0
+for i in eachindex(timing_info)
+    t, bytes, gctime, memallocs = timing_info[i]
+    totaltime += t
+    @printf "%30s: " testfiles[i]
+    Base.time_print(1e9 * t, memallocs.allocd, memallocs.total_time,
+                    Base.gc_alloc_count(memallocs))
+end
+@printf "Total time: %7.2f seconds\n" totaltime

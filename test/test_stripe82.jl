@@ -1,12 +1,13 @@
 import JLD
 
-import Celeste.ParallelRun: infer_init, BoundingBox,
+import Celeste.ParallelRun: BoundingBox,
     one_node_joint_infer, one_node_single_infer, detect_sources
 import Celeste.SensitiveFloats: SensitiveFloat
 import Celeste.DeterministicVI.ElboMaximize
 import Celeste.Coordinates: match_coordinates
 
 import FITSIO
+
 """
 load_ea_from_source
 Helper function to load elbo args for a particular source
@@ -364,7 +365,7 @@ end
 
 
 # Stripe 82 tests are long running
-if test_long_running
+@testset "stripe82"
     test_improve_stripe_82_obj_value()
 
     # Test gradients near zero (this takes 100 iterations and is a bit slow)
