@@ -4,7 +4,7 @@ Make all star inference functiouns: prior, loglike, log (unnormalized) posterior
 function make_star_inference_functions(imgs::Vector,
           entry::CatalogEntry;
           pos_delta::Array{Float64, 1}=[2., 2.],
-          patches::Array{SkyPatch, 1}=nothing,
+          patches::Array{ImagePatch, 1}=nothing,
           background_images::Array{Array{Float64, 2}, 1}=nothing)
     # position log prior --- same for both star and galaxy (constrains to a
     # small window around the existing catalog location.  Because the range
@@ -54,7 +54,7 @@ Make all star inference functiouns: prior, loglike, log (unnormalized) posterior
 function make_gal_inference_functions(imgs::Vector,
           entry::CatalogEntry;
           pos_delta::Array{Float64, 1}=[2., 2.],
-          patches::Array{SkyPatch, 1}=nothing,
+          patches::Array{ImagePatch, 1}=nothing,
           background_images::Array{Array{Float64, 2}, 1}=nothing)
     # constrained location prior (same as above)
     pos_logprior, ra_lim, dec_lim, uniform_to_deg, deg_to_uniform =
@@ -107,7 +107,7 @@ Args:
     appearance model, not the MOG approximation
 """
 function make_star_loglike(imgs::Vector;
-                           patches::Array{SkyPatch, 1}=nothing,
+                           patches::Array{ImagePatch, 1}=nothing,
                            background_images::Array{Array{Float64, 2}, 1}=nothing,
                            pos_transform::Function=nothing)
     # create background images --- sky noise and neighbors if there
@@ -215,7 +215,7 @@ Note on Galaxy Shapes: the `gal_scale` parameter is in pixels.  The
   Also note that the scale prior defined below is over sigma^2_{cel}.
 """
 function make_gal_loglike(imgs::Vector;
-                          patches::Array{SkyPatch, 1}=nothing,
+                          patches::Array{ImagePatch, 1}=nothing,
                           background_images::Array{Array{Float64, 2}, 1}=nothing,
                           pos_transform::Function=nothing)
 
@@ -335,8 +335,8 @@ function make_location_prior(img::Image,
     # lower and upper bounds on the ra/dec
     ra_lo, ra_hi   = sort([pos0_world_lower[1], pos0_world_upper[1]])
     dec_lo, dec_hi = sort([pos0_world_lower[2], pos0_world_upper[2]])
-    Log.info(@sprintf " ... limiting RA  to [%2.5f, %2.5f]" ra_lo ra_hi)
-    Log.info(@sprintf " ... limiting DEC to [%2.5f, %2.5f]" dec_lo dec_hi)
+    Log.info(@sprintf " ... limiting RA  to [%3.5f, %3.5f]" ra_lo ra_hi)
+    Log.info(@sprintf " ... limiting DEC to [%3.5f, %3.5f]" dec_lo dec_hi)
 
     # corresponding uniform log likelihoods
     llra  = log(1./(ra_hi - ra_lo))

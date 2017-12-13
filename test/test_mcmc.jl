@@ -3,8 +3,6 @@ using Base.Test
 using Celeste: Model, Transform, SensitiveFloats, MCMC, Synthetic
 using StatsBase
 
-include(joinpath(Pkg.dir("Celeste"), "test", "SampleData.jl"))
-
 # helper to create synthetic data
 function generate_single_star_data(; lnr=7.7251)
     # generate images (data)
@@ -40,7 +38,6 @@ end
 function test_mcmc_catalog_to_data_frame_row()
     # create slightly less bright log re
     truedf, ce0, dat_images, ea, vp = generate_single_star_data(; lnr=6.)
-    @test true
 end
 
 function test_star_inference_functions()
@@ -73,6 +70,7 @@ function test_gal_inference_functions()
     @test !isnan(gal_logpost(th_rand))
 end
 
-println("Running mcmc tests")
-test_star_inference_functions()
-test_gal_inference_functions()
+@testset "MCMC" begin
+    test_star_inference_functions()
+    test_gal_inference_functions()
+end

@@ -29,7 +29,7 @@ function make_star_logpdf(images::Vector{<:Image},
                           S::Int64,
                           N::Int64,
                           source_params::Vector{Vector{Float64}},
-                          patches::Matrix{SkyPatch},
+                          patches::Matrix{ImagePatch},
                           active_sources::Vector{Int},
                           psf_K::Int64)
     # define star prior log probability density function
@@ -79,7 +79,7 @@ function make_galaxy_logpdf(images::Vector{<:Image},
                             S::Int64,
                             N::Int64,
                             source_params::Vector{Vector{Float64}},
-                            patches::Matrix{SkyPatch},
+                            patches::Matrix{ImagePatch},
                             active_sources::Vector{Int},
                             psf_K::Int64)
     # define galaxy prior function
@@ -135,7 +135,7 @@ function state_log_likelihood(is_star::Bool,                # source is star
                               position::Vector{Float64},    # source position
                               gal_shape::Vector{Float64},   # source gal shape
                               images::Vector{<:Image},   # list of images with source pixel data
-                              patches::Matrix{SkyPatch},    # formerly of ElboArgs
+                              patches::Matrix{ImagePatch},    # formerly of ElboArgs
                               active_sources::Vector{Int},  # formerly of ElboArgs
                               psf_K::Int64,                 # number of PSF Comps
                               source_params::Vector{Vector{Float64}}, # list of background sources

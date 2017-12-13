@@ -7,15 +7,15 @@ import Celeste: AccuracyBenchmark
 import Celeste: DeterministicVI
 import Celeste: Model
 
-@testset "whole accuracy benchmark pipeline runs" begin
-    rcf = RunCamcolField(4263, 5, 119)
-    strategy = SDSSIO.PlainFITSStrategy(datadir)
-    images = SDSSIO.load_field_images(strategy, [rcf])
+@testset "accuracy benchmarks" begin
 
-    primary_df = AccuracyBenchmark.load_primary(rcf, datadir)
-    output_path = joinpath(datadir, "test_primary.csv")
-    AccuracyBenchmark.write_catalog(output_path, primary_df)
-    new_csv = AccuracyBenchmark.append_hash_to_file(output_path)
+@testset "whole accuracy benchmark pipeline runs" begin
+    images = SampleData.get_sdss_images(4263, 5, 119)
+
+    rcf = RunCamcolField(4263, 5, 119)
+    primary_df = AccuracyBenchmark.load_primary(rcf, SampleData.DATADIR)
+    output_path = joinpath(SampleData.DATADIR, "test_primary.csv")
+    new_csv = AccuracyBenchmark.write_catalog(output_path, primary_df)
     primary_df2 = AccuracyBenchmark.read_catalog(new_csv)
     catalog_entries = AccuracyBenchmark.make_initialization_catalog(primary_df2, true)
     # entry 8 is a star near [0.513037, 0.535631],
@@ -23,7 +23,8 @@ import Celeste: Model
     target_sources = [8]
 
     patches = Model.get_sky_patches(images, catalog_entries)
-    neighbor_map = [Model.find_neighbors(patches, i) for i in target_sources]
+    neighbor_map = Dict(i=>Model.find_neighbors(patches, i)
+                        for i in target_sources)
     results = ParallelRun.one_node_single_infer(catalog_entries,
                                                 patches,
                                                 target_sources,
@@ -31,11 +32,10 @@ import Celeste: Model
                                                 config=Celeste.Config())
     results_df = AccuracyBenchmark.celeste_to_df(results)
 
-    coadd_path = joinpath(datadir, "coadd_for_4263_5_119.fit")
+    coadd_path = joinpath(SampleData.DATADIR, "coadd_for_4263_5_119.fit")
     coadd_df = AccuracyBenchmark.load_coadd_catalog(coadd_path)
-    coadd_path2 = joinpath(datadir, "test_coadd.csv")
-    AccuracyBenchmark.write_catalog(coadd_path2, coadd_df)
-    coadd_csv = AccuracyBenchmark.append_hash_to_file(coadd_path2)
+    coadd_path2 = joinpath(SampleData.DATADIR, "test_coadd.csv")
+    coadd_csv = AccuracyBenchmark.write_catalog(coadd_path2, coadd_df)
     coadd_df2 = AccuracyBenchmark.read_catalog(coadd_csv)
 
     scores = AccuracyBenchmark.score_predictions(coadd_df2, [results_df])
@@ -73,7 +73,7 @@ end
     @test isapprox(AccuracyBenchmark.degrees_to_diff(-10., 190.), 20.)
 end
 
-@testset "variational params -> data frame -> catalog entry conversion" begin
+@testset "variational params -> data frame -> catalog entry" begin
     variational_params = DeterministicVI.generic_init_source([1.0, 2.0])
     variational_params[Model.ids.gal_axis_ratio] = 0.5
     variational_params[Model.ids.gal_radius_px] = 10.0
@@ -199,4 +199,6 @@ end
     @test predictions_matched[1][:dec] == [50.0 - off, 53.0 - off]
     @test predictions_matched[2][:ra] == [0.0 - off, 3.0 - off]
     @test predictions_matched[2][:dec] == [50.0 + off, 53.0 + off]
+end
+
 end

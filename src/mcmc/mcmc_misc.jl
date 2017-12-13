@@ -281,7 +281,7 @@ end
 """
 Generate a model image on a patch, according to that image/patch psf
 """
-function render_patch_nmgy(img::Image, patch::SkyPatch, n_bodies::Vector{CatalogEntry})
+function render_patch_nmgy(img::Image, patch::ImagePatch, n_bodies::Vector{CatalogEntry})
     # create sky noise background image in nmgy
     patch_pixels = ones(Float32, size(img.sky)) .* img.sky
 
@@ -387,7 +387,7 @@ end
 """
 creates a new image from an existing larger (field) and a patch object
 """
-function patch_to_image(patch::SkyPatch, img::Image; round_pixels_to_int=true)
+function patch_to_image(patch::ImagePatch, img::Image; round_pixels_to_int=true)
     # subselect patch pixels from image
     Hr = patch.bitmap_offset[1]:(patch.bitmap_offset[1] +
                                 size(patch.active_pixel_bitmap)[1] - 1)

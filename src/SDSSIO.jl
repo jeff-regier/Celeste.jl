@@ -738,89 +738,9 @@ function convert(::Type{Vector{CatalogEntry}}, catalog::Dict)
 end
 
 
-function assemble_catalog(rawcatalogs::Vector{Dict};
-                          duplicate_policy=:primary)
-    # Limit each catalog to primary objects and objects where thing_id != -1
-    # (thing_id == -1 indicates that the matching process failed)
-    for cat in rawcatalogs
-        mask = (cat["thing_id"] .!= -1)
-        if duplicate_policy == :primary
-            mask = (mask .& (cat["mode"] .== 0x01))
-        end
-        for key in keys(cat)
-            cat[key] = cat[key][mask]
-        end
-    end
-
-    #for i in eachindex(fts)
-    #    Log.info(string("field $(fts[i]): $(length(rawcatalogs[i]["objid"])) ",
-    #            "filtered entries"))
-    #end
-
-    # Merge all catalogs together (there should be no duplicate objects,
-    # because for each object there should only be one "primary" occurance.)
-    rawcatalog = deepcopy(rawcatalogs[1])
-    for i=2:length(rawcatalogs)
-        for key in keys(rawcatalog)
-            append!(rawcatalog[key], rawcatalogs[i][key])
-        end
-    end
-
-    # check that there are no duplicate thing_ids (see above comment)
-    if length(Set(rawcatalog["thing_id"])) < length(rawcatalog["thing_id"])
-        error("Found one or more duplicate primary thing_ids in photoobj " *
-              "catalogs")
-    end
-
-    # convert to celeste format catalog
-    catalog = convert(Vector{CatalogEntry}, rawcatalog)
-
-    return catalog
+function load_field_catalog(strategy::IOStrategy, rcf::RunCamcolField)
+    rawcatalog = read_photoobj(strategy, rcf)
+    return convert(Vector{CatalogEntry}, rawcatalog)
 end
-
-
-"""
-read_photoobj_files(fieldids, dirs) -> Vector{CatalogEntry}
-
-Combine photoobj catalogs for the given overlapping fields, returning a single
-joined catalog.
-
-The `duplicate_policy` argument controls how catalogs are joined.
-With `duplicate_policy = :primary`, only primary objects are included in the
-combined catalog.
-With `duplicate_policy = :first`, only the first detection is included in the
-combined catalog.
-"""
-function read_photoobj_files(strategy, fts::Vector{RunCamcolField};
-                             duplicate_policy=:primary,
-                             slurp::Bool = false, drop_quickly::Bool = false)
-    @assert duplicate_policy == :primary || duplicate_policy == :first
-    @assert duplicate_policy == :primary || length(fts) == 1
-
-    #Log.info("reading photoobj catalogs for $(length(fts)) fields")
-
-    # the code below assumes there is at least one field.
-    if length(fts) == 0
-        return CatalogEntry[]
-    end
-
-    # Read in all photoobj catalogs.
-    rawcatalogs = Vector{Dict}(length(fts))
-    for i in eachindex(fts)
-        ft = fts[i]
-        #Log.info("field $(fts[i]): reading $fname")
-        po = read_photoobj(strategy, ft, 'r')
-        if !drop_quickly
-            rawcatalogs[i] = po
-        end
-    end
-
-    if drop_quickly
-        return CatalogEntry[]
-    end
-
-    return assemble_catalog(rawcatalogs; duplicate_policy=duplicate_policy)
-end
-
 
 end  # module

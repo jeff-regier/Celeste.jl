@@ -225,7 +225,7 @@ function slicesample_chain(lnpdf, th, N;
             Log.info(@sprintf "   %d   : \t %2.4f" n ll)
         end
     end
-    elapsed = 1e9 * (time_ns() - t0)
+    elapsed = 1e-9 * (time_ns() - t0)
     Log.info(@sprintf "%2.3f ms per sample (%d samples in %2.3f seconds) \n" 1000*(elapsed/N) N elapsed)
     return samps, lls
 end

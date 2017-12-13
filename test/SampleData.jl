@@ -2,21 +2,23 @@ module SampleData
 
 using Celeste: Model, DeterministicVI
 import Celeste: Synthetic
-import Celeste.SDSSIO: RunCamcolField, load_field_images, PlainFITSStrategy,
-                       SDSSBackground
+import Celeste.SDSSIO: RunCamcolField, load_field_images, load_field_catalog,
+                       PlainFITSStrategy, SDSSBackground, SDSSPSFMap
+
 
 using Distributions
 using StaticArrays
-import WCS, FITSIO, DataFrames
+import WCS
+import FITSIO
+import DataFrames
 
-export empty_model_params, datadir,
+export empty_model_params,
        sample_ce, perturb_params,
        sample_star_fluxes, sample_galaxy_fluxes,
        gen_sample_star_dataset, gen_sample_galaxy_dataset,
        gen_two_body_dataset, gen_three_body_dataset, gen_n_body_dataset,
        make_elbo_args, true_star_init
 
-const datadir = joinpath(Pkg.dir("Celeste"), "test", "data")
 
 const sample_star_fluxes = [
     4.451805E+03,1.491065E+03,2.264545E+03,2.027004E+03,1.846822E+04]
@@ -31,15 +33,53 @@ const wcs_id = WCS.WCSTransform(2,
                     crpix = Float64[1, 1],
                     crval = Float64[1, 1]);
 
-# Ensure that test images are available.
-wd = pwd()
-cd(datadir)
-run(`make RUN=3900 CAMCOL=6 FIELD=269`)
-cd(wd)
+# globals to hold already-loaded test images and catalogs
+const DATADIR = joinpath(Pkg.dir("Celeste"), "test", "data")
+const SDSS_FIELD_IMAGES =
+    Dict{RunCamcolField,Vector{Image{SDSSBackground,SDSSPSFMap}}}()
+const SDSS_FIELD_CATALOGS = Dict{RunCamcolField, Vector{CatalogEntry}}()
+
+function _load_sdss_field(rcf)
+    # ensure images and catalog are downloaded
+    wd = pwd()
+    cd(DATADIR)
+    make_output = readstring(`make RUN=$(rcf.run) CAMCOL=$(rcf.camcol) FIELD=$(rcf.field)`)
+
+    # only print something if we actually ran a download
+    if !startswith(make_output, "make: Nothing to be done for")
+        print(make_output)
+    end
+
+    cd(wd)
+
+    strategy = PlainFITSStrategy(DATADIR)
+    SDSS_FIELD_IMAGES[rcf] = load_field_images(strategy, rcf)
+    SDSS_FIELD_CATALOGS[rcf] = load_field_catalog(strategy, rcf)
+end
 
 
-const sample_rcf = RunCamcolField(3900, 6, 269)
-const sample_images = load_field_images(PlainFITSStrategy(datadir), sample_rcf)
+"""
+    get_sdss_images(run, camcol, field) -> Vector{<:Image}
+
+Return lazily-loaded images from the given SDSS field.
+"""
+function get_sdss_images(run, camcol, field)
+    rcf = RunCamcolField(run, camcol, field)
+    haskey(SDSS_FIELD_IMAGES, rcf) || _load_sdss_field(rcf)
+    return SDSS_FIELD_IMAGES[rcf]
+end
+
+
+"""
+    get_sdss_catalog(run, camcol, field) -> Vector{CatalogEntry}
+
+Return lazily-loaded catalog for the given SDSS field.
+"""
+function get_sdss_catalog(run, camcol, field)
+    rcf = RunCamcolField(run, camcol, field)
+    haskey(SDSS_FIELD_CATALOGS, rcf) || _load_sdss_field(rcf)
+    return SDSS_FIELD_CATALOGS[rcf]
+end
 
 
 """
@@ -65,7 +105,7 @@ function empty_model_params(S::Int)
     vp = [DeterministicVI.generic_init_source([ 0., 0. ]) for s in 1:S]
     ElboArgs(Image[],
              vp,
-             Matrix{SkyPatch}(S, 0),
+             Matrix{ImagePatch}(S, 0),
              collect(1:S))
 end
 
@@ -96,6 +136,7 @@ end
 
 function cropped_sample_images(new_H, new_W)
     srand(1)
+    sample_images = get_sdss_images(3900, 6, 269)
     images = deepcopy(sample_images)
 
     for img in images

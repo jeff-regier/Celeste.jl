@@ -45,20 +45,8 @@ end
 
 
 function load_psfstamp(; x::Float64=500., y::Float64=500.)
-  run_num = 3900
-  camcol_num = 6
-  field_num = 269
-  b = 3
-
-  psf_filename =
-    @sprintf("%s/%s/%s/%s/psField-%06d-%d-%04d.fit",
-        datadir, run_num, camcol_num, field_num,
-                 run_num, camcol_num, field_num)
-  psf_fits = FITSIO.FITS(psf_filename)
-  psfmap = SDSSIO.read_psfmap(psf_fits, BAND_LETTERS[b])
-  close(psf_fits)
-
-  psfmap(x, y)
+    images = SampleData.get_sdss_images(3900, 6, 269)
+    return images[3].psfmap(x, y)
 end
 
 
@@ -139,7 +127,6 @@ function test_psf_fit()
                                     psf_params[k][psf_ids.gal_radius_px])
   end
 
-  println("Testing single pixel value")
   psf_components = PsfComponent[
     PsfComponent(psf_params[k][psf_ids.weight], SVector{2,Float64}(psf_params[k][psf_ids.mu]), SMatrix{2,2,Float64,4}(sigma_vec[k]))
                   for k = 1:K ]
@@ -156,7 +143,6 @@ function test_psf_fit()
   @test ad_hess[:] ≈ pixel_value.h[:]
 
   # Test the whole least squares function.
-  println("Testing psf least squares")
 
   # Fewer pixels for quick testing.  Also, ForwardDiff.hessian runs into strange
   # problems on the whole image.
@@ -276,9 +262,10 @@ function test_trim_psf()
     @test size(trimmed_psf, 2) < size(psfstamp, 2)
 end
 
-
-test_transform_psf_sensitive_float()
-test_transform_psf_params()
-test_psf_fit()
-test_psf_optimizer()
-test_trim_psf()
+@testset "psf" begin
+    test_transform_psf_sensitive_float()
+    test_transform_psf_params()
+    test_psf_fit()
+    test_psf_optimizer()
+    test_trim_psf()
+end

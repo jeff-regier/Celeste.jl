@@ -56,8 +56,9 @@ function main()
     if !isdir(OUTPUT_DIRECTORY)
         mkdir(OUTPUT_DIRECTORY)
     end
-    AccuracyBenchmark.write_catalog(output_filename, catalog)
-    AccuracyBenchmark.append_hash_to_file(output_filename)
+    output_filename = AccuracyBenchmark.write_catalog(
+        output_filename, catalog_df; append_hash=true)
+    @printf("Wrote '%s'\n", output_filename)
 end
 
 main()

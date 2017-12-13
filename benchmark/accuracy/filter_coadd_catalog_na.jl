@@ -21,6 +21,7 @@ ArgumentParse.add_argument(
 )
 parsed_args = ArgumentParse.parse_args(parser, ARGS)
 
+@printf("Reading '%s'...\n", parsed_args["catalog_csv"])
 catalog_data = AccuracyBenchmark.read_catalog(parsed_args["catalog_csv"])
 no_na_cols = :flux_r_nmgy, :color_ug, :color_gr, :color_ri, :color_iz
 for col in no_na_cols
@@ -29,5 +30,5 @@ end
 
 catalog_label = splitext(parsed_args["catalog_csv"])[1]
 output_filename = @sprintf("%s_filtered.csv", catalog_label)
+@printf("Writing '%s'...\n", output_filename)
 AccuracyBenchmark.write_catalog(output_filename, catalog_data)
-
