@@ -12,15 +12,8 @@ using Base.Test
     end
 
     @testset "box_from_catalog: run it and check maxradius" begin
-        wd = pwd()
-        cd(datadir)
-        run(`make RUN=4114 CAMCOL=3 FIELD=127`)
-        cd(wd)
-
-        rcfs = [RunCamcolField(4114, 3, 127)]
-        strategy = PlainFITSStrategy(datadir)
-        images = SDSSIO.load_field_images(strategy, rcfs)
-        catalog = SDSSIO.read_photoobj_files(strategy, rcfs)
+        images = SampleData.get_sdss_images(4114, 3, 127)
+        catalog = SampleData.get_sdss_catalog(4114, 3, 127)
 
         patches = [ImagePatch(img, box_from_catalog(img, entry; max_radius=25))
                    for entry in catalog, img in images]

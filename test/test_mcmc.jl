@@ -3,8 +3,6 @@ using Base.Test
 using Celeste: Model, Transform, SensitiveFloats, MCMC, Synthetic
 using StatsBase
 
-include(joinpath(Pkg.dir("Celeste"), "test", "SampleData.jl"))
-
 # helper to create synthetic data
 function generate_single_star_data(; lnr=7.7251)
     # generate images (data)

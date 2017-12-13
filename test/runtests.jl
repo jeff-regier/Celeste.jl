@@ -15,26 +15,16 @@ include(joinpath(Pkg.dir("Celeste"), "test", "SampleData.jl"))
 
 using SampleData
 
-Log.LEVEL[] = Log.WARN  # do not show info during tests.
-anyerrors = false
-
-wd = pwd()
-# Ensure that test images are available.
-const datadir = joinpath(Pkg.dir("Celeste"), "test", "data")
-cd(datadir)
-run(`make`)
-run(`make RUN=4263 CAMCOL=5 FIELD=119`)
-# Ensure GalSim test images are available.
-const galsim_benchmark_dir = joinpath(Pkg.dir("Celeste"), "benchmark", "galsim")
-cd(galsim_benchmark_dir)
-run(`make fetch`)
-cd(wd)
+# Set logging level and timing reporting (TODO: ability to set on command line)
+Log.LEVEL[] = Log.WARN
+verbose_timing = false
 
 # Check whether to run time-consuming tests.
 long_running_flag = "--long-running"
 test_long_running = long_running_flag in ARGS
-test_files = setdiff(ARGS, [ long_running_flag ])
 
+
+test_files = setdiff(ARGS, [ long_running_flag ])
 if length(test_files) > 0
     testfiles = ["test_$(arg).jl" for arg in test_files]
 else
@@ -58,7 +48,11 @@ for i in eachindex(timing_info)
     t, bytes, gctime, memallocs = timing_info[i]
     totaltime += t
     @printf "%30s: " testfiles[i]
-    Base.time_print(1e9 * t, memallocs.allocd, memallocs.total_time,
-                    Base.gc_alloc_count(memallocs))
+    if verbose_timing
+        Base.time_print(1e9 * t, memallocs.allocd, memallocs.total_time,
+                        Base.gc_alloc_count(memallocs))
+    else
+        @printf "%7.2f seconds\n" t
+    end
 end
-@printf "Total time: %7.2f seconds\n" totaltime
+@printf "%30s: %7.2f seconds\n" "Total time" totaltime

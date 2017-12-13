@@ -45,20 +45,8 @@ end
 
 
 function load_psfstamp(; x::Float64=500., y::Float64=500.)
-  run_num = 3900
-  camcol_num = 6
-  field_num = 269
-  b = 3
-
-  psf_filename =
-    @sprintf("%s/%s/%s/%s/psField-%06d-%d-%04d.fit",
-        datadir, run_num, camcol_num, field_num,
-                 run_num, camcol_num, field_num)
-  psf_fits = FITSIO.FITS(psf_filename)
-  psfmap = SDSSIO.read_psfmap(psf_fits, BAND_LETTERS[b])
-  close(psf_fits)
-
-  psfmap(x, y)
+    images = SampleData.get_sdss_images(3900, 6, 269)
+    return images[3].psfmap(x, y)
 end
 
 

@@ -4,6 +4,11 @@ using DataFrames
 
 import Celeste: GalsimBenchmark
 
+# Ensure GalSim test images are available.
+wd = pwd()
+cd(joinpath(Pkg.dir("Celeste"), "benchmark", "galsim"))
+run(`make fetch`)
+cd(wd)
 
 if test_long_running
     GALSIM_CASES_EXERCISED = [

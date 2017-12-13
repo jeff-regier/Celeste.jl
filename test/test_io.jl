@@ -2,8 +2,8 @@ using Celeste
 
 const read_with_strategy = function(strategy)
     rcf = Celeste.RunCamcolField(4263, 5, 119)
-    Celeste.SDSSIO.load_field_images(strategy, [rcf])
-    Celeste.SDSSIO.read_photoobj_files(strategy, [rcf])
+    Celeste.SDSSIO.load_field_images(strategy, rcf)
+    Celeste.SDSSIO.load_field_catalog(strategy, rcf)
 end
 
 function test_config(config)

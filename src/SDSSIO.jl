@@ -738,6 +738,11 @@ function convert(::Type{Vector{CatalogEntry}}, catalog::Dict)
 end
 
 
+function load_field_catalog(strategy::IOStrategy, rcf::RunCamcolField)
+    rawcatalog = read_photoobj(strategy, rcf)
+    return convert(Vector{CatalogEntry}, rawcatalog)
+end
+
 function assemble_catalog(rawcatalogs::Vector{Dict};
                           duplicate_policy=:primary)
     # Limit each catalog to primary objects and objects where thing_id != -1

@@ -9,10 +9,8 @@ function test_images()
 
     # A lot of tests are in a single function to avoid having to reload
     # the full image multiple times.
-    strategy = PlainFITSStrategy(datadir)
-    images = SDSSIO.load_field_images(strategy, [rcf])
-
-    cat_entries = convert(Vector{CatalogEntry}, SDSSIO.read_photoobj(strategy, rcf))
+    images = SampleData.get_sdss_images(3900, 6, 269)
+    cat_entries = SampleData.get_sdss_catalog(3900, 6, 269)
 
     ea = make_elbo_args(images, cat_entries, patch_radius_pix=1e-6)
 
