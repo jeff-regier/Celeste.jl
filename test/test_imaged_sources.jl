@@ -2,6 +2,7 @@ using Celeste.Model: boxes_overlap, ImagePatch, box_from_catalog, find_neighbors
 using Celeste.SDSSIO
 using Base.Test
 
+
 @testset "ImagePatch" begin
     @testset "boxes_overlap" begin
         @test boxes_overlap((1:0, 1:0), (1:0, 1:0)) == false
@@ -10,28 +11,26 @@ using Base.Test
         @test boxes_overlap((1:2, 5:7), (2:3, 7:10)) == true
     end
 
-    @testset "box_from_catalog: check box is not too big" begin
+    @testset "box_from_catalog: run it and check maxradius" begin
         wd = pwd()
         cd(datadir)
         run(`make RUN=4114 CAMCOL=3 FIELD=127`)
-        run(`make RUN=4114 CAMCOL=4 FIELD=127`)
         cd(wd)
 
-        rcfs = [RunCamcolField(4114, 3, 127), RunCamcolField(4114, 4, 127)]
+        rcfs = [RunCamcolField(4114, 3, 127)]
         strategy = PlainFITSStrategy(datadir)
         images = SDSSIO.load_field_images(strategy, rcfs)
         catalog = SDSSIO.read_photoobj_files(strategy, rcfs)
 
-        patches = [ImagePatch(img, box_from_catalog(img, entry))
+        patches = [ImagePatch(img, box_from_catalog(img, entry; max_radius=25))
                    for entry in catalog, img in images]
 
-        # star at RA, Dec = (309.49754066435867, 45.54976572870953)
-        entry_id = 429
+        patch_widths = [length(p.box[1]) for p in patches]
 
-        neighbors = find_neighbors(patches, entry_id)
+        # check that all obey maxradius
+        @test all(patch_widths .<= 51)
 
-        # there's a lot near this star, but not a lot that overlaps with it, see
-        # http://skyserver.sdss.org/dr10/en/tools/explore/summary.aspx?id=0x112d1012607f050a
-        @test length(neighbors) < 5
+        # check that some radii are smaller than 20 (fairly arbitrary number)
+        @test sum(patch_widths .<= 40) > length(patch_widths) / 2
     end
 end
