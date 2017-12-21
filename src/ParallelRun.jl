@@ -193,7 +193,8 @@ function one_node_joint_infer(catalog, patches, target_sources, neighbor_map,
     for i = 1:n_sources
         entry = catalog[target_sources[i]]
         is_sky_bad = bad_sky(entry, images)
-        result = OptimizedSource(entry.pos[1], entry.pos[2], vp_vec[i][1], is_sky_bad)
+        result = OptimizedSource(entry.pos[1], entry.pos[2], vp_vec[i][1],
+                                 is_sky_bad)
         push!(results, result)
     end
 
@@ -421,9 +422,6 @@ function show_pixels_processed()
     Log.info("$(Time(now())): (active,inactive) pixels processed: \($n_active,$n_inactive\)")
 end
 
-abstract type ParallelismStrategy; end
-struct ThreadsStrategy <: ParallelismStrategy; end
-
 
 # In production mode, rather the development mode, always catch exceptions
 const is_production_run = haskey(ENV, "CELESTE_PROD") && ENV["CELESTE_PROD"] != ""
@@ -569,10 +567,6 @@ function process_source_mcmc(config::Config,
 end
 
 
-"""
-Use multiple threads to process each target source with the specified
-callback and write the results to a file.
-"""
 function one_node_single_infer(catalog::Vector{CatalogEntry},
                                patches::Matrix{ImagePatch},
                                target_sources::Vector{Int},
@@ -698,11 +692,9 @@ save_results(outdir, box, results) =
     save_results(outdir, box.ramin, box.ramax, box.decmin, box.decmax, results)
 
 
-function infer_box(images::Vector{<:Image}, box::BoundingBox; method=:joint,
-                   do_vi=true, config=Config())
-    # detect sources on all the images
-    catalog, patches = detect_sources(images)
-
+function _infer_box(images::Vector{<:Image}, catalog::Vector{CatalogEntry},
+                    patches::Matrix{ImagePatch}, box::BoundingBox;
+                    method=:joint, do_vi=true, n_iters=3, config=Config())
     # Get indices of entries in the RA/Dec range of interest.
     # (Some images can have regions that are outside the box, so not
     # all sources are necessarily in the box.)
@@ -716,7 +708,8 @@ function infer_box(images::Vector{<:Image}, box::BoundingBox; method=:joint,
 
     if method == :joint
         results = one_node_joint_infer(catalog, patches, target_ids,
-                                       neighbor_map, images; config=config)
+                                       neighbor_map, images; n_iters=n_iters,
+                                       config=config)
     elseif method == :single
         results = one_node_single_infer(catalog, patches, target_ids,
                                         neighbor_map, images; do_vi=do_vi,
@@ -725,6 +718,36 @@ function infer_box(images::Vector{<:Image}, box::BoundingBox; method=:joint,
         error("unknown method: $method")
     end
     return results
+end
+
+
+"""
+    infer_box(images, box; options...)
+    infer_box(images, catalog, box; options...)
+
+In the first form, detect objects in images and run inference on all sources
+within the bounding box. In the second form, run inference on objects in
+`catalog` that fall within the bounding box.
+
+In both forms, objects outside the bounding box (either detected or given)
+may be used as "neighbors".
+"""
+function infer_box(images::Vector{<:Image}, box::BoundingBox;
+                   method=:joint, do_vi=true, n_iters=3, config=Config())
+    catalog, patches = detect_sources(images)
+    return _infer_box(images, catalog, patches, box;
+                      method=method, do_vi=do_vi, n_iters=n_iters,
+                      config=config)
+end
+
+
+function infer_box(images::Vector{<:Image}, catalog::Vector{CatalogEntry},
+                   box::BoundingBox;
+                   method=:joint, do_vi=true, n_iters=3, config=Config())
+    patches = Model.get_sky_patches(images, catalog)
+    return _infer_box(images, catalog, patches, box;
+                      method=method, do_vi=do_vi, n_iters=n_iters,
+                      config=config)
 end
 
 
