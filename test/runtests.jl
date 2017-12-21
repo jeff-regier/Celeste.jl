@@ -30,10 +30,6 @@ if length(test_files) > 0
 else
     testdir = joinpath(Pkg.dir("Celeste"), "test")
     testfiles = filter(r"^test_.*\.jl$", readdir(testdir))
-    if !test_long_running
-        info("Skipping stripe82 tests without --long-running flag.")
-        testfiles = setdiff(testfiles, ["test_stripe82.jl"])
-    end
 end
 
 timing_info = Any[]

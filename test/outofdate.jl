@@ -1,18 +1,21 @@
-import JLD
+# This file contains tests that have become out-of-date with the
+# current code.  They no longer run. It may be useful to rewrite them
+# and re-include them in the test suite at some point, or perhaps just
+# write completely new tests testing the same thing.
 
-import Celeste.ParallelRun: BoundingBox,
+import Celeste: detect_sources
+import Celeste.ParallelRun: BoundingBox, OptimizedSource,
     one_node_joint_infer, one_node_single_infer, detect_sources
 import Celeste.SensitiveFloats: SensitiveFloat
 import Celeste.DeterministicVI.ElboMaximize
 import Celeste.Coordinates: match_coordinates
 
-import FITSIO
-
 """
 load_ea_from_source
 Helper function to load elbo args for a particular source
 """
-function load_ea_from_source(target_source, target_sources, catalog, images, all_vps)
+function load_ea_from_source(target_source, target_sources, catalog,
+                             images, all_vps)
 
     patches = Model.get_sky_patches(images, catalog)
 
@@ -47,12 +50,14 @@ end
 """
 compute_unconstrained_gradient
 """
-function compute_unconstrained_gradient(target_source, target_sources, catalog, images, all_vps)
+function compute_unconstrained_gradient(target_source, target_sources,
+                                        catalog, images, all_vps)
     # Load ea
     ea = load_ea_from_source(target_source, target_sources, catalog, images,
-                                    all_vps)
+                             all_vps)
 
-    # Evaluate in constrained space and then unconstrain (taken from the old maximize_elbo.jl code)
+    # Evaluate in constrained space and then unconstrain
+    # (taken from the old maximize_elbo.jl code)
     last_sf::SensitiveFloat{Float64} = SensitiveFloats.SensitiveFloat{Float64}(length(UnconstrainedParams), 1, true, true)
     transform = DeterministicVI.get_mp_transform(vp, ea.active_sources)
     f_res = DeterministicVI.elbo(ea)
@@ -103,27 +108,25 @@ end
 compute_obj_value
 computes obj value given set of results from one_node_infer and one_node_joint_infer
 """
-function compute_obj_value(results,
-                           rcfs::Vector{RunCamcolField},
-                           stagedir::String;
-                           box=BoundingBox(-1000.,1000.,-1000.,1000.),
-                           primary_initialization=true)
-    catalog, target_sources = infer_init(rcfs, stagedir; box=box, primary_initialization=primary_initialization)
-    images = SDSSIO.load_field_images(rcfs, stagedir)
+function compute_obj_value(images::Vector{<:Image},
+                           catalog::Vector{CatalogEntry},
+                           box::BoundingBox,
+                           results::Vector{OptimizedSource})
 
+    # TODO: This stuff is duplicated from ParallelRun.infer_box.
+    # We should refactor infer_box to return the objective value in some way!
+    patches = Model.get_sky_patches(images, catalog)
+    entry_in_range = entry->((box.ramin < entry.pos[1] < box.ramax) &&
+                             (box.decmin < entry.pos[2] < box.decmax))
+    target_ids = find(entry_in_range, catalog)
+
+    # There must be a vp for every patch in the call to elbo().
+    # So, here we must limit patches to just the targets we optimized
+    # and pass [1, 2, 3, ...] as the target indexes.
+    ea = ElboArgs(images, patches[target_ids, :],
+                  collect(1:length(target_ids)); include_kl=false)
     vp = [r.vs for r in results]
-
-    # it may be better to pass `patches` as an argument to `compute_obj_value`.
-    patches = Model.get_sky_patches(images, catalog[target_sources])
-
-    # this works since we're just generating patches for active_sources.
-    # if instead you pass patches for all sources, then instead we'd used
-    # active_sources = target_sources
-    active_sources = collect(1:length(target_sources))
-
-    ea = ElboArgs(images, patches, active_sources,
-                  calculate_gradient=false, calculate_hessian=false)
-    DeterministicVI.elbo(ea).v[]
+    DeterministicVI.elbo(ea, vp).v[]
 end
 
 """
@@ -140,42 +143,8 @@ function load_stripe_82_data()
 end
 
 
-"""
-test_improve_stripe_82_obj_value
-"""
-function test_improve_stripe_82_obj_value()
-    println("Testing that joint_infer improves score on stripe 82...")
-    (rcfs, datadir, target_sources, catalog, images) = load_stripe_82_data()
-
-    ctni = ParallelRun.infer_init(rcfs, strategy; box=box)
-
-    # Single inference obj value
-    infer_single(ctni...) = one_node_single_infer(ctni...)
-    result_single = one_node_infer(rcfs, datadir;
-                                   primary_initialization=false)
-    score_single = compute_obj_value(result_single, rcfs, datadir;
-                                     primary_initialization=false)
-
-    # Joint inference obj value
-    infer_multi(ctni...) = one_node_joint_infer(ctni...;
-                                                n_iters=30,
-                                                within_batch_shuffling=true)
-    result_multi = one_node_infer(rcfs, datadir;
-                                  infer_callback=infer_multi,
-                                  primary_initialization=false)
-    score_multi = compute_obj_value(result_multi, rcfs, datadir;
-                                    primary_initialization=false)
-
-    println("Score single: $(score_single)")
-    println("Score multi: $(score_multi)")
-
-    @test score_multi > score_single
-end
-
-"""
-test_gradient_is_near_zero_on_stripe_82
-TODO(max) - This doesn't pass right now since some light sources are not close to zero.
-"""
+# TODO - This doesn't pass right now since some light sources are
+# not close to zero.
 function test_gradient_is_near_zero_on_stripe_82()
     (rcfs, datadir, target_sources, catalog, images) = load_stripe_82_data()
 
@@ -190,34 +159,37 @@ function test_gradient_is_near_zero_on_stripe_82()
     @test unconstrained_gradient_near_zero(target_sources, catalog, images, [x.vs for x in results_many])
 end
 
-"""
-test_gradient_is_near_zero_on_four_sources
-Tests that the gradient is zero on four sources after joint optimization.
-Makes sure that with fewer iterations the gradient is not zero.
-"""
-function test_gradient_is_near_zero_on_four_sources()
-    box = BoundingBox(154.39, 164.41, 39.11, 39.13)
-    field_triplets = [RunCamcolField(3900, 6, 269),]
 
-    catalog, target_sources = infer_init(field_triplets, datadir; box=box)
-    images = SDSSIO.load_field_images(field_triplets, datadir)
+# Tests that the gradient is zero on overlapping sources after
+# joint optimization.
+# Makes sure that with fewer iterations the gradient is not zero.
+function test_gradient_is_near_zero()
+    images = SampleData.get_sdss_images(4263, 5, 119)
+    catalog = SampleData.get_sdss_catalog(4263, 5, 119)
 
-    infer_few(ctni...) = one_node_joint_infer(ctni...;
-                                              n_iters=2,
-                                              within_batch_shuffling=true)
-    result_few = one_node_infer(field_triplets, datadir;
-                                infer_callback=infer_few,
-                                box=box)
-    @test !unconstrained_gradient_near_zero(target_sources, catalog, images, [x.vs for x in result_few])
+    # This box has 3 overlapping objects in it.
+    box = BoundingBox(0.467582, 0.473275, 0.588383, 0.595095)
 
-    infer_many(ctni...) = one_node_joint_infer(ctni...;
-                                               n_iters=100,
-                                               within_batch_shuffling=true)
-    result_many = one_node_infer(field_triplets, datadir;
-                                 infer_callback=infer_many,
-                                 box=box)
-    @test unconstrained_gradient_near_zero(target_sources, catalog, images, [x.vs for x in result_many])
+    result_few = ParallelRun.infer_box(images, catalog, box;
+                                       method=:joint, n_iters=2)
 
+    @test length(result_few) == 3
+
+    # this stuff is copied from infer_box so that we can calculate the gradient
+    #catalog, patches = detect_sources(images)
+    patches = Model.get_sky_patches(images, catalog)
+    entry_in_range = entry->((box.ramin < entry.pos[1] < box.ramax) &&
+                             (box.decmin < entry.pos[2] < box.decmax))
+    target_sources = find(entry_in_range, catalog)
+
+    @test !unconstrained_gradient_near_zero(target_sources, catalog, images,
+                                            [x.vs for x in result_few])
+
+    result_many = ParallelRun.infer_box(images, catalog, box;
+                                        method=:joint, n_iters=20)
+    @test length(result_many) == 3
+    @test unconstrained_gradient_near_zero(target_sources, catalog, images,
+                                           [x.vs for x in result_many])
 end
 
 """
@@ -298,20 +270,6 @@ function test_same_one_node_infer_twice()
     @test compare_vp_params(result_bs_7_1, result_bs_7_2)
 end
 
-"""
-test infer multi iter with a single (run, camcol, field).
-This is basically just to make sure it runs at all.
-"""
-function test_one_node_joint_infer()
-    # very small patch of sky that turns out to have 4 sources.
-    # We checked that this patch is in the given field.
-    box = BoundingBox(164.39, 164.41, 39.11, 39.13)
-    field_triplets = [RunCamcolField(3900, 6, 269),]
-    result = one_node_infer(field_triplets, datadir;
-                            infer_callback=one_node_joint_infer,
-                            box=box)
-end
-
 
 """
 test infer multi iter obj overlapping.
@@ -365,11 +323,9 @@ end
 
 
 # Stripe 82 tests are long running
-@testset "stripe82"
-    test_improve_stripe_82_obj_value()
-
+@testset "stripe82" begin
     # Test gradients near zero (this takes 100 iterations and is a bit slow)
-    test_gradient_is_near_zero_on_four_sources()
+    test_gradient_is_near_zero()
 
     # Test that we reach a higher objective with more iterations.
     # This is a bit slow.
@@ -378,5 +334,4 @@ end
     test_same_one_node_infer_twice()
     test_different_result_with_different_iter()
     test_same_result_with_diff_batch_sizes()
-    test_one_node_joint_infer()
 end
