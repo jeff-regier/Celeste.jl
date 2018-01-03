@@ -1,7 +1,0 @@
-io:
-    dataset: sdss
-    dirlayout: sdss
-    basedir: data/dr12
-    strategy: fits
-    compressed: false
-    slurp: false

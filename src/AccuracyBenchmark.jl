@@ -11,7 +11,7 @@ import ..Config
 import ..DeterministicVI
 import ..Model
 import ..ParallelRun
-import ..SDSSIO
+using ..SDSSIO
 using ..Coordinates: angular_separation, match_coordinates
 
 const ARCSEC_PER_DEGREE = 3600
@@ -267,8 +267,8 @@ Load the SDSS photoObj catalog used to initialize celeste, and reformat column
 names to match what the rest of the scoring code expects.
 """
 function load_primary(rcf::SDSSIO.RunCamcolField, stagedir::String)
-    strategy = SDSSIO.PlainFITSStrategy(stagedir)
-    raw_df = object_dict_to_data_frame(SDSSIO.read_photoobj(strategy, rcf))
+    dataset = SDSSDataSet(stagedir)
+    raw_df = object_dict_to_data_frame(SDSSIO.read_photoobj(dataset, rcf))
 
     usedev = raw_df[:frac_dev] .> 0.5  # true=> use dev, false=> use exp
     dev_or_exp(dev_column, exp_column) = ifelse.(usedev, raw_df[dev_column], raw_df[exp_column])

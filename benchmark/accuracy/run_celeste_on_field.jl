@@ -43,15 +43,13 @@ if haskey(parsed_args, "images-jld")
     catalog_label = splitext(basename(parsed_args["images-jld"]))[1]
 else
     rcf = AccuracyBenchmark.STRIPE82_RCF
-    strategy = SDSSIO.PlainFITSStrategy(AccuracyBenchmark.SDSS_DATA_DIR)
-    images = SDSSIO.load_field_images(strategy, [rcf])
+    dataset = SDSSIO.SDSSDataSet(AccuracyBenchmark.SDSS_DATA_DIR)
+    images = SDSSIO.load_field_images(dataset, rcf)
     catalog_label = @sprintf("sdss_%s_%s_%s", rcf.run, rcf.camcol, rcf.field)
 end
 @assert length(images) == 5
 
-
-config = Config(25.0)
-method = parsed_args["joint"] ? :joint : :single
+method = parsed_args["joint"] ? :joint_vi : :single_vi
 box = ParallelRun.BoundingBox(-1000.0, 1000.0, -1000.0, 1000.0)
 
 if haskey(parsed_args, "initialization-catalog")
@@ -71,13 +69,12 @@ if haskey(parsed_args, "initialization-catalog")
                        length(catalog))
         catalog = catalog[1:nsources]
     end
-
-    results = ParallelRun.infer_box(images, catalog, box;
-                                    method=method, config=config)
 else
-    results = ParallelRun.infer_box(images, box; method=method, config=config)
+    catalog = nothing
 end
 
+results = ParallelRun.infer_box(images, box; catalog = catalog,
+                                method = method)
 results_df = AccuracyBenchmark.celeste_to_df(results)
 
 csv_filename = joinpath(OUTPUT_DIRECTORY, "$(catalog_label)_predictions.csv")

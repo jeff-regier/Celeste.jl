@@ -3,7 +3,7 @@ module SampleData
 using Celeste: Model, DeterministicVI
 import Celeste: Synthetic
 import Celeste.SDSSIO: RunCamcolField, load_field_images, load_field_catalog,
-                       PlainFITSStrategy, SDSSBackground, SDSSPSFMap
+                       SDSSDataSet, SDSSBackground, SDSSPSFMap
 
 
 using Distributions
@@ -35,15 +35,18 @@ const wcs_id = WCS.WCSTransform(2,
 
 # globals to hold already-loaded test images and catalogs
 const DATADIR = joinpath(Pkg.dir("Celeste"), "test", "data")
+const DATASET = SDSSDataSet(DATADIR)
 const SDSS_FIELD_IMAGES =
     Dict{RunCamcolField,Vector{Image{SDSSBackground,SDSSPSFMap}}}()
 const SDSS_FIELD_CATALOGS = Dict{RunCamcolField, Vector{CatalogEntry}}()
 
-function _load_sdss_field(rcf)
+# Fetch sdss data for field `rcf` if not already present. See DATADIR/Makefile
+# for possible make targets.
+function fetch_sdss_data(rcf, make_target)
     # ensure images and catalog are downloaded
     wd = pwd()
     cd(DATADIR)
-    make_output = readstring(`make RUN=$(rcf.run) CAMCOL=$(rcf.camcol) FIELD=$(rcf.field)`)
+    make_output = readstring(`make $(make_target) RUN=$(rcf.run) CAMCOL=$(rcf.camcol) FIELD=$(rcf.field)`)
 
     # only print something if we actually ran a download
     if !startswith(make_output, "make: Nothing to be done for")
@@ -51,11 +54,9 @@ function _load_sdss_field(rcf)
     end
 
     cd(wd)
-
-    strategy = PlainFITSStrategy(DATADIR)
-    SDSS_FIELD_IMAGES[rcf] = load_field_images(strategy, rcf)
-    SDSS_FIELD_CATALOGS[rcf] = load_field_catalog(strategy, rcf)
 end
+fetch_sdss_data(run, camcol, field, make_target) =
+    fetch_sdss_data(RunCamcolField(run, camcol, field), make_target)
 
 
 """
@@ -65,7 +66,10 @@ Return lazily-loaded images from the given SDSS field.
 """
 function get_sdss_images(run, camcol, field)
     rcf = RunCamcolField(run, camcol, field)
-    haskey(SDSS_FIELD_IMAGES, rcf) || _load_sdss_field(rcf)
+    if !haskey(SDSS_FIELD_IMAGES, rcf)
+        fetch_sdss_data(rcf, "all")
+        SDSS_FIELD_IMAGES[rcf] = load_field_images(DATASET, rcf)
+    end
     return SDSS_FIELD_IMAGES[rcf]
 end
 
@@ -77,7 +81,10 @@ Return lazily-loaded catalog for the given SDSS field.
 """
 function get_sdss_catalog(run, camcol, field)
     rcf = RunCamcolField(run, camcol, field)
-    haskey(SDSS_FIELD_CATALOGS, rcf) || _load_sdss_field(rcf)
+    if !haskey(SDSS_FIELD_CATALOGS, rcf)
+        fetch_sdss_data(rcf, "photoobj")
+        SDSS_FIELD_CATALOGS[rcf] = load_field_catalog(DATASET, rcf)
+    end
     return SDSS_FIELD_CATALOGS[rcf]
 end
 

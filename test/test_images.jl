@@ -1,11 +1,8 @@
 using Base.Test
 using DataFrames
-using Celeste.SDSSIO: PlainFITSStrategy
 import WCS
 
-
-function test_images()
-    rcf = RunCamcolField(3900, 6, 269)
+@testset "images" begin
 
     # A lot of tests are in a single function to avoid having to reload
     # the full image multiple times.
@@ -54,8 +51,4 @@ function test_images()
     # The threshold for the test below was formerly 1e-6.
     # Is it a problem I needed to increase it?
     @test isapprox(obj_psf_val, point_patch_psf, atol=5e-4)
-end
-
-@testset "images" begin
-    test_images()
 end

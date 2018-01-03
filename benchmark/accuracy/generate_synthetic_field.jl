@@ -25,9 +25,9 @@ catalog_entries = [
     AccuracyBenchmark.make_catalog_entry(row)
         for row in eachrow(catalog_data)]
 
-# load template iamges
-strategy = SDSSIO.PlainFITSStrategy(AccuracyBenchmark.SDSS_DATA_DIR)
-images = SDSSIO.load_field_images(strategy, [AccuracyBenchmark.STRIPE82_RCF])
+# load template images
+dataset = SDSSIO.SDSSDataSet(AccuracyBenchmark.SDSS_DATA_DIR)
+images = SDSSIO.load_field_images(dataset, AccuracyBenchmark.STRIPE82_RCF)
 
 # overwrite the pixels with synthetic images
 Synthetic.gen_images!(images, catalog_entries)
