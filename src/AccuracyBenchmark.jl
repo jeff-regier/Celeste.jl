@@ -218,7 +218,7 @@ function load_coadd_catalog(fits_filename)
     result[:is_star] = is_star
 
     flux_r = mag_to_flux.(mag_r, 3)
-    result[:flux_r_nmgy] = ifelse.(flux_r .> 0, flux_r, NaN)
+    result[:flux_r_nmgy] = ifelse.(flux_r .> 0, flux_r, missing)
 
     result[:color_ug] = color_from_mags.(mag_u, 1, mag_g, 2)
     result[:color_gr] = color_from_mags.(mag_g, 2, mag_r, 3)

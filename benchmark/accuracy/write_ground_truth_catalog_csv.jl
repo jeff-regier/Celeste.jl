@@ -48,16 +48,17 @@ function main()
         return
     end
 
-    # for stars, ensure galaxy-only fields are NA
-    for column_symbol in GALAXY_ONLY_COLUMNS
-        catalog[catalog[:is_star], column_symbol] = NA
+    # for stars, ensure galaxy-only fields are "missing"
+    for col in GALAXY_ONLY_COLUMNS
+        catalog[col] = convert(Vector{Union{Missing, Float64}}, catalog[col])
+        catalog[catalog[:is_star], col] = missing
     end
 
     if !isdir(OUTPUT_DIRECTORY)
         mkdir(OUTPUT_DIRECTORY)
     end
     output_filename = AccuracyBenchmark.write_catalog(
-        output_filename, catalog_df; append_hash=true)
+        output_filename, catalog; append_hash=true)
     @printf("Wrote '%s'\n", output_filename)
 end
 
