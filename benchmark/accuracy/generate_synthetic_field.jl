@@ -34,6 +34,8 @@ Synthetic.gen_images!(images, catalog_entries)
 
 # save images
 catalog_label = splitext(basename(parsed_args["catalog_csv"]))[1]
-output_filename = joinpath(OUTPUT_DIRECTORY, @sprintf("%s_synthetic.jld", catalog_label))
-JLD.save(output_filename, "images", images)
-AccuracyBenchmark.append_hash_to_file(output_filename)
+
+hash_string = hex(hash(images))[1:10]
+output_filename = @sprintf("%s_synthetic_%s.jld", catalog_label, hash_string)
+output_path = joinpath(OUTPUT_DIRECTORY, output_filename)
+JLD.save(output_path, "images", images)
