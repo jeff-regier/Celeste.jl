@@ -109,7 +109,7 @@ function ais_slicesample(logposterior::Function,
                          schedule::Array{Float64,1}=nothing,
                          num_temps::Int=50,
                          num_samps::Int=10,
-                         num_bootstrap::Int=5000,
+                         num_bootstrap::Int=100,
                          num_samples_per_step::Int=1)
     if schedule == nothing
         schedule = sigmoid_schedule(num_temps; rad=1)
