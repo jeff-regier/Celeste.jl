@@ -1,4 +1,4 @@
-import Distributions: logpdf, Poisson, Normal, MvNormal
+import Distributions: logpdf, Poisson, Normal, MvNormal, NegativeBinomial
 
 ################################
 # poisson convenience wrappers #
@@ -26,6 +26,13 @@ function inrange(val, a, b)
     end
     return true
 end
+
+function negative_binomial(data, mu, sig2)
+    r = mu*mu / (sig2 - mu)
+    p = r / (r + mu)
+    return float(logpdf(NegativeBinomial(r, p), data))
+end
+
 
 #######################################################
 # save images + plotting stuff for numpy/matplotlib   #
@@ -134,35 +141,45 @@ function samples_to_dataframe(chain; is_star=true)
 end
 
 
-function samples_to_dataframe_row(sampdf; is_star=true)
+function samples_to_dataframe_row(sampdf; is_star=true, summarize=mean)
     """ summarize a set of samples into a single dataframe row """
     df = DataFrame()
-    df[:ra]                = [mean(sampdf[:ra])]
-    df[:dec]               = [mean(sampdf[:dec])]
+    df[:ra]                = [summarize(sampdf[:ra])]
+    df[:dec]               = [summarize(sampdf[:dec])]
     df[:is_star]           = [true]
     df[:gal_frac_dev]      = [NaN]
     df[:gal_axis_ratio]    = [NaN]
     df[:gal_radius_px]     = [NaN]
     df[:gal_angle_deg]     = [NaN]
-    df[:flux_r_nmgy]       = [mean(sampdf[:flux_r_nmgy])]
-    df[:log_flux_r]        = [mean(sampdf[:log_flux_r])]
+    df[:flux_r_nmgy]       = [summarize(sampdf[:flux_r_nmgy])]
+    df[:log_flux_r]        = [summarize(sampdf[:log_flux_r])]
     df[:log_flux_r_stderr] = [std(sampdf[:log_flux_r])]
-    df[:color_ug]          = [mean(sampdf[:color_ug])]
-    df[:color_gr]          = [mean(sampdf[:color_gr])]
-    df[:color_ri]          = [mean(sampdf[:color_ri])]
-    df[:color_iz]          = [mean(sampdf[:color_iz])]
+    df[:color_ug]          = [summarize(sampdf[:color_ug])]
+    df[:color_gr]          = [summarize(sampdf[:color_gr])]
+    df[:color_ri]          = [summarize(sampdf[:color_ri])]
+    df[:color_iz]          = [summarize(sampdf[:color_iz])]
     df[:color_ug_stderr]   = [std(sampdf[:color_ug])]
     df[:color_gr_stderr]   = [std(sampdf[:color_gr])]
     df[:color_ri_stderr]   = [std(sampdf[:color_ri])]
     df[:color_iz_stderr]   = [std(sampdf[:color_iz])]
     if !is_star
         df[:is_star]                        = [false]
-        df[:gal_frac_dev]   = [mean(sampdf[:gal_frac_dev])]
-        df[:gal_axis_ratio] = [mean(sampdf[:gal_axis_ratio])]
-        df[:gal_radius_px]  = [mean(sampdf[:gal_radius_px])]
-        df[:gal_angle_deg]  = [mean(sampdf[:gal_angle_deg])]
+        df[:gal_frac_dev]   = [summarize(sampdf[:gal_frac_dev])]
+        df[:gal_axis_ratio] = [summarize(sampdf[:gal_axis_ratio])]
+        df[:gal_radius_px]  = [summarize(sampdf[:gal_radius_px])]
+        #df[:gal_angle_deg]  = [summarize(sampdf[:gal_angle_deg])]
+        df[:gal_angle_deg]  = [mean_angle(sampdf[:gal_angle_deg])]
     end
     return df
+end
+
+
+function mean_angle(angles)
+  # convert to radians in [0, 2pi]
+  a    = (angles/180.)*2*pi
+  abar = atan2(mean(sin(a)), mean(cos(a)))
+  aout = abar/(2*pi) * 180
+  return aout
 end
 
 
@@ -389,10 +406,10 @@ creates a new image from an existing larger (field) and a patch object
 """
 function patch_to_image(patch::ImagePatch, img::Image; round_pixels_to_int=true)
     # subselect patch pixels from image
-    Hr = patch.bitmap_offset[1]:(patch.bitmap_offset[1] +
-                                size(patch.active_pixel_bitmap)[1] - 1)
-    Wr = patch.bitmap_offset[2]:(patch.bitmap_offset[2] +
-                                size(patch.active_pixel_bitmap)[2] - 1)
+    Hr = (patch.bitmap_offset[1]+1):(patch.bitmap_offset[1] +
+                                     size(patch.active_pixel_bitmap)[1])
+    Wr = (patch.bitmap_offset[2]+1):(patch.bitmap_offset[2] +
+                                     size(patch.active_pixel_bitmap)[2])
     patch_pixels = img.pixels[Hr, Wr]
     if round_pixels_to_int
         patch_pixels = round.(patch_pixels)

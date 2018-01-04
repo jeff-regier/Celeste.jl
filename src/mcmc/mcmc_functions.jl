@@ -65,18 +65,19 @@ function make_gal_inference_functions(imgs::Vector,
                                patches=patches,
                                background_images=background_images,
                                pos_transform=uniform_to_deg)
-    gal_logprior = make_gal_logprior()
+    gal_rad_max = min(8, entry.gal_radius_px*2)
+    println("Galaxy radius maximum = ", gal_rad_max)
+    gal_logprior = make_gal_logprior(gal_radius_px_max=gal_rad_max)
     function logprior(th)
         _, pos, _ = th[1:5], uniform_to_deg(th[6:7]), th[8:end]
         return gal_logprior(th) + pos_logprior(pos)
     end
-
     #th_cat = parameters_from_catalog(entry; is_star=false)
     #cat_shape = th_cat[8:end]
     function sample_prior()
         lnfluxes = sample_logfluxes(; is_star=false)
         pos = rand(2)
-        shape = sample_galaxy_shape()
+        shape = sample_galaxy_shape(gal_radius_px_max=gal_rad_max)
         return [lnfluxes..., pos..., shape...]
     end
 
@@ -253,7 +254,7 @@ function make_gal_loglike(imgs::Vector;
     end
 
     # make galaxy log like function
-    function gal_loglike(th::Array{Float64, 1}; print_params=false)
+    function gal_loglike(th::Array{Float64, 1}; print_params=false, use_robust_likelihood=false)
 
         # unpack location and log fluxes (smushed)
         lnfluxes, pos, ushape = th[1:5], th[6:7], th[8:end]
@@ -302,7 +303,12 @@ function make_gal_loglike(imgs::Vector;
                 pixel_data = img.pixels[h,w]
                 is_active  = active_bitmap[h,w]
                 if !isnan(pixel_data) && is_active
-                    ll += (pixel_data*log(rate_hw) - rate_hw)
+                    if use_robust_likelihood
+                        var_hw = 1000.*rate_hw
+                        ll += negative_binomial(pixel_data, rate_hw, var_hw)
+                    else
+                        ll += (pixel_data*log(rate_hw) - rate_hw)
+                    end
                 end
             end
         end
@@ -369,9 +375,12 @@ function make_location_prior(img::Image,
 end
 
 
-function make_gal_logprior()
+function make_gal_logprior(; gal_radius_px_max=Inf)
     # distributions over galaxy parameters
     prior = Model.construct_prior()
+
+    # create galaxy radius prior that is truncated at some reasonable value
+    gal_radius_px_prior = Truncated(prior.galaxy.gal_radius_px, 1e-6, gal_radius_px_max)
 
     function gal_logprior(th)
         lnfluxes, u, ushape = th[1:5], th[6:7], th[8:end]
@@ -387,19 +396,23 @@ function make_gal_logprior()
         if !inrange(gal_angle, 0., pi)
             return -Inf
         end
-        if !inrange(gal_scale, 1e-5, Inf)
+
+        llscale = logpdf(gal_radius_px_prior, gal_scale)
+        if isinf(llscale)
             return -Inf
         end
-
+        ##if !inrange(gal_scale, 1e-5, gal_radius_px_max)
+        #    return -Inf
+        #end
         # uniform over angle, ll log normal over scale
         llangle = -log(pi)
-        llscale = logpdf(prior.galaxy.gal_radius_px, gal_scale)
-        if isinf(llangle)
-          throw(" angle bad!")
-        end
-        if isinf(llscale)
-          throw(" scale bad!")
-        end
+        #llscale = logpdf(gal_radius_px_prior, gal_scale) #logpdf(prior.galaxy.gal_radius_px, gal_scale)
+        #if isinf(llangle)
+        #  throw(" angle bad!")
+        #end
+        #if isinf(llscale)
+        #  throw(" scale bad!")
+        #end
         ll = MCMC.logflux_logprior(lnfluxes; is_star=false) + llangle + llscale
         return ll
 
@@ -410,11 +423,14 @@ end
 
 param_prior = Model.construct_prior()
 
-function sample_galaxy_shape()
+function sample_galaxy_shape(; gal_radius_px_max=Inf)
     gal_frac_dev = rand()
     gal_ab       = rand()
     gal_angle    = rand() * pi
-    gal_scale    = rand(param_prior.galaxy.gal_radius_px)
+
+    # create galaxy radius prior that is truncated at some reasonable value
+    gal_radius_px_prior = Truncated(param_prior.galaxy.gal_radius_px, 1e-6, gal_radius_px_max)
+    gal_scale = rand(gal_radius_px_prior)
     return [gal_frac_dev, gal_ab, gal_angle, gal_scale]
 end
 
