@@ -3,16 +3,14 @@ using DataFrames
 using Celeste.SDSSIO: PlainFITSStrategy
 import WCS
 
-const rcf = RunCamcolField(3900, 6, 269)
-
 
 function test_images()
+    rcf = RunCamcolField(3900, 6, 269)
+
     # A lot of tests are in a single function to avoid having to reload
     # the full image multiple times.
-    strategy = PlainFITSStrategy(datadir)
-    images = SDSSIO.load_field_images(strategy, [rcf])
-
-    cat_entries = convert(Vector{CatalogEntry}, SDSSIO.read_photoobj(strategy, rcf))
+    images = SampleData.get_sdss_images(3900, 6, 269)
+    cat_entries = SampleData.get_sdss_catalog(3900, 6, 269)
 
     ea = make_elbo_args(images, cat_entries, patch_radius_pix=1e-6)
 
@@ -58,5 +56,6 @@ function test_images()
     @test isapprox(obj_psf_val, point_patch_psf, atol=5e-4)
 end
 
-
-test_images()
+@testset "images" begin
+    test_images()
+end

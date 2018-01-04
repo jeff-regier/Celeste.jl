@@ -8,6 +8,7 @@ import ForwardDiff.Dual
 
 import SampleData: gen_two_body_dataset, true_star_init
 
+@testset "elbo" begin
 
 @testset "calculate_G_s overwrites E_G_s, E_G2_s, and var_G_s" begin
     ea, vp, catalog = gen_two_body_dataset()
@@ -65,24 +66,26 @@ end
     # active_sources.
     ea, vp, catalog = gen_two_body_dataset()
 
+    # for subsequent tests, ensure that the first light source
+    # has a radius at least as large as both the height and the
+    # width of images, and that its center is within the image
     s = 1
+    for n = 1:size(ea.patches, 2)
+        p = ea.patches[s, n]
+        @test 0.5 <= p.world_center[1] <= 20.5
+        @test 0.5 <= p.world_center[2] <= 23.5
+
+        # this patch is huge, the bottom left corner should be the
+        # bottom left of the image
+        @test p.bitmap_offset == [0, 0]
+
+        # all the pixels should be active pixels
+        @test size(p.active_pixel_bitmap) == size(ea.images[n].pixels)
+        @test all(p.active_pixel_bitmap)
+    end
+
     n = 5
     p = ea.patches[s, n]
-
-    # for subsequent tests, ensure that the second light source
-    # has a radius at least as large as both the height and the
-    # width of image 3, and that its center is within the image
-    @test p.radius_pix >= 23
-    @test 0.5 <= p.center[1] <= 20.5
-    @test 0.5 <= p.center[2] <= 23.5
-
-    # this patch is huge, the bottom left corner should be the
-    # bottom left of the image
-    @test p.bitmap_offset == [0, 0]
-
-    # this patch is huge, all the pixels should be active pixels
-    @test size(p.active_pixel_bitmap) == size(ea.images[n].pixels)
-    @test all(p.active_pixel_bitmap)
 
     # lets make the second source have no active pixels
     s2 = 2
@@ -256,7 +259,7 @@ end
         vp_dual[s][i] += ForwardDiff.Dual(0, 1)
     end
 
-    @time elbo_dual = DeterministicVI.elbo(ea, vp_dual)
+    elbo_dual = DeterministicVI.elbo(ea, vp_dual)
 
     for s in 1:2, p in 1:length(ids)
         auto_hessian_column_sum = elbo_dual.d[p, s].partials[]
@@ -295,4 +298,6 @@ end
     for i in 1:20
         @test hv_manual[i] ≈ hv_auto[i] atol=abs(0.01 * hv_auto[i])
     end
+end
+
 end

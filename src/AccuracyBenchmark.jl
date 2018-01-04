@@ -5,6 +5,7 @@ using Distributions
 import FITSIO
 using StaticArrays
 import WCS
+import CSV
 
 import ..Config
 import ..DeterministicVI
@@ -82,29 +83,41 @@ function assert_columns_are_present(catalog_df::DataFrame, required_columns::Set
 end
 
 function read_catalog(csv_file::String)
-    @printf("Reading '%s'...\n", csv_file)
-    catalog_df = readtable(csv_file)
+    catalog_df = CSV.read(csv_file, rows_for_type_detect=100)
     assert_columns_are_present(catalog_df, CATALOG_COLUMNS)
     catalog_df
 end
 
-function write_catalog(csv_file::String, catalog_df::DataFrame)
+function write_catalog(filename::String, catalog_df::DataFrame;
+                       append_hash=false)
     assert_columns_are_present(catalog_df, CATALOG_COLUMNS)
-    @printf("Writing '%s'...\n", csv_file)
-    writetable(csv_file, catalog_df)
+
+    if append_hash
+        # Serialize the data frame into an array of bytes.
+        # (CSV.write(::IO, ...) currently broken, so we use a temp file.
+        tmp = tempname()
+        CSV.write(tmp, catalog_df)
+        data = open(tmp) do f
+            read(f)
+        end
+        rm(tmp)
+
+        # Hash the bytes and add the hash string to the filename.
+        hash_string = hex(hash(data))[1:10]
+        base, extension = splitext(filename)
+        filename = @sprintf("%s_%s%s", base, hash_string, extension)
+
+        # Write out the file
+        open(filename, "w") do f
+            write(f, data)
+        end
+    else
+        CSV.write(filename, catalog_df)
+    end
+
+    return filename
 end
 
-function append_hash_to_file(filename::String)
-    contents_hash = open(filename) do stream
-        hash(read(stream))
-    end
-    hash_string = hex(contents_hash)[1:10]
-    base, extension = splitext(filename)
-    new_filename = @sprintf("%s_%s%s", base, hash_string, extension)
-    @printf("Renaming %s -> %s\n", filename, new_filename)
-    mv(filename, new_filename, remove_destination=true)
-    new_filename
-end
 
 ################################################################################
 # Read various catalogs to a common catalog DF format
@@ -134,7 +147,7 @@ end
 
 function color_from_fluxes(flux1::AbstractFloat, flux2::AbstractFloat)
     if flux1 <= 0 || flux2 <= 0
-        NA
+        missing
     else
         log(flux2 / flux1)
     end
@@ -205,7 +218,7 @@ function load_coadd_catalog(fits_filename)
     result[:is_star] = is_star
 
     flux_r = mag_to_flux.(mag_r, 3)
-    result[:flux_r_nmgy] = ifelse.(flux_r .> 0, flux_r, NaN)
+    result[:flux_r_nmgy] = ifelse.(flux_r .> 0, flux_r, missing)
 
     result[:color_ug] = color_from_mags.(mag_u, 1, mag_g, 2)
     result[:color_gr] = color_from_mags.(mag_g, 2, mag_r, 3)
@@ -301,21 +314,16 @@ function load_primary(rcf::SDSSIO.RunCamcolField, stagedir::String)
     return result
 end
 
-function fluxes_from_colors(flux_r_nmgy::Float64, colors::DataVector{Float64})
+function fluxes_from_colors(flux_r_nmgy::Float64, colors::AbstractVector)
     @assert length(colors) == 4
     color_ratios = exp.(colors)
-    fluxes = DataArray(Float64, 5)
+    fluxes = similar(colors, 5)
     fluxes[3] = flux_r_nmgy
     fluxes[4] = fluxes[3] * color_ratios[3]
     fluxes[5] = fluxes[4] * color_ratios[4]
     fluxes[2] = fluxes[3] / color_ratios[2]
     fluxes[1] = fluxes[2] / color_ratios[1]
     fluxes
-end
-
-function fluxes_from_colors(flux_r_nmgy::Float64, colors::Vector{Float64})
-    fluxes = fluxes_from_colors(flux_r_nmgy, DataArray{Float64}(colors))
-    convert(Vector{Float64}, fluxes)
 end
 
 function get_median_fluxes(variational_params::Vector{Float64}, source_type::Int64)
@@ -458,14 +466,12 @@ struct FitsImage
 end
 
 function read_fits(filename::String)
-    println("Reading '$filename'...")
     if !isfile(filename)
         throw(BenchmarkFitsFileNotFound(filename))
     end
 
     fits = FITSIO.FITS(filename)
     try
-        println("Found $(length(fits)) extensions.")
         map(fits) do extension
             pixels = read(extension)
             header = FITSIO.read_header(extension)
@@ -595,19 +601,15 @@ function make_catalog_entry(x_position_world_coords::Float64,
     )
 end
 
-ensure_small_flux(value) = (isna(value) || value <= 0) ? 1e-6 : value
+ensure_small_flux(value) = (ismissing(value) || value <= 0) ? 1e-6 : value
 
-na_to_default(value, default) = isna(value) ? default : value
+na_to_default(value, default) = ismissing(value) ? default : value
 
 function make_catalog_entry(row::DataFrameRow)
-    colors = DataArray{Float64}(DataArray(Any[
-        row[:color_ug],
-        row[:color_gr],
-        row[:color_ri],
-        row[:color_iz],
-    ]))
+    colors = Union{Float64, Missing}[row[:color_ug], row[:color_gr],
+                                     row[:color_ri], row[:color_iz]]
     fluxes = fluxes_from_colors(row[:flux_r_nmgy], colors)
-    fluxes = convert(Vector{Float64}, ensure_small_flux.(fluxes))
+    fluxes = ensure_small_flux.(fluxes)
     gal_axis_ratio = na_to_default(row[:gal_axis_ratio], 0.8)
     Model.CatalogEntry(
         [row[:ra], row[:dec]],
@@ -781,14 +783,10 @@ ABSOLUTE_ERROR_COLUMNS = vcat(
 )
 
 function degrees_to_diff(a, b)
-    angle_between = abs(a - b) % 180
-    min.(angle_between, 180 - angle_between)
+    angle_between = abs.(a - b) .% 180
+    min.(angle_between, 180 .- angle_between)
 end
 
-# When a dataframe column only has NA values it gets an NAtype rather
-# than a Float64 type, and abs no longer works
-import Base.abs
-abs(x::DataArrays.DataArray{DataArrays.NAtype,1}) = NA
 
 """
 Given two results data frame, one containing ground truth (i.e Coadd)
@@ -802,8 +800,8 @@ function get_error_df(truth::DataFrame, predicted::DataFrame)
 
     predicted_galaxy = predicted[:is_star] .< .5
     true_galaxy = truth[:is_star] .< .5
-    errors[:missed_stars] = ifelse.(!true_galaxy, predicted_galaxy, NA)
-    errors[:missed_galaxies] = ifelse.(true_galaxy, !predicted_galaxy, NA)
+    errors[:missed_stars] = ifelse.(.!true_galaxy, predicted_galaxy, missing)
+    errors[:missed_galaxies] = ifelse.(true_galaxy, .!predicted_galaxy, missing)
 
     errors[:position] =
         (ARCSEC_PER_DEGREE / SDSS_ARCSEC_PER_PIXEL) .*
@@ -813,42 +811,42 @@ function get_error_df(truth::DataFrame, predicted::DataFrame)
                             predicted[:dec])
 
     # compare flux in both mags and nMgy for now
-    errors[:flux_r_mag] = abs(
+    errors[:flux_r_mag] = abs.(
         flux_to_mag.(truth[:flux_r_nmgy], 3)
         .- flux_to_mag.(predicted[:flux_r_nmgy], 3)
     )
-    errors[:flux_r_nmgy] = abs(
+    errors[:flux_r_nmgy] = abs.(
         truth[:flux_r_nmgy] .- predicted[:flux_r_nmgy]
     )
     errors[:gal_angle_deg] = degrees_to_diff(truth[:gal_angle_deg], predicted[:gal_angle_deg])
 
     for column_symbol in ABSOLUTE_ERROR_COLUMNS
-        errors[column_symbol] = abs(truth[column_symbol] - predicted[column_symbol])
+        errors[column_symbol] = abs.(truth[column_symbol] .- predicted[column_symbol])
     end
     for color_column in COLOR_COLUMNS
         # to match up with Stripe82Score, which used differences of mags
-        errors[color_column] *= 2.5 / log(10)
+        errors[color_column] .*= 2.5 / log(10)
     end
 
     errors
 end
 
 function is_good_row(truth_row::DataFrameRow, error_row::DataFrameRow, column_name::Symbol)
-    if isna(error_row[column_name]) || isnan(error_row[column_name])
+    if ismissing(error_row[column_name]) || isnan(error_row[column_name])
         return false
-    elseif !isna(truth_row[:gal_radius_px]) && truth_row[:gal_radius_px] > 20
+    elseif !ismissing(truth_row[:gal_radius_px]) && truth_row[:gal_radius_px] > 20
         return false
     end
 
     if column_name in [:gal_axis_ratio, :gal_radius_px, :gal_angle_deg,
                        :gal_frac_dev]
-        has_mixture_weight = !isna(truth_row[:gal_frac_dev])
+        has_mixture_weight = !ismissing(truth_row[:gal_frac_dev])
         if has_mixture_weight && (0.05 < truth_row[:gal_frac_dev] < 0.95)
             return false
         end
     end
     if column_name == :gal_angle_deg
-        if !isna(truth_row[:gal_axis_ratio]) && truth_row[:gal_axis_ratio] > .6
+        if !ismissing(truth_row[:gal_axis_ratio]) && truth_row[:gal_axis_ratio] > .6
             return false
         end
     end
@@ -862,14 +860,15 @@ function filter_rows(truth::DataFrame, errors::DataFrame, column_name::Symbol)
     end
 end
 
-function score_column(errors::DataArray)
+function score_column(errors::AbstractVector)
     DataFrame(
         N=length(errors),
         first=mean(errors),
     )
 end
 
-function score_column(first_errors::DataArray, second_errors::DataArray)
+function score_column(first_errors::AbstractVector,
+                      second_errors::AbstractVector)
     @assert length(first_errors) == length(second_errors)
     scores = score_column(first_errors)
     scores[:second] = mean(second_errors)
@@ -987,7 +986,7 @@ function get_uncertainty_df(truth::DataFrame, predictions::DataFrame)
     matched_truth[:log_flux_err] = errors[1]
     matched_truth[:log_flux_stderr] = std_errs[1]
     matched_truth[:flux_r_celeste] = matched_predictions[:flux_r_nmgy]
-    writetable("stderr.csv", matched_truth)
+    CSV.write("stderr.csv", matched_truth)
 
     mapreduce(vcat, zip(names, errors, std_errs)) do values
         name, error, std_err = values
@@ -1000,7 +999,7 @@ end
 function score_uncertainty(uncertainty_df::DataFrame)
     mapreduce(vcat, groupby(uncertainty_df, :name)) do group_df
         abs_error_sds = abs.(group_df[:error] ./ group_df[:posterior_std_err])
-        abs_error_sds = abs_error_sds[.!isna.(abs_error_sds)]
+        abs_error_sds = abs_error_sds[.!ismissing.(abs_error_sds)]
         DataFrame(
             field=group_df[1, :name],
             within_half_sd=mean(abs_error_sds .<= 1/2),

@@ -49,5 +49,5 @@ output_filename = @sprintf(
     rcf.field,
 )
 output_path = joinpath(OUTPUT_DIRECTORY, output_filename)
-AccuracyBenchmark.write_catalog(output_path, catalog_df)
-AccuracyBenchmark.append_hash_to_file(output_path)
+output_path = AccuracyBenchmark.write_catalog(output_path, catalog_df; append_hash=true)
+@printf("Wrote '%s'\n", output_path)

@@ -6,17 +6,18 @@ import FITSIO
 import ..AccuracyBenchmark
 import ..Config
 import ..ParallelRun
+import ..Model
 
 const GALSIM_BENCHMARK_DIR = joinpath(Pkg.dir("Celeste"), "benchmark", "galsim")
 const LATEST_FITS_FILENAME_DIR = joinpath(GALSIM_BENCHMARK_DIR, "latest_filenames")
 const ACTIVE_PIXELS_MIN_RADIUS_PX = 40.0
 
-function get_latest_fits_filename(label)
+function get_latest_fits_filename(label; verbose=false)
     latest_fits_filename_holder = joinpath(
         LATEST_FITS_FILENAME_DIR,
         @sprintf("latest_%s.txt", label),
     )
-    println("Looking for latest FITS filename in '$latest_fits_filename_holder'")
+    verbose && println("Looking for latest FITS filename in '$latest_fits_filename_holder'")
     open(latest_fits_filename_holder) do stream
         return strip(readstring(stream))
     end
@@ -29,7 +30,7 @@ function extract_catalog_from_header(header::FITSIO.FITSHeader)
             if haskey(header, key)
                 header[key]
             else
-                NA
+                missing
             end
         end
         DataFrame(
@@ -68,14 +69,15 @@ function truth_comparison_df(truth_df::DataFrame, prediction_df::DataFrame)
     long_prediction_df = stack(prediction_df, parameter_columns)
     sort!(long_prediction_df, cols=[:index, :variable])
 
-    rename!(long_truth_df, :value, :truth)
+    rename!(long_truth_df, :value => :truth)
     long_truth_df[:estimate] = long_prediction_df[:value]
     long_truth_df[:error] = long_truth_df[:estimate] .- long_truth_df[:truth]
     long_truth_df
 end
 
-function run_benchmarks(; test_case_names=String[], joint_inference=false)
-    latest_fits_filename = get_latest_fits_filename("galsim_benchmarks")
+function run_benchmarks(; test_case_names=String[], joint_inference=false,
+                        verbose=false)
+    latest_fits_filename = get_latest_fits_filename("galsim_benchmarks"; verbose=verbose)
     full_fits_path = joinpath(GALSIM_BENCHMARK_DIR, "output", latest_fits_filename)
     extensions = AccuracyBenchmark.read_fits(full_fits_path)
 
@@ -87,7 +89,7 @@ function run_benchmarks(; test_case_names=String[], joint_inference=false)
         if !isempty(test_case_names) && !in(this_test_case_name, test_case_names)
             return DataFrame()
         end
-        println("Running test case '$this_test_case_name'")
+        verbose && println("Running test case '$this_test_case_name'")
         num_sources = header["CLNSRC"]
 
         images = AccuracyBenchmark.make_images(extensions[first_band_index:(first_band_index+4)])
@@ -95,16 +97,19 @@ function run_benchmarks(; test_case_names=String[], joint_inference=false)
         catalog_entries = AccuracyBenchmark.make_initialization_catalog(truth_catalog_df, false)
         target_sources = collect(1:num_sources)
         config = Config(ACTIVE_PIXELS_MIN_RADIUS_PX)
-        neighbor_map = ParallelRun.find_neighbors(target_sources,
-                                                  catalog_entries, images)
+        patches = Model.get_sky_patches(images, catalog_entries)
+        neighbor_map = Dict(i=>Model.find_neighbors(patches, i)
+                            for i in target_sources)
 
         if joint_inference
             results = ParallelRun.one_node_joint_infer(catalog_entries,
+                                                       patches,
                                                        target_sources,
                                                        neighbor_map, images,
                                                        config=config)
         else
             results = ParallelRun.one_node_single_infer(catalog_entries,
+                                                        patches,
                                                         target_sources,
                                                         neighbor_map, images,
                                                         config=config)
@@ -112,7 +117,7 @@ function run_benchmarks(; test_case_names=String[], joint_inference=false)
 
         prediction_df = AccuracyBenchmark.celeste_to_df(results)
 
-        println(repr(truth_comparison_df(truth_catalog_df, prediction_df)))
+        verbose && println(repr(truth_comparison_df(truth_catalog_df, prediction_df)))
         push!(truth_dfs, truth_catalog_df)
         push!(prediction_dfs, prediction_df)
     end

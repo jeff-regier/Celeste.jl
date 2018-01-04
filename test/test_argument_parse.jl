@@ -1,5 +1,7 @@
 import Celeste.ArgumentParse
 
+@testset "argument parse" begin
+
 @testset "positional argument" begin
     parser = ArgumentParse.ArgumentParser(propagate_errors=true)
     ArgumentParse.add_argument(parser, "my_arg")
@@ -77,4 +79,6 @@ end
         help_message = exc.message
     end
     @test help_message == "Usage: test.jl [--my-keyword my-keyword] my_arg"
+end
+
 end

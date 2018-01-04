@@ -6,7 +6,9 @@ using Base.Dates
 import FITSIO
 import JLD
 import WCS
+using DataStructures
 
+import ..Celeste: detect_sources
 import ..Config
 import ..Log
 using ..Model
@@ -17,12 +19,408 @@ import ..SEP
 import ..Coordinates: angular_separation, match_coordinates
 import ..MCMC
 
+using ..DeterministicVI
+using ..DeterministicVI.ConstraintTransforms: ConstraintBatch, DEFAULT_CHUNK
+using ..DeterministicVI.ElboMaximize: ElboConfig, maximize!
+
 export BoundingBox
 
-include("joint_infer.jl")
+include("partition.jl")
 
-abstract type ParallelismStrategy; end
-struct ThreadsStrategy <: ParallelismStrategy; end
+"""
+Return a Cyclades partitioning or an equal partitioning of the target
+sources.
+"""
+function partition_box(npartitions::Int, target_sources::Vector{Int},
+                       neighbor_map::Dict{Int,Vector{Int}}, ea_vec;
+                       cyclades_partition=true,
+                       batch_size=7000)
+    if cyclades_partition
+        #return partition_cyclades(npartitions, target_sources,
+        #                          neighbor_map,
+        #                          batch_size=batch_size)
+        #return partition_cyclades_dynamic(target_sources,
+        #                                  neighbor_map,
+        #                                  batch_size=batch_size)
+	return partition_cyclades_dynamic_auto_batchsize(target_sources, neighbor_map, ea_vec)
+    else
+        return partition_equally(npartitions, length(target_sources))
+    end
+end
+
+function estimate_time(patches)
+    sum(sum(p.active_pixel_bitmap) for p in patches)
+end
+
+function load_balance_across_threads(n_threads, times)
+    ts = [0 for i=1:n_threads]
+    for t in times
+        minimum,index_min = findmin(ts)
+        ts[index_min] += t
+    end
+    return ts
+end
+
+"""
+Partitions sources via the cyclades algorithm. Finds the batch size which returns most balanced CC distribution.
+- target_sources - array of target sources. Elements should match keys of neighbor_map.
+- neighbor_map - graph of connections of sources
+"""
+function partition_cyclades_dynamic_auto_batchsize(target_sources::Vector{Int}, neighbor_map::Dict{Int,Vector{Int}}, ea_vec)
+    n_threads = nthreads()
+
+    # Sample batch sizes at intervals
+    n_to_sample = 100
+    stepsize = max(1, trunc(Int, length(target_sources) / n_to_sample))
+
+    # Best load imbalance of the batch sizes to test
+    best_score = Inf
+    best_result = Inf
+    best_batch_size = -Inf
+
+    for batch_size_to_use = 1 : stepsize : length(target_sources)+1
+        ccs = partition_cyclades_dynamic(target_sources, neighbor_map, batch_size=batch_size_to_use)
+        score = 0
+        for batch in ccs
+            # Find average load imbalance within the batch as a percentage
+	    times = [sum([estimate_time(ea_vec[source_index].patches) for source_index in component]) for component in batch]
+            times = load_balance_across_threads(n_threads, times)
+            estimated_imbalance = mean(maximum(times) - times)
+	    score += estimated_imbalance
+        end
+        if score <= best_score
+            best_result = ccs
+            best_score = score
+            best_batch_size = batch_size_to_use
+        end
+    end
+    for batch in best_result
+        sizes = [length(x) for x in batch]
+    end
+    best_result
+end
+
+"""
+Pre-allocate elbo args variational parameters; configurations need to
+be persisted across calls to `maximize!()` so that location constraints
+don't shift from their initial position.
+"""
+function setup_vecs(n_sources::Int, target_sources::Vector{Int},
+                    catalog::Vector{CatalogEntry})
+    ts_vp = Dict{Int64, Array{Float64}}()
+    for ts in target_sources
+        cat = catalog[ts]
+        ts_vp[ts] = generic_init_source(cat.pos)
+    end
+
+    ea_vec = Vector{ElboArgs}(n_sources)
+    vp_vec = Vector{VariationalParams{Float64}}(n_sources)
+    cfg_vec = Vector{ElboConfig{DEFAULT_CHUNK,Float64}}(n_sources)
+
+    return ea_vec, vp_vec, cfg_vec, ts_vp
+end
+
+
+"""
+Uses multiple threads on one node to fit the Celeste
+model over numerous iterations.
+
+catalog - the catalog of light sources
+target_sources - light sources to optimize
+neighbor_map - light_source id -> neighbor light_source ids
+
+cyclades_partition - use the cyclades algorithm to partition into non conflicting batches for updates.
+batch_size - size of a single batch of sources for updates
+within_batch_shuffling - whether or not to process sources within a batch randomly
+joint_inference_terminate - whether to terminate once sources seem to be stable
+n_iters - number of iterations to optimize. 1 iteration optimizes a full pass over target
+          sources if optimize_fixed_iters=true.
+
+Returns:
+
+- Vector of OptimizedSource results
+"""
+function one_node_joint_infer(catalog, patches, target_sources, neighbor_map,
+                              images;
+                              cyclades_partition::Bool=true,
+                              batch_size::Int=7000,
+                              within_batch_shuffling::Bool=true,
+                              n_iters::Int=3,
+                              config=Config())
+    # Seed random number generator to ensure the same results per run.
+    srand(42)
+
+    n_threads = nthreads()
+
+    # Partition the sources
+    n_sources = length(target_sources)
+    Log.info("Optimizing $(n_sources) sources")
+
+    #Log.info(batched_connected_components)
+
+    Log.info("Done assigning sources to threads for processing")
+
+    ea_vec, vp_vec, cfg_vec, target_source_variational_params =
+            setup_vecs(n_sources, target_sources, catalog)
+
+    # Initialize elboargs in parallel
+    thread_initialize_sources_assignment::Vector{Vector{Vector{Int64}}} = partition_equally(n_threads, n_sources)
+
+    initialize_elboargs_sources!(config, ea_vec, vp_vec, cfg_vec, thread_initialize_sources_assignment,
+                                 catalog, patches, target_sources, neighbor_map, images,
+                                 target_source_variational_params)
+
+    #thread_sources_assignment = partition_box(n_threads, target_sources,
+    #                                  neighbor_map;
+    #                                  cyclades_partition=cyclades_partition,
+    #                                  batch_size=batch_size)
+    batched_connected_components = partition_box(n_threads, target_sources,
+                                                 neighbor_map, ea_vec;
+                                                 cyclades_partition=cyclades_partition,
+                                                 batch_size=batch_size)
+
+    # Process sources in parallel
+    #process_sources!(images, ea_vec, vp_vec, cfg_vec,
+    #                 thread_sources_assignment,
+    #                 n_iters, within_batch_shuffling)
+    process_sources_dynamic!(images, ea_vec, vp_vec, cfg_vec,
+                             batched_connected_components,
+                             n_iters, within_batch_shuffling)
+
+    # Return add results to vector
+    results = OptimizedSource[]
+
+    for i = 1:n_sources
+        entry = catalog[target_sources[i]]
+        is_sky_bad = bad_sky(entry, images)
+        result = OptimizedSource(entry.pos[1], entry.pos[2], vp_vec[i][1],
+                                 is_sky_bad)
+        push!(results, result)
+    end
+
+    show_pixels_processed()
+
+    results
+end
+
+function initialize_elboargs_sources!(config::Config, ea_vec, vp_vec, cfg_vec,
+                                      thread_initialize_sources_assignment,
+                                      catalog, patches, target_sources, neighbor_map, images,
+                                      target_source_variational_params;
+                                      termination_callback=nothing)
+    Threads.@threads for i in 1:nthreads()
+        try
+            for batch in 1:length(thread_initialize_sources_assignment[i])
+                for source_index in thread_initialize_sources_assignment[i][batch]
+                    init_elboargs(config, source_index, catalog, patches, target_sources,
+                                  neighbor_map, images, ea_vec, vp_vec, cfg_vec,
+                                  target_source_variational_params;
+                                  termination_callback=termination_callback)
+                end
+            end
+        catch ex
+            Log.exception(ex)
+            rethrow()
+        end
+    end
+end
+
+
+"""
+Initialize elbo args for the specified target source.
+"""
+function init_elboargs(config::Config,
+                       ts::Int,
+                       catalog::Vector{CatalogEntry},
+                       patches::Matrix{ImagePatch},
+                       target_sources::Vector{Int},
+                       neighbor_map::Dict{Int,Vector{Int}},
+                       images::Vector{<:Image},
+                       ea_vec::Vector{ElboArgs},
+                       vp_vec::Vector{VariationalParams{Float64}},
+                       cfg_vec::Vector{ElboConfig{DEFAULT_CHUNK,Float64}},
+                       ts_vp::Dict{Int64,Array{Float64}};
+                       termination_callback=nothing)
+    try
+        entry_id = target_sources[ts]
+        entry = catalog[entry_id]
+        neighbor_ids = neighbor_map[entry_id]
+        neighbors = catalog[neighbor_ids]
+        cat_local = vcat([entry], neighbors)
+        ids_local = vcat([entry_id], neighbor_ids)
+
+        # Limit patches to just the active source and its neighbors.
+        patches = patches[ids_local, :]
+
+        # Load vp with shared target source params, and also vp
+        # that doesn't share target source params
+        vp = Vector{Float64}[haskey(ts_vp, x) ?
+                             ts_vp[x] :
+                             catalog_init_source(catalog[x])
+                             for x in ids_local]
+        ea = ElboArgs(images, patches, [1])
+
+        ea_vec[ts] = ea
+        vp_vec[ts] = vp
+        cfg_vec[ts] = ElboConfig(ea, vp;
+                termination_callback=termination_callback)
+    catch exc
+        if is_production_run || nthreads() > 1
+            Log.exception(exc)
+        else
+            rethrow()
+        end
+    end
+end
+
+
+function process_sources!(images::Vector{<:Model.Image},
+                          ea_vec::Vector{ElboArgs},
+                          vp_vec::Vector{VariationalParams{Float64}},
+                          cfg_vec::Vector{ElboConfig{DEFAULT_CHUNK,Float64}},
+                          thread_sources_assignment::Vector{Vector{Vector{Int64}}},
+                          n_iters::Int,
+                          within_batch_shuffling::Bool)
+    n_threads::Int = nthreads()
+    n_batches::Int = length(thread_sources_assignment[1])
+    for iter in 1:n_iters
+        # Process every batch of every iteration. We do the batches on the outside
+        # Since there is an implicit barrier after the inner threaded for loop below.
+        # We want this barrier because there may be conflict _between_ Cyclades batches.
+        for batch in 1:n_batches
+            process_sources_elapsed_times::Vector{Float64} = Vector{Float64}(n_threads)
+            # Process every batch of every iteration with n_threads
+            Threads.@threads for i in 1:n_threads
+                try
+                    tic()
+                    process_sources_kernel!(ea_vec, vp_vec, cfg_vec,
+                                            thread_sources_assignment[i::Int][batch::Int],
+                                            within_batch_shuffling)
+                    process_sources_elapsed_times[i::Int] = toq()
+                catch exc
+                    Log.exception(exc)
+                    rethrow()
+                end
+            end
+            Log.info("Batch $(batch) - $(process_sources_elapsed_times)")
+        end
+    end
+end
+
+function process_sources_dynamic!(images::Vector{<:Model.Image},
+                                  ea_vec::Vector{ElboArgs},
+                                  vp_vec::Vector{VariationalParams{Float64}},
+                                  cfg_vec::Vector{ElboConfig{DEFAULT_CHUNK,Float64}},
+                                  thread_sources_assignment::Vector{Vector{Vector{Int64}}},
+                                  n_iters::Int,
+                                  within_batch_shuffling::Bool)
+    Log.info("Processing with dynamic connected components load balancing")
+
+    n_threads::Int = nthreads()
+    n_batches::Int = length(thread_sources_assignment)
+
+    l = SpinLock()
+
+    total_idle_time = 0
+    total_sum_of_thread_times = 0
+
+    for iter in 1:n_iters
+
+        # Process every batch of every iteration. We do the batches on the outside
+        # Since there is an implicit barrier after the inner threaded for loop below.
+        # We want this barrier because there may be conflict _between_ Cyclades batches.
+        for batch in 1:n_batches
+
+            connected_components_index = 1
+            process_sources_elapsed_times::Vector{Float64} = Vector{Float64}(n_threads)
+
+            # Process every batch of every iteration with n_threads
+            Threads.@threads for i in 1:n_threads
+                try
+                    tic()
+                    while true
+                        cc_index = -1
+
+                        #ccall(:jl_,Void,(Any,), "this is thread number $(Threads.threadid()) $(cc_index)")
+
+                        lock(l)
+                        cc_index = connected_components_index
+                        connected_components_index += 1
+                        unlock(l)
+
+                        if cc_index > length(thread_sources_assignment[batch::Int])
+                            break
+                        end
+
+                        #ccall(:jl_,Void,(Any,), "this is thread number $(Threads.threadid()) $(cc_index) popped")
+
+                        process_sources_kernel!(ea_vec, vp_vec, cfg_vec,
+                                                thread_sources_assignment[batch::Int][cc_index],
+                                                within_batch_shuffling)
+                    end
+                    process_sources_elapsed_times[i::Int] = toq()
+                catch exc
+                    Log.exception(exc)
+                    rethrow()
+                end
+            end
+            Log.info("Batch $(batch) - $(process_sources_elapsed_times)")
+	    avg_thread_idle_time = mean(maximum(process_sources_elapsed_times) - process_sources_elapsed_times)
+	    maximum_thread_time = maximum(process_sources_elapsed_times)
+            idle_percent = 100.0 * (avg_thread_idle_time / maximum_thread_time)
+            Log.info("Batch $(batch) avg threads idle: $(round(Int, idle_percent))% ($(avg_thread_idle_time) / $(maximum_thread_time))")
+	    total_idle_time += sum(maximum(process_sources_elapsed_times) - process_sources_elapsed_times)
+            total_sum_of_thread_times += sum(process_sources_elapsed_times)
+        end
+    end
+    Log.info("Total idle time: $(round(Int, total_idle_time)), Total sum of threads times: $(round(Int, total_sum_of_thread_times))")
+end
+
+# Process partition of sources. Multiple threads call this function in parallel.
+function process_sources_kernel!(ea_vec::Vector{ElboArgs},
+                                 vp_vec::Vector{VariationalParams{Float64}},
+                                 cfg_vec::Vector{ElboConfig{DEFAULT_CHUNK,Float64}},
+                                 source_assignment::Vector{Int64},
+                                 within_batch_shuffling::Bool)
+    try
+        # Shuffle the source assignments within each batch of each process.
+        # This is disabled by default because it ruins the deterministic outcome
+        # required by the test cases.
+        if within_batch_shuffling
+            shuffle!(source_assignment)
+        end
+
+	#tic()
+        for i in source_assignment
+            maximize!(ea_vec[i], vp_vec[i], cfg_vec[i])
+        end
+	#ccall(:jl_,Void,(Any,), "this is thread number $(Threads.threadid()) took $(toq()) seconds to process batch with $(length(source_assignment)) sources")
+    catch ex
+        if is_production_run || nthreads() > 1
+            Log.exception(ex)
+        else
+            rethrow(ex)
+        end
+    end
+end
+
+function get_pixels_processed()
+    n_active = 0
+    n_inactive = 0
+    for elbo_vars in DeterministicVI.ElboMaximize.ELBO_VARS_POOL
+        n_active += elbo_vars.active_pixel_counter[]
+        n_inactive += elbo_vars.inactive_pixel_counter[]
+        elbo_vars.active_pixel_counter[] = 0
+        elbo_vars.inactive_pixel_counter[] = 0
+    end
+    return (n_active, n_inactive)
+end
+
+# Count and display the number of active and inactive pixels processed.
+function show_pixels_processed()
+    n_active, n_inactive = get_pixels_processed()
+    Log.info("$(Time(now())): (active,inactive) pixels processed: \($n_active,$n_inactive\)")
+end
 
 
 # In production mode, rather the development mode, always catch exceptions
@@ -41,354 +439,6 @@ function BoundingBox(ramin::String, ramax::String, decmin::String, decmax::Strin
                 parse(Float64, ramax),
                 parse(Float64, decmin),
                 parse(Float64, decmax))
-end
-
-# ------
-# initialization helpers
-
-"""
-Computes the nearby light sources in the catalog for each of the target
-sources.
-
-Arguments:
-    target_sources: indexes of astronomical objects in the catalog to infer
-    catalog: astronomical objects appearing the images
-    images: astronomical images
-"""
-function find_neighbors(target_sources::Vector{Int64},
-                        catalog::Vector{CatalogEntry},
-                        images::Vector{<:Image})
-    psf_width_ub = zeros(NUM_BANDS)
-    for img in images
-        psf_width = Model.get_psf_width(img.psf)
-        psf_width_ub[img.b] = max(psf_width_ub[img.b], psf_width)
-    end
-
-    epsilon_lb = fill(Inf, NUM_BANDS)
-    for img in images
-        epsilon = img.sky[div(img.H, 2), div(img.W, 2)]
-        epsilon_lb[img.b] = min(epsilon_lb[img.b], epsilon)
-    end
-
-    radii_map = zeros(length(catalog))
-    for s in 1:length(catalog)
-        ce = catalog[s]
-        for img in images
-            radius_pix = Model.choose_patch_radius(ce, img, width_scale=1.2)
-            radii_map[s] = max(radii_map[s], radius_pix)
-        end
-        @assert radii_map[s] <= 25
-    end
-
-    dist(ra1, dec1, ra2, dec2) = (3600 / 0.396) * max(abs(dec2 - dec1), abs(ra2 - ra1))
-
-    neighbor_map = Vector{Int64}[Int64[] for s in target_sources]
-
-    # If this loop isn't super fast in pratice, we can tile (the sky, not the
-    # images) or build a spatial index with a library before distributing
-    for ts in 1:length(target_sources)
-        s = target_sources[ts]
-        ce = catalog[s]
-
-        for s2 in 1:length(catalog)
-            ce2 = catalog[s2]
-            ctrs_dist = dist(ce.pos[1], ce.pos[2], ce2.pos[1], ce2.pos[2])
-
-            if s2 != s && ctrs_dist < radii_map[s] + radii_map[s2]
-                push!(neighbor_map[ts], s2)
-            end
-        end
-    end
-
-    neighbor_map
-end
-
-
-"""
-Record which pixels in each patch will be considered when computing the
-objective function.
-
-Non-standard arguments:
-  noise_fraction: The proportion of the noise below which we will remove pixels.
-"""
-function load_active_pixels!(config::Config,
-                             images::Vector{<:Image},
-                             patches::Matrix{SkyPatch};
-                             exclude_nan=true,
-                             noise_fraction=0.5)
-    S, N = size(patches)
-
-    for n = 1:N, s=1:S
-        img = images[n]
-        p = patches[s,n]
-
-        # (h2, w2) index the local patch, while (h, w) index the image
-        H2, W2 = size(p.active_pixel_bitmap)
-        for w2 in 1:W2, h2 in 1:H2
-            h = p.bitmap_offset[1] + h2
-            w = p.bitmap_offset[2] + w2
-
-            # skip masked pixels
-            if isnan(img.pixels[h, w]) && exclude_nan
-                p.active_pixel_bitmap[h2, w2] = false
-                continue
-            end
-
-            # include pixels that are close, even if they aren't bright
-            sq_dist = (h - p.pixel_center[1])^2 + (w - p.pixel_center[2])^2
-            if sq_dist < config.min_radius_pix^2
-                p.active_pixel_bitmap[h2, w2] = true
-                continue
-            end
-
-            # if this pixel is bright, let's include it
-            # (in the future we may want to do something fancier, like
-            # fitting an elipse, so we don't include nearby sources' pixels,
-            # or adjusting active pixels during the optimization)
-            # Note: This is risky because bright pixels are disproportionately likely
-            # to get included, even if it's because of noise. Therefore it's important
-            # to keep the noise fraction pretty low.
-            threshold = img.nelec_per_nmgy[h] * img.sky[h, w] * (1. + noise_fraction)
-            p.active_pixel_bitmap[h2, w2] = img.pixels[h, w] > threshold
-        end
-    end
-end
-
-# legacy wrapper
-function load_active_pixels!(images::Vector{<:Image},
-                             patches::Matrix{SkyPatch};
-                             exclude_nan=true,
-                             noise_fraction=0.5)
-    load_active_pixels!(
-        Config(),
-        images,
-        patches,
-        exclude_nan=exclude_nan,
-        noise_fraction=noise_fraction,
-    )
-end
-
-# The range of image pixels in a vector of patches
-function get_active_pixel_range(
-    patches::Matrix{SkyPatch}, sources::Vector{Int}, n::Int)
-    H_min = minimum([ p.bitmap_offset[1] + 1 for p in patches[sources, n] ])
-    W_min = minimum([ p.bitmap_offset[2] + 1 for p in patches[sources, n] ])
-    H_max = maximum([ p.bitmap_offset[1] + size(p.active_pixel_bitmap, 1)
-                      for p in patches[sources, n] ])
-    W_max = maximum([ p.bitmap_offset[2] + size(p.active_pixel_bitmap, 2)
-                      for p in patches[sources, n] ])
-    H_min, W_min, H_max, W_max
-end
-
-
-# Is a pixel (h, w) in whole-image coordinates an active pixel in the patch p?
-function is_pixel_in_patch(h::Int, w::Int, p::SkyPatch)
-    hp = h - p.bitmap_offset[1]
-    wp = w - p.bitmap_offset[2]
-    in_patch =
-        (hp > 0) &
-        (wp > 0) &
-        (hp <= size(p.active_pixel_bitmap, 1)) &
-        (wp <= size(p.active_pixel_bitmap, 2))
-    if !in_patch
-        return false
-    else
-        return p.active_pixel_bitmap[hp, wp]
-    end
-end
-
-"""
-    detect_sources(images)
-
-Detect sources in a set of (possibly overlapping) `Image`s and combine
-duplicates.
-
-# Returns
-
-- `catalog::Vector{CatalogEntry}`: Detected sources.
-- `source_radii::Vector{Float64}`: Radius of circle containing all of each
-  source's member pixels (degrees).
-
-# Notes
-
-We're using sky subtracted (and calibrated) image data, but, we still
-run a background analysis, just to determine the rough image noise for
-the purposes of setting a threshold. This could be slightly suboptimal
-in terms of selecting faint sources: If the image noise varies
-significantly across the image, the threshold might be too high or too
-low in some places. However, we don't really trust the variable
-background RMS without first masking sources. (We could add this.)
-"""
-function detect_sources(images::Vector{Image})
-
-    catalog = Vector{CatalogEntry}()
-    source_radii = Vector{Float64}()
-
-    for image in images
-
-        calpixels = Model.calibrated_pixels(image)
-
-        # Run background, just to get background rms.
-        bkg = SEP.Background(calpixels; boxsize=(256, 256),
-                             filtersize=(3, 3))
-        sep_catalog = SEP.extract(calpixels, 1.3; noise=SEP.global_rms(bkg))
-
-        # convert pixel coordinates to world coordinates
-        pixcoords = Array{Float64}(2, length(sep_catalog.x))
-        for i in eachindex(sep_catalog.x)
-            pixcoords[1, i] = sep_catalog.x[i]
-            pixcoords[2, i] = sep_catalog.y[i]
-        end
-        worldcoords = WCS.pix_to_world(image.wcs, pixcoords)
-
-        # Get angle offset between +RA axis and +x axis from the
-        # image's WCS.  This assumes there is no skew, meaning the x
-        # and y axes are perpindicular in world coordinates.
-        cd = image.wcs[:cd]
-        sgn = sign(det(cd))
-        n_vs_y_rot = atan2(sgn * cd[1, 2],  sgn * cd[1, 1])  # angle of N CCW
-                                                             # from +y axis
-        x_vs_n_rot = -(n_vs_y_rot + pi/2)  # angle of +x CCW from N
-
-        # convert sep_catalog entries to CatalogEntries
-        im_catalog = Vector{CatalogEntry}(length(sep_catalog.npix))
-        im_source_radii = Vector{Float64}(length(sep_catalog.npix))
-        for i in eachindex(sep_catalog.npix)
-
-            # For galaxy flux, use sum of all pixels above
-            # threshold. Set other band fluxes to NaN, to indicate which
-            # band the flux is measured in. We'll use this information below
-            # when merging detections in different bands.
-            gal_fluxes = fill(NaN, NUM_BANDS)
-            gal_fluxes[image.b] = sep_catalog.flux[i]
-
-            gal_axis_ratio = sep_catalog.b[i] / sep_catalog.a[i]
-
-            # SEP angle is CCW from +x axis and in [-pi/2, pi/2].
-            # Add offset of x axis from N to make angle CCW from N
-            gal_angle = sep_catalog.theta[i] + x_vs_n_rot
-
-            # A 2-d symmetric gaussian has CDF(r) =  1 - exp(-(r/sigma)^2/2)
-            # The half-light radius is then r = sigma * sqrt(2 ln(2))
-            sigma = sqrt(sep_catalog.a[i] * sep_catalog.b[i])
-            gal_radius_px = sigma * sqrt(2. * log(2.))
-
-            pos = worldcoords[:, i]
-            im_catalog[i] = CatalogEntry(pos,
-                                         false,  # is_star
-                                         Float64[],  # will replace below
-                                         gal_fluxes,
-                                         0.5,  # gal_frac_dev
-                                         gal_axis_ratio,
-                                         gal_angle,
-                                         gal_radius_px)
-
-            # get object extent in degrees from bounding box in pixels
-            xmin = sep_catalog.xmin[i]
-            xmax = sep_catalog.xmax[i]
-            ymin = sep_catalog.ymin[i]
-            ymax = sep_catalog.ymax[i]
-            corner_pixcoords = Float64[xmin xmin xmax xmax;
-                                       ymin ymax ymin ymax]
-            corners = WCS.pix_to_world(image.wcs, corner_pixcoords)
-            im_source_radii[i] =
-                maximum(angular_separation(pos[1], pos[2],
-                                           corners[1, j], corners[2, j])
-                        for j in 1:4)
-        end
-
-        # Combine the catalog for this image with the joined catalog
-        if length(catalog) == 0
-            catalog = im_catalog
-            source_radii = im_source_radii
-        else
-            # for each detection in image, find nearest match in joined catalog
-            idx, dist = match_coordinates([ce.pos[1] for ce in im_catalog],
-                                          [ce.pos[2] for ce in im_catalog],
-                                          [ce.pos[1] for ce in catalog],
-                                          [ce.pos[2] for ce in catalog])
-
-            for (i, ce) in enumerate(im_catalog)
-                # if there is an existing object within 1 arcsec,
-                # add it to the joined catalog
-                if dist[i] < (1.0 / 3600.)
-                    existing_ce = catalog[idx[i]]
-                    if isnan(existing_ce.gal_fluxes[image.b])
-                        existing_ce.gal_fluxes[image.b] =
-                            ce.gal_fluxes[image.b]
-                    end
-                    if im_source_radii[i] > source_radii[idx[i]]
-                        source_radii[idx[i]] = im_source_radii[i]
-                    end
-
-                # if not, add entry to joined catalog
-                else
-                    push!(catalog, ce)
-                    push!(source_radii, im_source_radii[i])
-                end
-            end
-        end
-    end  # loop over images
-
-    # clean up NaN flux entries in joined catalog,
-    # copy gal_fluxes to star_fluxes
-    for ce in catalog
-        minflux = minimum(f for f in ce.gal_fluxes if !isnan(f))
-        for i in eachindex(ce.gal_fluxes)
-            if isnan(ce.gal_fluxes[i])
-                ce.gal_fluxes[i] = minflux
-            end
-        end
-        ce.star_fluxes = copy(ce.gal_fluxes)
-    end
-
-    return catalog, source_radii
-end
-
-
-"""
-New version of infer_init() that uses detect_sources() instead of SDSS
-photoObj catalog for initialization.
-"""
-function infer_init(images::Vector{<:Image};
-                    box=BoundingBox(-1000., 1000., -1000., 1000.))
-
-    # Initialize variables to empty vectors in case try block fails
-    target_sources = Int[]
-
-    # detect sources on all images
-    catalog, source_radii = detect_sources(images)
-
-    # Get indices of entries in the RA/Dec range of interest.
-    # (Some images can have regions that are outside the box, so not
-    # all sources are necessarily in the box.)
-    entry_in_range = entry->((box.ramin < entry.pos[1] < box.ramax) &&
-                             (box.decmin < entry.pos[2] < box.decmax))
-    target_sources = find(entry_in_range, catalog)
-    Log.info("$(Time(now())): $(length(catalog)) sources, ",
-             "$(length(target_sources)) target sources in $(box.ramin), ",
-             "$(box.ramax), $(box.decmin), $(box.decmax)")
-
-    # build neighbor map based on source radii
-    neighbor_map = Vector{Int64}[Int64[] for s in target_sources]
-    for ts in 1:length(target_sources)
-        s = target_sources[ts]
-        ce = catalog[s]
-        ce_rad = source_radii[s]
-
-        for s2 in 1:length(catalog)
-            s2 == s && continue
-            ce2 = catalog[s2]
-            dist = angular_separation(ce.pos[1], ce.pos[2],
-                                      ce2.pos[1], ce2.pos[2])
-
-            if dist < source_radii[s] + source_radii[s2]
-                push!(neighbor_map[ts], s2)
-            end
-        end
-    end
-
-    return catalog, target_sources, neighbor_map
 end
 
 
@@ -416,18 +466,17 @@ function bad_sky(ce, images)
     end
 
     img = images[img_index]
-    p = Model.SkyPatch(img, ce)
 
-    h = max(1, min(round(Int, p.pixel_center[1]), size(img.pixels, 1)))
-    w = max(1, min(round(Int, p.pixel_center[1]), size(img.pixels, 2)))
+    # Get sky at location of the object
+    pixel_center = WCS.world_to_pix(img.wcs, ce.pos)
+    h = max(1, min(round(Int, pixel_center[1]), size(img.pixels, 1)))
+    w = max(1, min(round(Int, pixel_center[2]), size(img.pixels, 2)))
+
     claimed_sky = img.sky[h, w] * img.nelec_per_nmgy[h]
 
-    # the "super" patch below contains the original patch as well as a lot of
-    # background
-    sp = Model.SkyPatch(img, ce, radius_override_pix=50)
-    H2, W2 = size(sp.active_pixel_bitmap)
-    h_range = (sp.bitmap_offset[1] + 1):(sp.bitmap_offset[1] + H2)
-    w_range = (sp.bitmap_offset[2] + 1):(sp.bitmap_offset[2] + W2)
+    # Determine background in a 50-pixel radius box around the object
+    box = Model.box_around_point(img.wcs, ce.pos, 50.0)
+    h_range, w_range = Model.clamp_box(box, (img.H, img.W))
     observed_sky = median(filter(!isnan, img.pixels[h_range, w_range]))
 
     # A 5 photon-per-pixel disparity can really add up if the light sources
@@ -437,35 +486,35 @@ end
 
 
 """
-Optimize the `ts`th element of `target_sources`.
+Optimize the `s`th element in `catalog`.
 Used only for one_node_single_infer, not one_node_joint_infer.
 """
 function process_source(config::Config,
-                        ts::Int,
+                        s::Int,
                         catalog::Vector{CatalogEntry},
-                        target_sources::Vector{Int},
-                        neighbor_map::Vector{Vector{Int}},
+                        patches::Matrix{ImagePatch},
+                        neighbor_ids::Vector{Int},
                         images::Vector{<:Image})
-    neighbors = catalog[neighbor_map[ts]]
+    neighbors = catalog[neighbor_ids]
     if length(neighbors) > 100
         msg = string("object at RA, Dec = $(entry.pos) has an excessive",
                      "number ($(length(neighbors))) of neighbors")
         Log.warn(msg)
     end
 
-    s = target_sources[ts]
     entry = catalog[s]
     cat_local = vcat([entry], neighbors)
 
-    patches = Model.get_sky_patches(images, cat_local)
-    load_active_pixels!(config, images, patches)
+    # Limit patches to just the active source and its neighbors.
+    idxs = vcat([s], neighbor_ids)
+    patches = patches[idxs, :]
 
     vp = DeterministicVI.init_sources([1], cat_local)
     ea = DeterministicVI.ElboArgs(images, patches, [1])
 
     tic()
     f_evals, max_f, max_x, nm_result = DeterministicVI.ElboMaximize.maximize!(ea, vp)
-    Log.info("#$(ts) at ($(entry.pos[1]), $(entry.pos[2])): $(toq()) secs")
+    Log.info("#$(s) at ($(entry.pos[1]), $(entry.pos[2])): $(toq()) secs")
 
     vs_opt = vp[1]
     is_sky_bad = bad_sky(entry, images)
@@ -477,26 +526,24 @@ end
 Run MCMC to process a source.  Returns
 """
 function process_source_mcmc(config::Config,
-                             ts::Int,
+                             s::Int,
                              catalog::Vector{CatalogEntry},
-                             target_sources::Vector{Int},
-                             neighbor_map::Vector{Vector{Int}},
-                             images::Vector{Image};
+                             patches::Matrix{ImagePatch},
+                             neighbor_ids::Vector{Int},
+                             images::Vector{<:Image};
                              use_ais::Bool=true)
     # subselect source, select active source and neighbor set
-    s = target_sources[ts]
     entry = catalog[s]
-    neighbors = catalog[neighbor_map[ts]]
+    neighbors = catalog[neighbor_ids]
     if length(neighbors) > 100
         msg = string("objid $(entry.objid) [ra: $(entry.pos)] has an excessive",
                      "number ($(length(neighbors))) of neighbors")
         Log.warn(msg)
     end
 
-    # 1. handle SkyPatch subsampling for the active source `entry`
-    cat_local = vcat([entry], neighbors)
-    patches = Model.get_sky_patches(images, cat_local)
-    load_active_pixels!(config, images, patches)
+    # Limit patches to just the active source and its neighbors.
+    idxs = vcat([s], neighbor_ids)
+    patches = patches[idxs, :]
 
     # create smaller images for the MCMC sampler to use
     patch_images = [MCMC.patch_to_image(patches[1, i], images[i])
@@ -523,13 +570,10 @@ function process_source_mcmc(config::Config,
 end
 
 
-"""
-Use multiple threads to process each target source with the specified
-callback and write the results to a file.
-"""
 function one_node_single_infer(catalog::Vector{CatalogEntry},
+                               patches::Matrix{ImagePatch},
                                target_sources::Vector{Int},
-                               neighbor_map::Vector{Vector{Int}},
+                               neighbor_map::Dict{Int,Vector{Int}},
                                images::Vector{<:Image};
                                config=Config(),
                                do_vi=true)
@@ -556,13 +600,14 @@ function one_node_single_infer(catalog::Vector{CatalogEntry},
                 break
             end
 
+            s = target_sources[ts]
             try
                 if do_vi
-                    result = process_source(config, ts, catalog, target_sources,
-                                            neighbor_map, images)
+                    result = process_source(config, s, catalog, patches,
+                                            neighbor_map[s], images)
                 else
-                    result = process_source_mcmc(config, ts, catalog,
-                        target_sources, neighbor_map, images)
+                    result = process_source_mcmc(config, s, catalog, patches,
+                                                 neighbor_map[s], images)
                 end
 
                 lock(results_lock)
@@ -582,7 +627,7 @@ function one_node_single_infer(catalog::Vector{CatalogEntry},
         process_sources()
     else
         ccall(:jl_threading_run, Void, (Any,), Core.svec(process_sources))
-        ccall(:jl_threading_profile, Void, ())
+        Log.LEVEL[] >= Log.INFO && ccall(:jl_threading_profile, Void, ())
     end
 
     return results
@@ -650,22 +695,80 @@ save_results(outdir, box, results) =
     save_results(outdir, box.ramin, box.ramax, box.decmin, box.decmax, results)
 
 
+function _infer_box(images::Vector{<:Image}, catalog::Vector{CatalogEntry},
+                    patches::Matrix{ImagePatch}, box::BoundingBox;
+                    method=:joint, do_vi=true, n_iters=3, config=Config())
+    # Get indices of entries in the RA/Dec range of interest.
+    # (Some images can have regions that are outside the box, so not
+    # all sources are necessarily in the box.)
+    entry_in_range = entry->((box.ramin < entry.pos[1] < box.ramax) &&
+                             (box.decmin < entry.pos[2] < box.decmax))
+    target_ids = find(entry_in_range, catalog)
+
+    # find objects with patches overlapping
+    neighbor_map = Dict(id=>Model.find_neighbors(patches, id)
+                        for id in target_ids)
+
+    if method == :joint
+        results = one_node_joint_infer(catalog, patches, target_ids,
+                                       neighbor_map, images; n_iters=n_iters,
+                                       config=config)
+    elseif method == :single
+        results = one_node_single_infer(catalog, patches, target_ids,
+                                        neighbor_map, images; do_vi=do_vi,
+                                        config=config)
+    else
+        error("unknown method: $method")
+    end
+    return results
+end
+
+
 """
-called from main entry point.
+    infer_box(images, box; options...)
+    infer_box(images, catalog, box; options...)
+
+In the first form, detect objects in images and run inference on all sources
+within the bounding box. In the second form, run inference on objects in
+`catalog` that fall within the bounding box.
+
+In both forms, objects outside the bounding box (either detected or given)
+may be used as "neighbors".
 """
+function infer_box(images::Vector{<:Image}, box::BoundingBox;
+                   method=:joint, do_vi=true, n_iters=3, config=Config())
+    catalog, patches = detect_sources(images)
+    return _infer_box(images, catalog, patches, box;
+                      method=method, do_vi=do_vi, n_iters=n_iters,
+                      config=config)
+end
+
+
+function infer_box(images::Vector{<:Image}, catalog::Vector{CatalogEntry},
+                   box::BoundingBox;
+                   method=:joint, do_vi=true, n_iters=3, config=Config())
+    patches = Model.get_sky_patches(images, catalog)
+    return _infer_box(images, catalog, patches, box;
+                      method=method, do_vi=do_vi, n_iters=n_iters,
+                      config=config)
+end
+
+
+# Called from main entry point.
 function infer_box(strategy, box::BoundingBox, outdir::String)
     Log.info("processing box $(box.ramin), $(box.ramax), $(box.decmin), ",
              "$(box.decmax) with $(nthreads()) threads")
-    @time begin
-        # Get vector of (run, camcol, field) triplets overlapping this patch
-        rcfs = get_overlapping_fields(box, strategy)
-        images = SDSSIO.load_field_images(strategy, rcfs)
-        catalog, target_sources, neighbor_map = infer_init(images; box=box)
-        results = one_node_joint_infer(catalog, target_sources, neighbor_map,
-                                       images)
-        save_results(outdir, box, results)
-    end
+
+    # Get vector of (run, camcol, field) triplets overlapping this patch
+    # and load images for them.
+    rcfs = get_overlapping_fields(box, strategy)
+    images = SDSSIO.load_field_images(strategy, rcfs)
+
+    results = infer_box(images, box)
+
+    save_results(outdir, box, results)
 end
+
 
 function infer_box(box::BoundingBox, stagedir::String, outdir::String)
     strategy = PlainFITSStrategy(stagedir)

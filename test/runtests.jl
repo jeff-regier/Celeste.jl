@@ -7,7 +7,7 @@ using StaticArrays
 
 using Celeste: Model, DeterministicVI
 
-import Celeste: DeterministicVI, ParallelRun
+import Celeste: DeterministicVI, ParallelRun, Log
 import Celeste: PSF, SDSSIO, SensitiveFloats, Transform
 import Celeste.SDSSIO: RunCamcolField
 
@@ -15,46 +15,40 @@ include(joinpath(Pkg.dir("Celeste"), "test", "SampleData.jl"))
 
 using SampleData
 
-anyerrors = false
-
-wd = pwd()
-# Ensure that test images are available.
-const datadir = joinpath(Pkg.dir("Celeste"), "test", "data")
-cd(datadir)
-run(`make`)
-run(`make RUN=4263 CAMCOL=5 FIELD=119`)
-# Ensure GalSim test images are available.
-const galsim_benchmark_dir = joinpath(Pkg.dir("Celeste"), "benchmark", "galsim")
-cd(galsim_benchmark_dir)
-run(`make fetch`)
-cd(wd)
+# Set logging level and timing reporting (TODO: ability to set on command line)
+Log.LEVEL[] = Log.WARN
+verbose_timing = false
 
 # Check whether to run time-consuming tests.
 long_running_flag = "--long-running"
 test_long_running = long_running_flag in ARGS
-test_files = setdiff(ARGS, [ long_running_flag ])
 
+
+test_files = setdiff(ARGS, [ long_running_flag ])
 if length(test_files) > 0
     testfiles = ["test_$(arg).jl" for arg in test_files]
 else
     testdir = joinpath(Pkg.dir("Celeste"), "test")
-    testfiles = filter(r"test_.*\.jl", readdir(testdir))
+    testfiles = filter(r"^test_.*\.jl$", readdir(testdir))
 end
 
-if !test_long_running
-    warn("Skipping long running tests.  ",
-         "To test everything, run tests with the flag ", long_running_flag)
-end
-
-
+timing_info = Any[]
 for testfile in testfiles
-    try
-        println("Running ", testfile)
-        @time include(testfile)
-        println("\t\033[1m\033[32mPASSED\033[0m: $(testfile)")
-    catch e
-        anyerrors = true
-        println("\t\033[1m\033[31mFAILED\033[0m: $(testfile)")
-        rethrow()  # Fail fast.
+        _, t, bytes, gctime, memallocs = @timed include(testfile)
+        push!(timing_info, (t, bytes, gctime, memallocs))
+end
+
+println("\nTiming info:")
+totaltime = 0.0
+for i in eachindex(timing_info)
+    t, bytes, gctime, memallocs = timing_info[i]
+    totaltime += t
+    @printf "%30s: " testfiles[i]
+    if verbose_timing
+        Base.time_print(1e9 * t, memallocs.allocd, memallocs.total_time,
+                        Base.gc_alloc_count(memallocs))
+    else
+        @printf "%7.2f seconds\n" t
     end
 end
+@printf "%30s: %7.2f seconds\n" "Total time" totaltime

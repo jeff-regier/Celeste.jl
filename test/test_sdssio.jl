@@ -1,6 +1,7 @@
 using Celeste.SDSSIO
 import Celeste.SDSSIO: SDSSBackground
 
+@testset "sdssio" begin
 
 @testset "sky interpolations" begin
     small_sky = [1.  2.  3.  4.;
@@ -42,4 +43,6 @@ end
     end
 
     catalog = SDSSIO.read_photoobj(strategy, rcf)
+end
+
 end

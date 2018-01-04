@@ -5,7 +5,7 @@ import ForwardDiff
 using StaticArrays
 
 # parameter types
-export Image, SkyPatch, PsfComponent,
+export Image, ImagePatch, PsfComponent,
        GalaxyComponent, GalaxyPrototype,
        PriorParams, CanonicalParams, BrightnessParams, StarPosParams,
        GalaxyPosParams, GalaxyShapeParams,

@@ -114,7 +114,7 @@ function load_bvn_mixtures!(
                     gal_mcs::Array{GalaxyCacheComponent{T},4},
                     #inputs
                     S::Int64,
-                    patches::Matrix{SkyPatch},
+                    patches::Matrix{ImagePatch},
                     source_params::Vector{Vector{T}},
                     active_sources::Vector{Int},
                     psf_K::Int64,
@@ -136,7 +136,7 @@ function load_bvn_mixtures!(
         # We need a safer way to let both methods call this method.
         world_loc = sp[lidx.pos]
         m_pos = Model.linear_world_to_pix(patches[s, n].wcs_jacobian,
-                                          patches[s, n].center,
+                                          patches[s, n].world_center,
                                           patches[s, n].pixel_center, world_loc)
 
         # Convolve the star locations with the PSF.
@@ -170,7 +170,7 @@ end
 
 function load_bvn_mixtures(
         S::Int64,
-        patches::Matrix{SkyPatch},
+        patches::Matrix{ImagePatch},
         source_params::Vector{Vector{T}},
         active_sources::Vector{Int},
         psf_K::Int64,
@@ -223,14 +223,14 @@ softpluslikeinv(y) = y < 0 ? 1e-3exp(y) : 1e-3(y + 1)
 
 
 function star_light_density!(fs0m::SensitiveFloat{T},
-                             p::SkyPatch,
+                             p::ImagePatch,
                              h::Int,
                              w::Int,
                              pos::Vector,
                              is_active_source::Bool) where {T <: Number}
      f(local_pos::Vector) = begin
          m_pos = Model.linear_world_to_pix(p.wcs_jacobian,
-                                           p.center,
+                                           p.world_center,
                                            p.pixel_center,
                                            local_pos)
          softpluslikeinv(p.itp_psf[h - m_pos[1] + 26, w - m_pos[2] + 26])
@@ -348,7 +348,7 @@ end
 
 function write_star_nmgy!(world_pos::Array{Float64,1},
                           flux::Float64,
-                          patch::SkyPatch,
+                          patch::ImagePatch,
                           pixels::Matrix{Float32};
                           write_to_patch::Bool=false)
     fs0m = SensitiveFloat{Float64}(length(StarPosParams), 1, false, false)
@@ -373,7 +373,7 @@ function write_galaxy_nmgy!(world_pos::Array{Float64,1},
                             gal_angle::Float64,
                             gal_radius_px::Float64,
                             psf::Array{Model.PsfComponent,1},
-                            patches::Array{SkyPatch, 2},
+                            patches::Array{ImagePatch, 2},
                             pixels::Matrix{Float32};
                             write_to_patch::Bool=false)
     bvn_derivs = Model.BivariateNormalDerivatives{Float64}()

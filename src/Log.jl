@@ -1,13 +1,17 @@
 """
-Thread-safe logging
+Thread-safe logging.
 """
 module Log
 
 import Base.Threads.threadid
 
-const is_production_run = haskey(ENV, "CELESTE_PROD") && ENV["CELESTE_PROD"] != ""
+# logging levels in increasing verbosity
+@enum LogLevel ERROR WARN INFO DEBUG
 
-# This can be set by the multinode functionality on startup
+const LEVEL = Ref{LogLevel}(INFO)
+const VERBOSE = Ref{Bool}(true)  # print stack traces from errors
+
+# Rank for multinode functionality (can be set on startup)
 const rank = Ref{Int}(1)
 grank() = rank[]
 
@@ -18,35 +22,40 @@ grank() = rank[]
 end
 @inline rtputs(s...) = puts("[$(grank())]<$(threadid())> ", s...)
 
-
 # logging functions
-@inline message(msg...) = rtputs(msg...)
-@inline one_message(msg...) = grank() == 1 && puts(msg...)
-@inline error(msg...) = rtputs("ERROR: ", msg...)
-@inline warn(msg...) = rtputs("WARN: ", msg...)
+@inline error(msg...) = LEVEL[] >= ERROR && rtputs("ERROR: ", msg...)
+@inline warn(msg...) = LEVEL[] >= WARN && rtputs("WARN: ", msg...)
+@inline info(msg...) = LEVEL[] >= INFO && rtputs("INFO: ", msg...)
+@inline debug(msg...) = LEVEL[] >= DEBUG && rtputs("DEBUG: ", msg...)
 
-# In production mode, rather the development mode, don't log debug or info statements
-@inline info(msg...) = is_production_run || rtputs("INFO: ", msg...)
-@inline debug(msg...) = is_production_run || rtputs("DEBUG: ", msg...)
 
-# Like `error()`, but include exception info and stack trace. Should only be called from a `catch`
-# block, e.g.,
-# try
-#   ...
-# catch ex
-#   Log.exception(ex, catch_stacktrace(), "Something happened %s", some_var)
-# end
+"""
+    exception(ex::Exception, msg...)
+
+If the logging level is ERROR or greater, log the message `msg` and
+show the exception `ex`. If `Log.VERBOSE[]` is true, also log the
+stack trace. Should only be called from a `catch` block, e.g.,
+
+```
+try
+    ...
+catch ex
+    Log.exception(ex, "Something", " happened.")
+end
+```
+"""
 function exception(exception::Exception, msg...)
+    LEVEL[] >= ERROR || return
     if length(msg) > 0
         error(msg...)
     end
-    if !is_production_run
+    if VERBOSE[]
         stack_trace = catch_stacktrace()
     end
     buf = IOBuffer()
     Base.showerror(buf, exception)
     error(String(take!(buf)))
-    if !is_production_run
+    if VERBOSE[]
         error("Stack trace:")
         if length(stack_trace) > 100
             stack_trace = vcat(
@@ -62,4 +71,3 @@ function exception(exception::Exception, msg...)
 end
 
 end
-

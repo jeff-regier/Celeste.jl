@@ -22,6 +22,7 @@ include("PSF.jl")
 include("SDSSIO.jl")
 include("SEP.jl")
 
+include("detection.jl")
 include("MCMC.jl")
 include("StochasticVI.jl")
 include("DeterministicVI.jl")

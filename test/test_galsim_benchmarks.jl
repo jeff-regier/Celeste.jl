@@ -4,6 +4,11 @@ using DataFrames
 
 import Celeste: GalsimBenchmark
 
+# Ensure GalSim test images are available.
+wd = pwd()
+cd(joinpath(Pkg.dir("Celeste"), "benchmark", "galsim"))
+run(`make fetch`)
+cd(wd)
 
 if test_long_running
     GALSIM_CASES_EXERCISED = [
@@ -22,7 +27,7 @@ end
 
 function assert_estimates_are_close(benchmark_results)
     for row in eachrow(benchmark_results)
-        if isna(row[:truth])
+        if ismissing(row[:truth])
             continue
         end
         if row[:variable] == :is_star
@@ -31,33 +36,31 @@ function assert_estimates_are_close(benchmark_results)
             maximum_error = 0.2
         elseif row[:variable] == :gal_angle_deg
             maximum_error = 5
-        #elseif !isna(row[1, :error_sds])
-        #    maximum_error = 2.5 * row[1, :error_sds]
         else
             maximum_error = 0.2 * abs(row[:truth])
         end
-        if !isapprox(row[:truth], row[:estimate], atol=maximum_error)
-            @show row
-            @show maximum_error
-            @test false
-        else
-            @test true # just so test framework will count test cases
-        end
+        @test isapprox(row[:truth], row[:estimate],
+                       atol=maximum_error)
     end
 end
 
-@testset "GalSim benchmark tests, single-source inference" begin
-    truth, results = GalsimBenchmark.run_benchmarks(
-        test_case_names=GALSIM_CASES_EXERCISED,
-        joint_inference=false
-    )
-    assert_estimates_are_close(GalsimBenchmark.truth_comparison_df(truth, results))
-end
+@testset "galsim benchmarks" begin
+    @testset "single-source inference" begin
+        truth, results = GalsimBenchmark.run_benchmarks(
+            test_case_names=GALSIM_CASES_EXERCISED,
+            joint_inference=false
+        )
+        assert_estimates_are_close(
+            GalsimBenchmark.truth_comparison_df(truth, results))
+    end
 
-@testset "GalSim benchmark tests, joint inference" begin
-    truth, results = GalsimBenchmark.run_benchmarks(
-        test_case_names=GALSIM_CASES_EXERCISED,
-        joint_inference=true
-    )
-    assert_estimates_are_close(GalsimBenchmark.truth_comparison_df(truth, results))
+
+    @testset "GalSim benchmark tests, joint inference" begin
+        truth, results = GalsimBenchmark.run_benchmarks(
+            test_case_names=GALSIM_CASES_EXERCISED,
+            joint_inference=true
+        )
+        assert_estimates_are_close(
+            GalsimBenchmark.truth_comparison_df(truth, results))
+    end
 end

@@ -23,8 +23,6 @@ function verify_sample_galaxy(vs, pos)
     @test isapprox(phi_hat, pi/4, atol=five_deg)
 
     brightness_hat = exp(vs[ids.flux_loc[2]] + 0.5 * vs[ids.flux_scale[2]])
-    @show brightness_hat
-    @show sample_galaxy_fluxes[3]
     @test isapprox(brightness_hat / sample_galaxy_fluxes[3], 1.0, atol=0.05)
 
     true_colors = log.(sample_galaxy_fluxes[2:5] ./ sample_galaxy_fluxes[1:4])
@@ -69,7 +67,8 @@ function test_full_elbo_optimization()
     verify_sample_galaxy(vp[1], [8.5, 9.6]);
 end
 
-
-test_single_source_optimization()
-test_full_elbo_optimization()
-test_galaxy_optimization()
+@testset "optimization" begin
+    test_single_source_optimization()
+    test_full_elbo_optimization()
+    test_galaxy_optimization()
+end
