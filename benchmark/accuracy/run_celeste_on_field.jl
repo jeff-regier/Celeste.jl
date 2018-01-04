@@ -49,41 +49,37 @@ else
 end
 @assert length(images) == 5
 
+
+config = Config(25.0)
+method = parsed_args["joint"] ? :joint : :single
+box = ParallelRun.BoundingBox(-1000.0, 1000.0, -1000.0, 1000.0)
+
 if haskey(parsed_args, "initialization-catalog")
-    catalog_data = AccuracyBenchmark.read_catalog(parsed_args["initialization-catalog"])
+    rawcatalog = AccuracyBenchmark.read_catalog(parsed_args["initialization-catalog"])
     if parsed_args["use-full-initialization"]
         println("Using full initialization from ", parsed_args["initialization-catalog"])
     end
-    catalog_entries = AccuracyBenchmark.make_initialization_catalog(
-        catalog_data, parsed_args["use-full-initialization"])
-    target_sources = collect(1:length(catalog_entries))
-    neighbor_map = ParallelRun.find_neighbors(target_sources, catalog_entries,
-                                              images)
+    catalog = AccuracyBenchmark.make_initialization_catalog(
+        rawcatalog, parsed_args["use-full-initialization"])
+
+    # TODO: add option in main entry point (infer_box) for limiting
+    # number of target sources. For two reasons: (1) enable limiting
+    # sources when a catalog is not passed (below). (2) When a catalog is
+    # passed, still consider neighbors even when they're not targets.
+    if haskey(parsed_args, "limit-num-sources")
+        nsources = min(parsed_args["limit-num-sources"],
+                       length(catalog))
+        catalog = catalog[1:nsources]
+    end
+
+    results = ParallelRun.infer_box(images, catalog, box;
+                                    method=method, config=config)
 else
-    catalog_entries, target_sources, neighbor_map =
-        ParallelRun.infer_init(images)
-end
-
-@printf("Loaded %d sources...\n", length(catalog_entries))
-
-if haskey(parsed_args, "limit-num-sources")
-    nsources = min(parsed_args["limit-num-sources"], length(target_sources))
-    target_sources = target_sources[1:nsources]
-end
-
-config = Config(25.0)
-if parsed_args["joint"]
-    results = ParallelRun.one_node_joint_infer(catalog_entries, target_sources,
-                                               neighbor_map, images,
-                                               config=config)
-else
-    results = ParallelRun.one_node_single_infer(catalog_entries, target_sources,
-                                                neighbor_map, images,
-                                                config=config)
+    results = ParallelRun.infer_box(images, box; method=method, config=config)
 end
 
 results_df = AccuracyBenchmark.celeste_to_df(results)
 
-csv_filename = joinpath(OUTPUT_DIRECTORY, @sprintf("%s_predictions.csv", catalog_label))
+csv_filename = joinpath(OUTPUT_DIRECTORY, "$(catalog_label)_predictions.csv")
 csv_filename = AccuracyBenchmark.write_catalog(csv_filename, results_df; append_hash=true)
 @printf("Wrote '%s'...\n", csv_filename)
