@@ -531,7 +531,8 @@ function process_source_mcmc(config::Config,
                              patches::Matrix{ImagePatch},
                              neighbor_ids::Vector{Int},
                              images::Vector{<:Image};
-                             use_ais::Bool=true)
+                             use_ais::Bool=true,
+                             use_robust_likelihood=false)
     # subselect source, select active source and neighbor set
     entry = catalog[s]
     neighbors = catalog[neighbor_ids]
@@ -557,7 +558,8 @@ function process_source_mcmc(config::Config,
     if use_ais
         mcmc_results = MCMC.run_ais(entry, patch_images, patches, background_images;
             num_temperatures=config.num_ais_temperatures,
-            num_samples=config.num_ais_samples)
+            num_samples=config.num_ais_samples,
+            use_robust_likelihood=use_robust_likelihood)
     else
         mcmc_results = MCMC.run_mcmc(entry, patch_images, patches, background_images)
     end
