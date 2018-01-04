@@ -15,8 +15,10 @@ function run_ais(entry::CatalogEntry,
                  num_samples::Int=2,
                  num_temperatures::Int=50,
                  print_skip::Int=20,
-                 num_samples_per_chain::Int=25)
+                 num_samples_per_chain::Int=25,
+                 use_robust_likelihood=false)
     Log.info("\nRunning AIS on with patch size $(imgs[1].H) x $(imgs[1].W)")
+    Log.info("  num_samples $(num_samples); num_temps $(num_temperatures); num_samples_per_chain $(num_samples_per_chain)")
     Log.info("  catalog type: $(entry.is_star ? "star" : "galaxy")")
     Log.info("  num images  : $(length(imgs))")
     n_active = sum([sum(p.active_pixel_bitmap) for p in patches[1, :]]) / length(patches[1,:])
@@ -62,11 +64,16 @@ function run_ais(entry::CatalogEntry,
     ####################
     # run galaxy AIS   #
     ####################
-    gal_loglike, gal_logprior, gal_logpost, sample_gal_prior, ra_lim, dec_lim, uniform_to_deg, deg_to_uniform =
+    gal_loglike_fun, gal_logprior, gal_logpost, sample_gal_prior, ra_lim, dec_lim, uniform_to_deg, deg_to_uniform =
           MCMC.make_gal_inference_functions(imgs, entry;
                                         patches=patches[1, :],
                                         background_images=background_images,
                                         pos_delta=pos_delta)
+    if use_robust_likelihood
+        gal_loglike = (th) -> gal_loglike_fun(th; use_robust_likelihood=true)
+    else
+        gal_loglike = (th) -> gal_loglike_fun(th; use_robust_likelihood=false)
+    end
     th_cat = MCMC.parameters_from_catalog(entry; is_star=false)
     th_rand = sample_gal_prior()
     Log.info("gal loglike  at CATALOG vs PRIOR : ", gal_loglike(th_cat), ", ", gal_loglike(th_rand))
@@ -262,11 +269,11 @@ end
 Turn MCMC results into a single dataframe row that summarizes the
 posterior distribution
 """
-function summarize_samples(results_dict)
+function summarize_samples(results_dict; summarize=mean)
     stardf   = results_dict["star_samples"]
     galdf    = results_dict["gal_samples"]
-    star_row = samples_to_dataframe_row(stardf; is_star=true)
-    gal_row  = samples_to_dataframe_row(galdf; is_star=false)
+    star_row = samples_to_dataframe_row(stardf; is_star=true, summarize=summarize)
+    gal_row  = samples_to_dataframe_row(galdf; is_star=false, summarize=summarize)
     return star_row, gal_row
 end
 
@@ -274,7 +281,7 @@ end
 """
 Consolidate samples into results dataframes (single entry per source)
 """
-function consolidate_samples(reslist; objids=nothing)
+function consolidate_samples(reslist; objids=nothing, summarize=mean)
     # give each source a unique label
     if objids==nothing
         objids = ["samp_$(i)" for i in 1:length(reslist)]
@@ -286,7 +293,7 @@ function consolidate_samples(reslist; objids=nothing)
         r = reslist[i]
 
         # compute star and gal summaries
-        star_row, gal_row = summarize_samples(r)
+        star_row, gal_row = summarize_samples(r; summarize=summarize)
         star_row[:objid], gal_row[:objid] = objids[i], objids[i]
         push!(star_summary, star_row)
         push!(gal_summary, gal_row)
