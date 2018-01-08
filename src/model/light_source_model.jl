@@ -87,7 +87,7 @@ struct PriorParams
 end
 
 
-function load_prior()
+function load_prior_init()
     # set is_star = [.95, .05] if stars are underrepresented
     # due to the greater flexibility of the galaxy model
     #is_star = [0.28, 0.72]
@@ -130,4 +130,7 @@ function load_prior()
 end
 
 
-const prior = load_prior()
+const prior = load_prior_init()
+
+# TODO: is deepcopy necessary here? (do callers modify the result?)
+load_prior() = deepcopy(prior)

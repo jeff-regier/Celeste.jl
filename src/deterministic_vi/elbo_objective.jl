@@ -14,13 +14,12 @@ Returns:
     Updates E_G_s, E_G2_s, and var_G_s in place with the brightness
     for this source at this pixel.
 """
-function calculate_G_s!{NumType <: Number}(
-                    vp::VariationalParams{NumType},
-                    elbo_vars::ElboIntermediateVariables{NumType},
-                    sb::SourceBrightness{NumType},
-                    b::Int,
-                    s::Int,
-                    is_active_source::Bool)
+function calculate_G_s!(vp::VariationalParams{T},
+                        elbo_vars::ElboIntermediateVariables{T},
+                        sb::SourceBrightness{T},
+                        b::Int,
+                        s::Int,
+                        is_active_source::Bool) where {T<:Number}
     E_G_s = elbo_vars.E_G_s
     E_G2_s = elbo_vars.E_G2_s
     var_G_s = elbo_vars.var_G_s
@@ -238,13 +237,14 @@ end
 Add the contributions from a single source at a single pixel to the
 sensitive floast E_G and var_G, which are updated in place.
 """
-function accumulate_source_pixel_brightness!{NumType <: Number}(
-                    ea::ElboArgs,
-                    vp::VariationalParams{NumType},
-                    elbo_vars::ElboIntermediateVariables{NumType},
-                    sb::SourceBrightness{NumType},
-                    b::Int, s::Int,
-                    is_active_source::Bool)
+function accumulate_source_pixel_brightness!(
+        ea::ElboArgs,
+        vp::VariationalParams{T},
+        elbo_vars::ElboIntermediateVariables{T},
+        sb::SourceBrightness{T},
+        b::Int, s::Int,
+        is_active_source::Bool) where {T<:Number}
+
     calculate_G_s!(vp, elbo_vars, sb, b, s, is_active_source)
 
     if is_active_source
@@ -271,13 +271,12 @@ Args:
     Updates elbo_vars.elbo in place by adding the lower bound to the log
     term.
 """
-function add_elbo_log_term!{NumType <: Number}(
-                elbo_vars::ElboIntermediateVariables{NumType},
-                E_G::SensitiveFloat{NumType},
-                var_G::SensitiveFloat{NumType},
-                elbo::SensitiveFloat{NumType},
-                x_nbm::AbstractFloat,
-                iota::AbstractFloat)
+function add_elbo_log_term!(elbo_vars::ElboIntermediateVariables{T},
+                            E_G::SensitiveFloat{T},
+                            var_G::SensitiveFloat{T},
+                            elbo::SensitiveFloat{T},
+                            x_nbm::AbstractFloat,
+                            iota::AbstractFloat) where {T<:Number}
     # See notes for a derivation. The log term is
     # log E[G] - Var(G) / (2 * E[G] ^2 )
 
@@ -328,13 +327,13 @@ function add_elbo_log_term!{NumType <: Number}(
 end
 
 
-function add_pixel_term!{NumType <: Number}(
-                    ea::ElboArgs,
-                    vp::VariationalParams{NumType},
-                    n::Int, h::Int, w::Int,
-                    bvn_bundle::BvnBundle{NumType},
-                    sbs::Vector{SourceBrightness{NumType}},
-                    elbo_vars::ElboIntermediateVariables = ElboIntermediateVariables(NumType, ea.Sa))
+function add_pixel_term!(
+        ea::ElboArgs,
+        vp::VariationalParams{T},
+        n::Int, h::Int, w::Int,
+        bvn_bundle::BvnBundle{T},
+        sbs::Vector{SourceBrightness{T}},
+        elbo_vars::ElboIntermediateVariables = ElboIntermediateVariables(T, ea.Sa)) where {T<:Number}
     img = ea.images[n]
 
     SensitiveFloats.zero!(elbo_vars.E_G)
@@ -398,10 +397,10 @@ Return the expected log likelihood for all bands in a section
 of the sky.
 Returns: A sensitive float with the log likelihood.
 """
-function elbo_likelihood{T}(ea::ElboArgs,
-                            vp::VariationalParams{T},
-                            elbo_vars::ElboIntermediateVariables = ElboIntermediateVariables(T, ea.Sa),
-                            bvn_bundle::BvnBundle{T} = BvnBundle{T}(ea.psf_K, ea.S))
+function elbo_likelihood(ea::ElboArgs,
+                         vp::VariationalParams{T},
+                         elbo_vars::ElboIntermediateVariables = ElboIntermediateVariables(T, ea.Sa),
+                         bvn_bundle::BvnBundle{T} = BvnBundle{T}(ea.psf_K, ea.S)) where {T}
     zero!(elbo_vars)
     Model.zero!(bvn_bundle)
 
@@ -480,11 +479,11 @@ Calculates and returns the ELBO and its derivatives for all the bands
 of an image.
 Returns: A sensitive float containing the ELBO for the image.
 """
-function elbo{T}(ea::ElboArgs,
-                 vp::VariationalParams{T},
-                 elbo_vars::ElboIntermediateVariables =
-                        ElboIntermediateVariables(T, ea.Sa, true,  T<:AbstractFloat),
-                 bvn_bundle::BvnBundle = BvnBundle{T}(ea.psf_K, ea.S))
+function elbo(ea::ElboArgs,
+              vp::VariationalParams{T},
+              elbo_vars::ElboIntermediateVariables =
+                  ElboIntermediateVariables(T, ea.Sa, true,  T<:AbstractFloat),
+              bvn_bundle::BvnBundle = BvnBundle{T}(ea.psf_K, ea.S)) where {T}
     @assert(all(all(isfinite, vs) for vs in vp), "vp contains NaNs or Infs")
     result = elbo_likelihood(ea, vp, elbo_vars, bvn_bundle)
     ea.include_kl && KLDivergence.subtract_kl_all_sources!(ea, vp, result)

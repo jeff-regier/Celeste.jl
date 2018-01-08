@@ -11,10 +11,10 @@ Args:
 Returns:
     - The 1-indexed pixel locations in the same shape as the input.
 """
-linear_world_to_pix{T <: Number}(wcs_jacobian::Matrix{Float64},
-                          world_offset::Vector{Float64},
-                          pix_offset::Vector{Float64},
-                          worldcoords::VecOrMat{T}) =
+linear_world_to_pix(wcs_jacobian::Matrix{Float64},
+                    world_offset::Vector{Float64},
+                    pix_offset::Vector{Float64},
+                    worldcoords::VecOrMat{T}) where {T<:Number} =
     wcs_jacobian * (worldcoords .- world_offset) + pix_offset
 
 
@@ -34,7 +34,7 @@ Returns:
    coordinates across columns.
 """
 function pixel_world_jacobian(wcs::WCSTransform, pix_loc::Array{Float64, 1};
-                          pixel_delt=0.5)
+                              pixel_delt=0.5)
 
     # Choose a step size.
     # Assume that about a half a pixel is a reasonable step size and the

@@ -285,9 +285,10 @@ Args:
 Returns:
     - Updates psf_params or psf_params_free in place.
 """
-function transform_psf_params!{NumType<:Number}(
-        psf_params::Vector{Vector{NumType}}, psf_params_free::Vector{Vector{NumType}},
-        psf_transform::DataTransform, to_unconstrained::Bool)
+function transform_psf_params!(psf_params::Vector{Vector{T}},
+                               psf_params_free::Vector{Vector{T}},
+                               psf_transform::DataTransform,
+                               to_unconstrained::Bool) where {T<:Number}
     for k=1:length(psf_params)
         for (param, constraint_vec) in psf_transform.bounds[k]
             for ind in 1:length(getfield(psf_ids, param))
@@ -309,12 +310,12 @@ end
 """
 Allocate memory for and return a constrained parameter set.
 """
-function constrain_psf_params{NumType<:Number}(
-        psf_params_free::Vector{Vector{NumType}}, psf_transform::DataTransform)
+function constrain_psf_params(psf_params_free::Vector{Vector{T}},
+                              psf_transform::DataTransform) where {T<:Number}
     K = length(psf_params_free)
-    psf_params = Vector{Vector{NumType}}(K)
+    psf_params = Vector{Vector{T}}(K)
     for k=1:K
-        psf_params[k] = zeros(NumType, length(PsfParams))
+        psf_params[k] = zeros(T, length(PsfParams))
     end
 
     transform_psf_params!(psf_params, psf_params_free, psf_transform, false)
@@ -326,12 +327,12 @@ end
 """
 Allocate memory for and return an unconstrained parameter set.
 """
-function unconstrain_psf_params{NumType<:Number}(
-        psf_params::Vector{Vector{NumType}}, psf_transform::DataTransform)
+function unconstrain_psf_params(psf_params::Vector{Vector{T}},
+                                psf_transform::DataTransform) where {T<:Number}
     K = length(psf_params)
-    psf_params_free = Vector{Vector{NumType}}(K)
+    psf_params_free = Vector{Vector{T}}(K)
     for k=1:K
-        psf_params_free[k] = zeros(NumType, length(PsfParams))
+        psf_params_free[k] = zeros(T, length(PsfParams))
     end
 
     transform_psf_params!(psf_params, psf_params_free, psf_transform, true)
@@ -343,11 +344,11 @@ end
 """
 Convert a single vector of psf parameters to a vector of vectors.
 """
-function unwrap_psf_params{NumType <: Number}(psf_param_vec::Vector{NumType})
+function unwrap_psf_params(psf_param_vec::Vector{T}) where {T<:Number}
     @assert length(psf_param_vec) % length(PsfParams) == 0
     K = round(Int, length(psf_param_vec) / length(PsfParams))
     psf_param_mat = reshape(psf_param_vec, length(PsfParams), K)
-    psf_params = Vector{Vector{NumType}}(K)
+    psf_params = Vector{Vector{T}}(K)
     for k = 1:K
         psf_params[k] = psf_param_mat[:, k]
     end
@@ -358,8 +359,8 @@ end
 """
 Convert a vector of vectors of psf parameters to a single vector.
 """
-function wrap_psf_params{NumType <: Number}(psf_params::Vector{Vector{NumType}})
-    psf_params_mat = zeros(NumType, length(PsfParams), length(psf_params))
+function wrap_psf_params(psf_params::Vector{Vector{T}}) where {T<:Number}
+    psf_params_mat = zeros(T, length(PsfParams), length(psf_params))
     for k=1:length(psf_params)
         psf_params_mat[:, k] = psf_params[k]
     end
@@ -381,15 +382,16 @@ Args:
 Returns:
     - Updates pixel_value in place (and all the other placeholder values as well)
 """
-function evaluate_psf_pixel_fit!{NumType <: Number}(
-        x::SVector{2,Float64}, psf_params::Vector{Vector{NumType}},
-        sig_sf_vec::Vector{GalaxySigmaDerivs{NumType}},
-        bvn_vec::Vector{BvnComponent{NumType}},
-        bvn_derivs::BivariateNormalDerivatives{NumType},
-        log_pdf::SensitiveFloat{NumType},
-        pdf::SensitiveFloat{NumType},
-        pixel_value::SensitiveFloat{NumType},
-        calculate_gradient::Bool)
+function evaluate_psf_pixel_fit!(
+        x::SVector{2,Float64},
+        psf_params::Vector{Vector{T}},
+        sig_sf_vec::Vector{GalaxySigmaDerivs{T}},
+        bvn_vec::Vector{BvnComponent{T}},
+        bvn_derivs::BivariateNormalDerivatives{T},
+        log_pdf::SensitiveFloat{T},
+        pdf::SensitiveFloat{T},
+        pixel_value::SensitiveFloat{T},
+        calculate_gradient::Bool) where {T<:Number}
     SensitiveFloats.zero!(pixel_value)
 
     K = length(psf_params)
@@ -470,11 +472,11 @@ end
 """
 Convert PSF parameters to covariance matrices and derivatives and BvnComponents.
 """
-function get_sigma_from_params{NumType <: Number}(psf_params::Vector{Vector{NumType}})
+function get_sigma_from_params(psf_params::Vector{Vector{T}}) where {T<:Number}
     K = length(psf_params)
-    sigma_vec = Vector{SMatrix{2,2,NumType,4}}(K)
-    sig_sf_vec = Vector{GalaxySigmaDerivs{NumType}}(K)
-    bvn_vec = Vector{BvnComponent{NumType}}(K)
+    sigma_vec = Vector{SMatrix{2,2,T,4}}(K)
+    sig_sf_vec = Vector{GalaxySigmaDerivs{T}}(K)
+    bvn_vec = Vector{BvnComponent{T}}(K)
     for k = 1:K
         sigma_vec[k] = get_bvn_cov(psf_params[k][psf_ids.gal_axis_ratio],
             psf_params[k][psf_ids.gal_angle],
@@ -485,7 +487,7 @@ function get_sigma_from_params{NumType <: Number}(psf_params::Vector{Vector{NumT
             psf_params[k][psf_ids.gal_radius_px], sigma_vec[k], 1.0, true)
 
         bvn_vec[k] =
-            BvnComponent(SVector{2,NumType}(psf_params[k][psf_ids.mu]), sigma_vec[k], 1.0)
+            BvnComponent(SVector{2,T}(psf_params[k][psf_ids.mu]), sigma_vec[k], 1.0)
     end
     sigma_vec, sig_sf_vec, bvn_vec
 end
@@ -494,15 +496,16 @@ end
 """
 evaluate_psf_fit but with pre-allocated memory for intermediate calculations.
 """
-function evaluate_psf_fit!{NumType <: Number}(
-        psf_params::Vector{Vector{NumType}}, raw_psf::Matrix{Float64},
+function evaluate_psf_fit!(
+        psf_params::Vector{Vector{T}},
+        raw_psf::Matrix{Float64},
         x_mat::Matrix{SVector{2,Float64}},
-        bvn_derivs::BivariateNormalDerivatives{NumType},
-        log_pdf::SensitiveFloat{NumType},
-        pdf::SensitiveFloat{NumType},
-        pixel_value::SensitiveFloat{NumType},
-        squared_error::SensitiveFloat{NumType},
-        calculate_gradient::Bool)
+        bvn_derivs::BivariateNormalDerivatives{T},
+        log_pdf::SensitiveFloat{T},
+        pdf::SensitiveFloat{T},
+        pixel_value::SensitiveFloat{T},
+        squared_error::SensitiveFloat{T},
+        calculate_gradient::Bool) where {T<:Number}
     K = length(psf_params)
     sigma_vec, sig_sf_vec, bvn_vec = get_sigma_from_params(psf_params)
     SensitiveFloats.zero!(squared_error)
@@ -548,10 +551,12 @@ Args:
 Returns:
     - Updates sf_free in place.
 """
-function transform_psf_sensitive_float!{NumType<:Number}(
-        psf_params::Vector{Vector{NumType}}, psf_transform::DataTransform,
-        sf::SensitiveFloat{NumType}, sf_free::SensitiveFloat{NumType},
-        calculate_gradient::Bool)
+function transform_psf_sensitive_float!(
+        psf_params::Vector{Vector{T}},
+        psf_transform::DataTransform,
+        sf::SensitiveFloat{T},
+        sf_free::SensitiveFloat{T},
+        calculate_gradient::Bool) where {T<:Number}
     sf_free.v[] = sf.v[]
     if calculate_gradient
         K = length(psf_params)
@@ -627,9 +632,9 @@ Args:
 Returns:
     - A vector of PsfComponents fit to the raw_psf.
 """
-function fit_raw_psf_for_celeste{P<:PsfOptimizer}(
-        raw_psf::Array{Float64, 2}, psf_optimizer::P,
-        initial_psf_params::Vector{Vector{Float64}})
+function fit_raw_psf_for_celeste(raw_psf::Array{Float64, 2},
+                                 psf_optimizer::PsfOptimizer,
+                                 initial_psf_params::Vector{Vector{Float64}})
     K = length(initial_psf_params)
     @assert K == psf_optimizer.K
     optim_result = fit_psf(psf_optimizer, raw_psf, initial_psf_params)
