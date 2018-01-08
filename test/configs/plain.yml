@@ -1,0 +1,7 @@
+datasets:
+    sdss:
+        dirlayout: celeste
+        basedir: data
+        iostrategy: plain
+        compressed: false
+        slurp: false

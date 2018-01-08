@@ -1,0 +1,7 @@
+datasets:
+    sdss:
+        dirlayout: sdss
+        basedir: data
+        iostrategy: masterrpc
+        compressed: true
+        slurp: true

@@ -1,7 +1,7 @@
 ## test the main entry point in Celeste: the `infer` function
 import JLD
 
-import Celeste: Config
+import Celeste: Config, BoundingBox
 using Celeste.SDSSIO
 using Celeste.ParallelRun
 import Celeste.ParallelRun: OptimizedSource
@@ -29,41 +29,36 @@ function compute_obj_value(images::Vector{<:Image},
 end
 
 @testset "infer" begin
-    @testset "infer_box() runs" begin
+    @testset "infer_box(...; method = :single_vi) runs" begin
         # very small patch of sky that turns out to have 4 sources.
         # We checked that this patch is in the given field.
-        box = ParallelRun.BoundingBox(164.39, 164.41, 39.11, 39.13)
+        box = BoundingBox(164.39, 164.41, 39.11, 39.13)
         images = SampleData.get_sdss_images(3900, 6, 269)
-        result = ParallelRun.infer_box(images, box; method=:single, do_vi=true)
+        result = ParallelRun.infer_box(images, box; method=:single_vi)
     end
 
-    @testset "infer_box(..., do_vi=false) runs" begin
+    @testset "infer_box(...; method = :mcmc) runs" begin
         # very small patch of sky that turns out to have 4 sources.
         # We checked that this patch is in the given field.
-        box = ParallelRun.BoundingBox(164.39, 164.41, 39.11, 39.13)
+        box = BoundingBox(164.39, 164.41, 39.11, 39.13)
         images = SampleData.get_sdss_images(3900, 6, 269)
-        result = ParallelRun.infer_box(images, box; method=:single, do_vi=false,
-                                       config=Config(2.0, 3, 2))
-    end
-
-    @testset "infer_box with directories runs" begin
-        box = ParallelRun.BoundingBox("164.39", "164.41", "39.11", "39.13")
-        rcfs = [RunCamcolField(3900, 6, 269)]
-        datadir = SampleData.DATADIR
-        ParallelRun.infer_box(box, datadir, datadir)
+        result = ParallelRun.infer_box(images, box; method=:mcmc,
+                                       config=Config(2.0, 3, 2, 3))
     end
 
     @testset "joint vs single on overlapping sources" begin
-            images = SampleData.get_sdss_images(4263, 5, 119)
+        images = SampleData.get_sdss_images(4263, 5, 119)
         catalog = SampleData.get_sdss_catalog(4263, 5, 119)
 
         # This box has 3 overlapping objects in it.
         box = BoundingBox(0.467582, 0.473275, 0.588383, 0.595095)
 
-        results_single = ParallelRun.infer_box(images, catalog, box;
-                                               method=:single)
-        results_joint = ParallelRun.infer_box(images, catalog, box;
-                                              method=:joint)
+        results_single = ParallelRun.infer_box(images, box;
+                                               catalog = catalog,
+                                               method=:single_vi)
+        results_joint = ParallelRun.infer_box(images, box;
+                                              catalog = catalog,
+                                              method=:joint_vi)
 
         @test length(results_single) == 3
         @test length(results_joint) == 3

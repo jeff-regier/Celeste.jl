@@ -96,7 +96,7 @@ function run_benchmarks(; test_case_names=String[], joint_inference=false,
         truth_catalog_df = extract_catalog_from_header(header)
         catalog_entries = AccuracyBenchmark.make_initialization_catalog(truth_catalog_df, false)
         target_sources = collect(1:num_sources)
-        config = Config(ACTIVE_PIXELS_MIN_RADIUS_PX)
+        config = Config(min_radius_pix = ACTIVE_PIXELS_MIN_RADIUS_PX)
         patches = Model.get_sky_patches(images, catalog_entries)
         neighbor_map = Dict(i=>Model.find_neighbors(patches, i)
                             for i in target_sources)

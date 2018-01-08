@@ -1,7 +1,0 @@
-io:
-    dataset: sdss
-    dirlayout: celeste
-    basedir: data
-    strategy: fits
-    compressed: false
-    slurp: true

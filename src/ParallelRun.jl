@@ -8,22 +8,16 @@ import JLD
 import WCS
 using DataStructures
 
-import ..Celeste: detect_sources
-import ..Config
+import ..Celeste: detect_sources, BoundingBox, Config
 import ..Log
 using ..Model
-import ..SDSSIO
-import ..SDSSIO: RunCamcolField, IOStrategy, PlainFITSStrategy
 import ..PSF
-import ..SEP
 import ..Coordinates: angular_separation, match_coordinates
 import ..MCMC
 
 using ..DeterministicVI
 using ..DeterministicVI.ConstraintTransforms: ConstraintBatch, DEFAULT_CHUNK
 using ..DeterministicVI.ElboMaximize: ElboConfig, maximize!
-
-export BoundingBox
 
 include("partition.jl")
 
@@ -133,8 +127,6 @@ cyclades_partition - use the cyclades algorithm to partition into non conflictin
 batch_size - size of a single batch of sources for updates
 within_batch_shuffling - whether or not to process sources within a batch randomly
 joint_inference_terminate - whether to terminate once sources seem to be stable
-n_iters - number of iterations to optimize. 1 iteration optimizes a full pass over target
-          sources if optimize_fixed_iters=true.
 
 Returns:
 
@@ -145,7 +137,6 @@ function one_node_joint_infer(catalog, patches, target_sources, neighbor_map,
                               cyclades_partition::Bool=true,
                               batch_size::Int=7000,
                               within_batch_shuffling::Bool=true,
-                              n_iters::Int=3,
                               config=Config())
     # Seed random number generator to ensure the same results per run.
     srand(42)
@@ -183,9 +174,10 @@ function one_node_joint_infer(catalog, patches, target_sources, neighbor_map,
     #process_sources!(images, ea_vec, vp_vec, cfg_vec,
     #                 thread_sources_assignment,
     #                 n_iters, within_batch_shuffling)
+    niters = config.num_joint_vi_iters
     process_sources_dynamic!(images, ea_vec, vp_vec, cfg_vec,
                              batched_connected_components,
-                             n_iters, within_batch_shuffling)
+                             niters, within_batch_shuffling)
 
     # Return add results to vector
     results = OptimizedSource[]
@@ -426,22 +418,6 @@ end
 # In production mode, rather the development mode, always catch exceptions
 const is_production_run = haskey(ENV, "CELESTE_PROD") && ENV["CELESTE_PROD"] != ""
 
-# ------ bounding box ------
-struct BoundingBox
-    ramin::Float64
-    ramax::Float64
-    decmin::Float64
-    decmax::Float64
-end
-
-function BoundingBox(ramin::String, ramax::String, decmin::String, decmax::String)
-    BoundingBox(parse(Float64, ramin),
-                parse(Float64, ramax),
-                parse(Float64, decmin),
-                parse(Float64, decmax))
-end
-
-
 # ------
 # optimization
 
@@ -630,71 +606,10 @@ function one_node_single_infer(catalog::Vector{CatalogEntry},
     return results
 end
 
-"""
-Query the SDSS database for all fields that overlap the given RA, Dec range.
-"""
-function get_overlapping_field_extents(query::BoundingBox, strategy::SDSSIO.IOStrategy)
-    f = SDSSIO.readFITS(strategy, SDSSIO.FieldExtents())
-
-    hdu = f[2]::FITSIO.TableHDU
-
-    # read in the entire table.
-    all_run = read(hdu, "run")::Vector{Int16}
-    all_camcol = read(hdu, "camcol")::Vector{UInt8}
-    all_field = read(hdu, "field")::Vector{Int16}
-    all_ramin = read(hdu, "ramin")::Vector{Float64}
-    all_ramax = read(hdu, "ramax")::Vector{Float64}
-    all_decmin = read(hdu, "decmin")::Vector{Float64}
-    all_decmax = read(hdu, "decmax")::Vector{Float64}
-
-    close(f)
-
-    ret = Tuple{RunCamcolField, BoundingBox}[]
-
-    # The ramin, ramax, etc is a bit unintuitive because we're looking
-    # for any overlap.
-    for i in eachindex(all_ramin)
-        if (all_ramax[i] > query.ramin && all_ramin[i] < query.ramax &&
-                all_decmax[i] > query.decmin && all_decmin[i] < query.decmax)
-            cur_box = BoundingBox(all_ramin[i], all_ramax[i],
-                                  all_decmin[i], all_decmax[i])
-            cur_fe = RunCamcolField(all_run[i], all_camcol[i], all_field[i])
-            push!(ret, (cur_fe, cur_box))
-        end
-    end
-
-    return ret
-end
-get_overlapping_field_extents(query::BoundingBox, stagedir::String) =
-    get_overlapping_field_extents(query, SDSSIO.PlainFITSStrategy(stagedir))
-
-
-"""
-Like `get_overlapping_field_extents()`, but return a Vector of
-(run, camcol, field) triplets.
-"""
-function get_overlapping_fields(query::BoundingBox, stagedir)
-    fes = get_overlapping_field_extents(query, stagedir)
-    [fe[1] for fe in fes]
-end
-
-
-"""
-Save provided results to a JLD file.
-"""
-function save_results(outdir, ramin, ramax, decmin, decmax, results)
-    fname = @sprintf("%s/celeste-%.4f-%.4f-%.4f-%.4f.jld",
-                     outdir, ramin, ramax, decmin, decmax)
-    JLD.save(fname, "results", results)
-end
-
-save_results(outdir, box, results) =
-    save_results(outdir, box.ramin, box.ramax, box.decmin, box.decmax, results)
-
 
 function _infer_box(images::Vector{<:Image}, catalog::Vector{CatalogEntry},
                     patches::Matrix{ImagePatch}, box::BoundingBox;
-                    method=:joint, do_vi=true, n_iters=3, config=Config())
+                    method=:joint_vi, config=Config())
     # Get indices of entries in the RA/Dec range of interest.
     # (Some images can have regions that are outside the box, so not
     # all sources are necessarily in the box.)
@@ -706,13 +621,16 @@ function _infer_box(images::Vector{<:Image}, catalog::Vector{CatalogEntry},
     neighbor_map = Dict(id=>Model.find_neighbors(patches, id)
                         for id in target_ids)
 
-    if method == :joint
+    if method == :joint_vi
         results = one_node_joint_infer(catalog, patches, target_ids,
-                                       neighbor_map, images; n_iters=n_iters,
-                                       config=config)
-    elseif method == :single
+                                       neighbor_map, images; config=config)
+    elseif method == :single_vi
         results = one_node_single_infer(catalog, patches, target_ids,
-                                        neighbor_map, images; do_vi=do_vi,
+                                        neighbor_map, images; do_vi=true,
+                                        config=config)
+    elseif method == :mcmc
+        results = one_node_single_infer(catalog, patches, target_ids,
+                                        neighbor_map, images; do_vi=false,
                                         config=config)
     else
         error("unknown method: $method")
@@ -723,53 +641,34 @@ end
 
 """
     infer_box(images, box; options...)
-    infer_box(images, catalog, box; options...)
 
-In the first form, detect objects in images and run inference on all sources
-within the bounding box. In the second form, run inference on objects in
+Detect objects in images and run inference on all sources
+within the bounding box. If `catalog` is given, run inference on objects in
 `catalog` that fall within the bounding box.
 
-In both forms, objects outside the bounding box (either detected or given)
+Objects outside the bounding box (either detected or given)
 may be used as "neighbors".
 """
 function infer_box(images::Vector{<:Image}, box::BoundingBox;
-                   method=:joint, do_vi=true, n_iters=3, config=Config())
-    catalog, patches = detect_sources(images)
-    return _infer_box(images, catalog, patches, box;
-                      method=method, do_vi=do_vi, n_iters=n_iters,
-                      config=config)
-end
-
-
-function infer_box(images::Vector{<:Image}, catalog::Vector{CatalogEntry},
-                   box::BoundingBox;
-                   method=:joint, do_vi=true, n_iters=3, config=Config())
-    patches = Model.get_sky_patches(images, catalog)
-    return _infer_box(images, catalog, patches, box;
-                      method=method, do_vi=do_vi, n_iters=n_iters,
-                      config=config)
-end
-
-
-# Called from main entry point.
-function infer_box(strategy, box::BoundingBox, outdir::String)
+                   catalog::Union{Void, Vector{CatalogEntry}}=nothing,
+                   method=:joint_vi, config=Config())
+    tic()
     Log.info("processing box $(box.ramin), $(box.ramax), $(box.decmin), ",
              "$(box.decmax) with $(nthreads()) threads")
 
-    # Get vector of (run, camcol, field) triplets overlapping this patch
-    # and load images for them.
-    rcfs = get_overlapping_fields(box, strategy)
-    images = SDSSIO.load_field_images(strategy, rcfs)
+    if catalog === nothing
+        cat, patches = detect_sources(images)
+    else
+        cat = catalog
+        patches = Model.get_sky_patches(images, cat)
+    end
 
-    results = infer_box(images, box)
+    results = _infer_box(images, cat, patches, box;
+                         method=method, config=config)
 
-    save_results(outdir, box, results)
-end
+    Log.info("infer_box for $box took $(toq()) seconds")
 
-
-function infer_box(box::BoundingBox, stagedir::String, outdir::String)
-    strategy = PlainFITSStrategy(stagedir)
-    infer_box(strategy, box, outdir)
+    return results
 end
 
 end

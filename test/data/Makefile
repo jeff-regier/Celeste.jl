@@ -24,10 +24,11 @@ all : $(SUBDIR3)/fpM-$(RUN6)-u$(CAMCOL)-$(FIELD4).fit \
       $(SUBDIR3)/frame-i-$(RUN6)-$(CAMCOL)-$(FIELD4).fits \
       $(SUBDIR3)/frame-z-$(RUN6)-$(CAMCOL)-$(FIELD4).fits \
       $(SUBDIR3)/psField-$(RUN6)-$(CAMCOL)-$(FIELD4).fit \
-      $(SUBDIR3)/photoObj-$(RUN6)-$(CAMCOL)-$(FIELD4).fits \
       $(SUBDIR2)/photoField-$(RUN6)-$(CAMCOL).fits \
-      field_extents.fits
+      field_extents.fits \
+      photoobj
 
+photoobj : $(SUBDIR3)/photoObj-$(RUN6)-$(CAMCOL)-$(FIELD4).fits
 
 field_extents.fits :
 	curl -O http://portal.nersc.gov/project/dasrepo/celeste/field_extents.fits
