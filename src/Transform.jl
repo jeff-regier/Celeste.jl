@@ -19,8 +19,8 @@ export DataTransform, ParamBounds, ParamBox, SimplexBox,
 # A vector of variational parameters.  The outer index is
 # of celestial objects, and the inner index is over individual
 # parameters for that object (referenced using ParamIndex).
-const VariationalParams{NumType <: Number} = Vector{Vector{NumType}}
-const FreeVariationalParams{NumType <: Number} = Vector{Vector{NumType}}
+const VariationalParams{T <: Number} = Vector{Vector{T}}
+const FreeVariationalParams{T <: Number} = Vector{Vector{T}}
 
 #####################################################################################
 # this is essentially a compatibility layer since Model has gotten rid of this code
@@ -83,7 +83,7 @@ Base.length(::Type{UnconstrainedParams}) =  6 + 2*NUM_SOURCE_TYPES + 2*(NUM_BAND
 """
 Unconstrain x in the unit interval to lie in R.
 """
-function inv_logit{NumType <: Number}(x::NumType)
+function inv_logit(x::Number)
     @assert(x >= 0)
     @assert(x <= 1)
     -log(1.0 / x - 1)
@@ -93,7 +93,7 @@ end
 """
 Convert x in R to lie in the unit interval.
 """
-function logit{NumType <: Number}(x::NumType)
+function logit(x::Number)
     1.0 / (1.0 + exp(-x))
 end
 
@@ -102,13 +102,13 @@ end
 Convert an (n - 1)-vector of real numbers to an n-vector on the simplex, where
 the last entry implicitly has the untransformed value 1.
 """
-function constrain_to_simplex{NumType <: Number}(x::Vector{NumType})
+function constrain_to_simplex(x::Vector{T}) where {T<:Number}
     m = maximum(x)
     if m == Inf
         # If more than 1 entry in x is Inf, it may be because the
         # the last entry in z is 0. Here we set all those entries to the
         # same value, though that may not be strictly correct.
-        z   = NumType[ x_entry .== Inf ? one(NumType) : zero(NumType) for x_entry in x]
+        z   = T[ x_entry .== Inf ? one(T) : zero(T) for x_entry in x]
         z ./= sum(z)
         push!(z, 0)
         return z
@@ -126,9 +126,9 @@ end
 Convert an n-vector on the simplex to an (n - 1)-vector in R^{n -1}.  Entries
 are expressed relative to the last element.
 """
-function unconstrain_simplex{NumType <: Number}(z::Vector{NumType})
+function unconstrain_simplex(z::Vector{T}) where {T<:Number}
     n = length(z)
-    NumType[ log(z[i]) - log(z[n]) for i = 1:(n - 1)]
+    T[ log(z[i]) - log(z[n]) for i = 1:(n - 1)]
 end
 
 
@@ -167,7 +167,7 @@ const ParamBounds = Dict{Symbol, Union{Vector{ParamBox}, Vector{SimplexBox}}}
 ###############################################
 # Functions for a "free transform".
 
-function unbox_parameter{NumType <: Number}(param::NumType, pb::ParamBox)
+function unbox_parameter(param::Number, pb::ParamBox)
     positive_constraint = (pb.ub == Inf)
 
     # exp and the logit functions handle infinities correctly, so
@@ -185,8 +185,7 @@ function unbox_parameter{NumType <: Number}(param::NumType, pb::ParamBox)
 end
 
 
-function box_parameter{NumType <: Number}(
-            free_param::NumType, pb::ParamBox)
+function box_parameter(free_param::Number, pb::ParamBox)
     positive_constraint = (pb.ub == Inf)
     if positive_constraint
         return exp(free_param / pb.scale) + pb.lb
@@ -202,14 +201,14 @@ Convert an unconstrained (n-1)-vector to a simplicial n-vector, z, such that
   - z >= sb.lb
 See notes for a derivation and reasoning.
 """
-function simplexify_parameter{NumType <: Number}(
-            free_param::Vector{NumType}, sb::SimplexBox)
+function simplexify_parameter(free_param::Vector{T},
+                              sb::SimplexBox) where {T<:Number}
     @assert length(free_param) == (sb.n - 1)
 
     # Broadcasting doesn't work with DualNumbers and Floats. :(
     # z_sim is on an unconstrained simplex.
-    z_sim = constrain_to_simplex(NumType[ p / sb.scale for p in free_param ])
-    param = NumType[ (1 - sb.n * sb.lb) * p + sb.lb for p in z_sim ]
+    z_sim = constrain_to_simplex(T[ p / sb.scale for p in free_param ])
+    param = T[ (1 - sb.n * sb.lb) * p + sb.lb for p in z_sim ]
 
     param
 end
@@ -219,16 +218,16 @@ end
 Invert the transformation simplexify_parameter() by converting an n-vector
 on a simplex to R^{n - 1}.
 """
-function unsimplexify_parameter{NumType <: Number}(
-            param::Vector{NumType}, sb::SimplexBox)
+function unsimplexify_parameter(param::Vector{T},
+                                sb::SimplexBox) where {T<:Number}
     @assert length(param) == sb.n
     @assert all(param .>= sb.lb)
     @assert(abs(sum(param) - 1) < 1e-14, abs(sum(param) - 1))
 
     # z_sim is on an unconstrained simplex.
     # Broadcasting doesn't work with DualNumbers and Floats. :(
-    z_sim = NumType[ (p - sb.lb) / (1 - sb.n * sb.lb) for p in param ]
-    free_param = NumType[ p * sb.scale for p in unconstrain_simplex(z_sim) ]
+    z_sim = T[ (p - sb.lb) / (1 - sb.n * sb.lb) for p in param ]
+    free_param = T[ p * sb.scale for p in unconstrain_simplex(z_sim) ]
 
     free_param
 end
@@ -251,12 +250,12 @@ Returns:
   - hessian_vec: An n-length vector of the hessian of each simplex output
                  parameter with respect to the (n-1) free input parameters.
 """
-function simplex_derivatives{NumType <: Number}(z_sim::Vector{NumType})
+function simplex_derivatives(z_sim::Vector{T}) where {T<:Number}
     n = length(z_sim)
-    hessian_vec = Vector{Array{NumType}}(n)
+    hessian_vec = Vector{Array{T}}(n)
 
     for i = 1:n
-        hessian_vec[i] = Matrix{NumType}(n - 1, n - 1)
+        hessian_vec[i] = Matrix{T}(n - 1, n - 1)
         for j=1:(n - 1), k=1:(n - 1)
             if j != k
                 if (j == i)
@@ -277,7 +276,7 @@ function simplex_derivatives{NumType <: Number}(z_sim::Vector{NumType})
     end
 
     jacobian =
-        NumType[ z_sim[i] * (i == j) - z_sim[i] * z_sim[j] for i=1:n, j=1:(n - 1) ]
+        T[ z_sim[i] * (i == j) - z_sim[i] * z_sim[j] for i=1:n, j=1:(n - 1) ]
 
     jacobian, hessian_vec
 end
@@ -293,14 +292,14 @@ Args:
                      the derivative of the function unconstrained -> constrained)
     - sb: A box simplex constraint
 """
-function box_simplex_derivatives{NumType <: Number}(
-    param::Vector{NumType}, sb::SimplexBox)
+function box_simplex_derivatives(param::Vector{T},
+                                 sb::SimplexBox) where {T<:Number}
 
     @assert length(param) == sb.n
 
     # z_sim is on an unconstrained simplex.
     # Broadcasting doesn't work with DualNumbers and Floats. :(
-    z_sim = NumType[ (p - sb.lb) / (1 - sb.n * sb.lb) for p in param ]
+    z_sim = T[ (p - sb.lb) / (1 - sb.n * sb.lb) for p in param ]
 
     jacobian, hessian_vec = simplex_derivatives(z_sim)
     for i in 1:sb.n
@@ -322,7 +321,7 @@ Args:
                      the derivative of the function unconstrained -> constrained)
     - pb: A box constraint
 """
-function box_derivatives{NumType <: Number}(param::NumType, pb::ParamBox)
+function box_derivatives(param::Number, pb::ParamBox)
     if pb.ub == Inf
         centered_param = param - pb.lb
         return pb.scale * centered_param, pb.scale ^ 2 * centered_param
@@ -345,23 +344,21 @@ Members:
   d2param_dfree2: A vector of hessians.  Each element is the Hessian of one
                   component of the aforementioned f()
 """
-struct TransformDerivatives{NumType <: Number}
-    dparam_dfree::Matrix{NumType}
-    d2param_dfree2::Vector{Matrix{NumType}}
+struct TransformDerivatives{T<:Number}
+    dparam_dfree::Matrix{T}
+    d2param_dfree2::Vector{Matrix{T}}
     Sa::Int
 
     # TODO: use sparse matrices?
-    function (::Type{TransformDerivatives{NumType}}){NumType}(Sa::Int)
+    function TransformDerivatives{T}(Sa::Int) where {T<:Number}
         dparam_dfree =
-            zeros(NumType,
-                        Sa * length(CanonicalParams), Sa * length(UnconstrainedParams))
-        d2param_dfree2 = Vector{Matrix{NumType}}(Sa * length(CanonicalParams))
+            zeros(T, Sa * length(CanonicalParams), Sa * length(UnconstrainedParams))
+        d2param_dfree2 = Vector{Matrix{T}}(Sa * length(CanonicalParams))
         for i in 1:(Sa * length(CanonicalParams))
             d2param_dfree2[i] =
-                zeros(NumType,
-                            Sa * length(UnconstrainedParams), Sa * length(UnconstrainedParams))
+                zeros(T, Sa * length(UnconstrainedParams), Sa * length(UnconstrainedParams))
         end
-        new{NumType}(dparam_dfree, d2param_dfree2, Sa)
+        new(dparam_dfree, d2param_dfree2, Sa)
     end
 end
 
@@ -377,68 +374,67 @@ Args:
 Returns:
   Update transform_derivatives in place.
 """
-function get_transform_derivatives!{NumType <: Number}(
-                            vp::VariationalParams{NumType},
-                            active_sources::Vector{Int},
-                            bounds::Vector{ParamBounds},
-                            transform_derivatives::TransformDerivatives)
+function get_transform_derivatives!(
+        vp::VariationalParams,
+        active_sources::Vector{Int},
+        bounds::Vector{ParamBounds},
+        transform_derivatives::TransformDerivatives)
 
-  @assert transform_derivatives.Sa == length(active_sources)
+    @assert transform_derivatives.Sa == length(active_sources)
 
-  for param in fieldnames(ids), sa = 1:length(active_sources)
-    s = active_sources[sa]
-      constraint_vec = bounds[sa][param]
+    for param in fieldnames(ids), sa = 1:length(active_sources)
+        s = active_sources[sa]
+        constraint_vec = bounds[sa][param]
 
-      if isa(constraint_vec[1], ParamBox) # It is a box constraint
-          @assert(length(constraint_vec) == length(getfield(ids_free, param)) ==
-        length(getfield(ids, param)))
+        if isa(constraint_vec[1], ParamBox) # It is a box constraint
+            @assert(length(constraint_vec) ==
+                    length(getfield(ids_free, param)) ==
+                    length(getfield(ids, param)))
 
-          # Get each components' derivatives one by one.
-          for ind = 1:length(constraint_vec)
-              @assert isa(constraint_vec[ind], ParamBox)
-              vp_ind = getfield(ids, param)[ind]
-              vp_free_ind = getfield(ids_free, param)[ind]
+            # Get each components' derivatives one by one.
+            for ind = 1:length(constraint_vec)
+                @assert isa(constraint_vec[ind], ParamBox)
+                vp_ind = getfield(ids, param)[ind]
+                vp_free_ind = getfield(ids_free, param)[ind]
 
-              jac, hess = box_derivatives(vp[s][vp_ind], constraint_vec[ind])
+                jac, hess = box_derivatives(vp[s][vp_ind], constraint_vec[ind])
 
-              vp_sf_ind = length(CanonicalParams) * (sa - 1) + vp_ind
-              vp_free_sf_ind = length(UnconstrainedParams) * (sa - 1) + vp_free_ind
+                vp_sf_ind = length(CanonicalParams) * (sa - 1) + vp_ind
+                vp_free_sf_ind = length(UnconstrainedParams) * (sa - 1) + vp_free_ind
 
-              transform_derivatives.dparam_dfree[vp_sf_ind, vp_free_sf_ind] = jac
-              transform_derivatives.d2param_dfree2[
-                  vp_sf_ind][vp_free_sf_ind, vp_free_sf_ind] = hess
-          end
-      else # It is a simplex constraint
+                transform_derivatives.dparam_dfree[vp_sf_ind, vp_free_sf_ind] = jac
+                transform_derivatives.d2param_dfree2[vp_sf_ind][vp_free_sf_ind, vp_free_sf_ind] = hess
+            end
+        else # It is a simplex constraint
 
-          # If a param is not a box constraint, it must have all simplex constraints.
-          @assert all([ isa(constraint, SimplexBox)  for constraint in constraint_vec])
+            # If a param is not a box constraint, it must have all simplex constraints.
+            @assert all([ isa(constraint, SimplexBox)  for constraint in constraint_vec])
 
-          param_size = size(getfield(ids, param))
-          @assert length(constraint_vec) == param_size[2]
-          for col=1:(param_size[2])
-              vp_free_ind = getfield(ids_free, param)[:, col]
-              vp_ind = getfield(ids, param)[:, col]
-              vp_sf_ind = length(CanonicalParams) * (sa - 1) + vp_ind
-              vp_free_sf_ind = length(UnconstrainedParams) * (sa - 1) + vp_free_ind
+            param_size = size(getfield(ids, param))
+            @assert length(constraint_vec) == param_size[2]
+            for col=1:(param_size[2])
+                vp_free_ind = getfield(ids_free, param)[:, col]
+                vp_ind = getfield(ids, param)[:, col]
+                vp_sf_ind = length(CanonicalParams) * (sa - 1) + vp_ind
+                vp_free_sf_ind = length(UnconstrainedParams) * (sa - 1) + vp_free_ind
 
-              jac, hess = Transform.box_simplex_derivatives(
-                  vp[s][vp_ind], constraint_vec[col])
+                jac, hess = Transform.box_simplex_derivatives(
+                    vp[s][vp_ind], constraint_vec[col])
 
-              transform_derivatives.dparam_dfree[vp_sf_ind, vp_free_sf_ind] = jac
-              for row in 1:(param_size[1])
-                  transform_derivatives.d2param_dfree2[
-                      vp_sf_ind[row]][vp_free_sf_ind, vp_free_sf_ind] = hess[row]
-              end
-          end
-      end
-  end
+                transform_derivatives.dparam_dfree[vp_sf_ind, vp_free_sf_ind] = jac
+                for row in 1:(param_size[1])
+                    transform_derivatives.d2param_dfree2[
+                         vp_sf_ind[row]][vp_free_sf_ind, vp_free_sf_ind] = hess[row]
+                end
+            end
+        end
+    end
 end
 
 
-function get_transform_derivatives{NumType <: Number}(
-                                vp::VariationalParams{NumType},
-                                active_sources::Vector{Int},
-                                bounds::Vector{ParamBounds})
+function get_transform_derivatives(vp::VariationalParams,
+                                   active_sources::Vector{Int},
+                                   bounds::Vector{ParamBounds})
   transform_derivatives =
     TransformDerivatives{Float64}(length(active_sources))
   get_transform_derivatives!(vp, active_sources, bounds, transform_derivatives)
@@ -463,9 +459,10 @@ Returns:
   If to_unconstrained is true, updates vp_free in place.
   If to_unconstrained is false, updates vp in place.
 """
-function perform_transform!{NumType <: Number}(
-            vp::Vector{NumType}, vp_free::Vector{NumType}, bounds::ParamBounds,
-            to_unconstrained::Bool)
+function perform_transform!(vp::Vector{T},
+                            vp_free::Vector{T},
+                            bounds::ParamBounds,
+                            to_unconstrained::Bool) where {T<:Number}
     for (param, constraint_vec) in bounds
         is_box = isa(bounds[param], Array{ParamBox})
         if is_box
@@ -501,14 +498,16 @@ function perform_transform!{NumType <: Number}(
 end
 
 
-function free_to_vp!{NumType <: Number}(
-        vp_free::Vector{NumType}, vp::Vector{NumType}, bounds::ParamBounds)
+function free_to_vp!(vp_free::Vector{T},
+                     vp::Vector{T},
+                     bounds::ParamBounds) where {T<:Number}
     perform_transform!(vp, vp_free, bounds, false)
 end
 
 
-function vp_to_free!{NumType <: Number}(
-        vp::Vector{NumType}, vp_free::Vector{NumType}, bounds::ParamBounds)
+function vp_to_free!(vp::Vector{T},
+                     vp_free::Vector{T},
+                     bounds::ParamBounds) where {T<:Number}
     perform_transform!(vp, vp_free, bounds, true)
 end
 
@@ -526,13 +525,13 @@ Args:
 There is probably no use for this function, since you'll only be passing
 trasformations to the optimizer, but I'll include it for completeness.
 """
-function free_vp_to_array{NumType <: Number}(vp::FreeVariationalParams{NumType},
-                                             omitted_ids::Vector{Int})
+function free_vp_to_array(vp::FreeVariationalParams{T},
+                          omitted_ids::Vector{Int}) where {T<:Number}
 
     left_ids = setdiff(1:length(UnconstrainedParams), omitted_ids)
     new_P = length(left_ids)
     S = length(vp)
-    x_new = zeros(NumType, new_P, S)
+    x_new = zeros(T, new_P, S)
 
     for p1 in 1:length(left_ids), s=1:S
         p0 = left_ids[p1]
@@ -555,8 +554,9 @@ Args:
 Returns:
  - Update vp_free in place.
 """
-function array_to_free_vp!{T}(xs::Array{T}, vp_free::FreeVariationalParams{T},
-                              kept_ids::Vector{Int})
+function array_to_free_vp!(xs::Array{T},
+                           vp_free::FreeVariationalParams{T},
+                           kept_ids::Vector{Int}) where {T}
     for s in 1:length(vp_free), p1 in 1:length(kept_ids)
         vp_free[s][kept_ids[p1]] = xs[p1, s]
     end
@@ -604,7 +604,9 @@ struct DataTransform
     end
 end
 
-function from_vp!{T}(dt::DataTransform, vp::VariationalParams{T}, vp_free::VariationalParams{T})
+function from_vp!(dt::DataTransform,
+                  vp::VariationalParams{T},
+                  vp_free::VariationalParams{T}) where {T}
     active_sources = dt.active_sources
     bounds = dt.bounds
     for i in eachindex(active_sources)
@@ -613,7 +615,9 @@ function from_vp!{T}(dt::DataTransform, vp::VariationalParams{T}, vp_free::Varia
     return nothing
 end
 
-function to_vp!{T<:Number}(dt::DataTransform, vp_free::FreeVariationalParams{T}, vp::VariationalParams{T})
+function to_vp!(dt::DataTransform,
+                vp_free::FreeVariationalParams{T},
+                vp::VariationalParams{T}) where {T<:Number}
     active_sources = dt.active_sources
     bounds = dt.bounds
     for i in eachindex(active_sources)
@@ -622,13 +626,14 @@ function to_vp!{T<:Number}(dt::DataTransform, vp_free::FreeVariationalParams{T},
     return nothing
 end
 
-function from_vp{T}(dt::DataTransform, vp::VariationalParams{T})
+function from_vp(dt::DataTransform,
+                 vp::VariationalParams{T}) where {T}
     vp_free = [zeros(T, length(ids_free)) for _ in 1:length(dt.active_sources)]
     from_vp!(dt, vp, vp_free)
     vp_free
 end
 
-function to_vp{T}(dt::DataTransform, vp_free::FreeVariationalParams{T})
+function to_vp(dt::DataTransform, vp_free::FreeVariationalParams{T}) where {T}
     n_active_sources = length(dt.active_sources)
     @assert(n_active_sources == dt.S,
             string("to_vp is not supported when active_sources is a ",
@@ -638,13 +643,17 @@ function to_vp{T}(dt::DataTransform, vp_free::FreeVariationalParams{T})
     vp
 end
 
-function vp_to_array{T}(dt::DataTransform, vp::VariationalParams{T}, omitted_ids::Vector{Int})
+function vp_to_array(dt::DataTransform,
+                     vp::VariationalParams{T},
+                     omitted_ids::Vector{Int}) where {T}
     vp_trans = from_vp(dt, vp)
     free_vp_to_array(vp_trans, omitted_ids)
 end
 
-function array_to_vp!{T}(dt::DataTransform, xs::Array{T}, vp::VariationalParams{T},
-                         kept_ids::Vector{Int})
+function array_to_vp!(dt::DataTransform,
+                      xs::Array{T},
+                      vp::VariationalParams{T},
+                      kept_ids::Vector{Int}) where {T}
     # This needs to update vp in place so that variables in omitted_ids
     # stay at their original values.
     vp_trans = from_vp(dt, vp)
@@ -659,11 +668,11 @@ end
 #
 # Note that all the other functions in DeterministicVI calculated derivatives with
 # respect to the constrained parameterization.
-function transform_sensitive_float!{T}(dt::DataTransform,
-                                       sf_free::SensitiveFloat,
-                                       sf::SensitiveFloat,
-                                       vp::VariationalParams{T},
-                                       active_sources::Vector{Int})
+function transform_sensitive_float!(dt::DataTransform,
+                                    sf_free::SensitiveFloat,
+                                    sf::SensitiveFloat,
+                                    vp::VariationalParams{T},
+                                    active_sources::Vector{Int}) where {T}
 
     if isnan(sf.v[])
        error("sf has NaN value:", sf_free.v[])
@@ -726,11 +735,10 @@ function symmetrize!(A, c = 0.5)
     return A
 end
 
-function get_mp_transform{NumType <: Number}(
-                          vp::VariationalParams{NumType},
+function get_mp_transform(vp::VariationalParams{T},
                           active_sources::Vector{Int};
                           loc_scale=1.0,
-                          loc_width=1e-4)
+                          loc_width=1e-4) where {T<:Number}
     bounds = Vector{ParamBounds}(length(active_sources))
 
     # Note that, for numerical reasons, the bounds must be on the scale
@@ -779,10 +787,9 @@ Put the variational parameters within the bounds of the transform.
 Returns:
   Updates vp in place.
 """
-function enforce_bounds!{NumType <: Number}(
-                        vp::VariationalParams{NumType},
-                        active_sources::Vector{Int},
-                        transform::DataTransform)
+function enforce_bounds!(vp::VariationalParams{T},
+                         active_sources::Vector{Int},
+                         transform::DataTransform) where {T<:Number}
     for sa in eachindex(transform.active_sources), (param, constraint_vec) in transform.bounds[sa]
         s = active_sources[sa]
         is_box = isa(constraint_vec, Array{ParamBox})
@@ -807,7 +814,7 @@ function enforce_bounds!{NumType <: Number}(
             param_size = size(getfield(ids, param))
             for col in 1:param_size[2]
                 constraint = constraint_vec[col]
-                param_sum = zero(NumType)
+                param_sum = zero(T)
                 for row in 1:param_size[1]
                     if !(constraint.lb <= vp[s][getfield(ids, param)[row, col]] <= 1.0)
                         # Don't set the value to exactly the lower bound to avoid Inf

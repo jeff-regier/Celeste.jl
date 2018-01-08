@@ -15,18 +15,18 @@ and all other rows are lognormal offsets.
   squared color terms.  The rows are bands, and the columns
   are star / galaxy.
 """
-struct SourceBrightness{NumType <: Number}
+struct SourceBrightness{T<:Number}
     # [E[l|a=0], E[l]|a=1]]
-    E_l_a::Matrix{SensitiveFloat{NumType}}
+    E_l_a::Matrix{SensitiveFloat{T}}
 
     # [E[l^2|a=0], E[l^2]|a=1]]
-    E_ll_a::Matrix{SensitiveFloat{NumType}}
+    E_ll_a::Matrix{SensitiveFloat{T}}
 end
 
 
-function SourceBrightness{NumType <: Number}(vs::Vector{NumType};
-                                             calculate_gradient=true,
-                                             calculate_hessian=true)
+function SourceBrightness(vs::Vector{T};
+                          calculate_gradient=true,
+                          calculate_hessian=true) where {T<:Number}
     flux_loc = vs[ids.flux_loc]
     flux_scale = vs[ids.flux_scale]
     color_mean = vs[ids.color_mean]
@@ -34,12 +34,12 @@ function SourceBrightness{NumType <: Number}(vs::Vector{NumType};
 
     # E_l_a has a row for each of the five colors and columns
     # for star / galaxy.
-    E_l_a  = Matrix{SensitiveFloat{NumType}}(NUM_BANDS, NUM_SOURCE_TYPES)
-    E_ll_a = Matrix{SensitiveFloat{NumType}}(NUM_BANDS, NUM_SOURCE_TYPES)
+    E_l_a  = Matrix{SensitiveFloat{T}}(NUM_BANDS, NUM_SOURCE_TYPES)
+    E_ll_a = Matrix{SensitiveFloat{T}}(NUM_BANDS, NUM_SOURCE_TYPES)
 
     for i = 1:NUM_SOURCE_TYPES
         for b = 1:NUM_BANDS
-            E_l_a[b, i] = SensitiveFloat{NumType}(length(BrightnessParams), 1,
+            E_l_a[b, i] = SensitiveFloat{T}(length(BrightnessParams), 1,
                                        calculate_gradient, calculate_hessian)
         end
 
@@ -116,7 +116,7 @@ function SourceBrightness{NumType <: Number}(vs::Vector{NumType};
         # Squared terms.
 
         for b = 1:NUM_BANDS
-            E_ll_a[b, i] = SensitiveFloat{NumType}(length(BrightnessParams), 1,
+            E_ll_a[b, i] = SensitiveFloat{T}(length(BrightnessParams), 1,
                                            calculate_gradient, calculate_hessian)
         end
 
@@ -198,7 +198,7 @@ function SourceBrightness{NumType <: Number}(vs::Vector{NumType};
         end # calculate_gradient
     end
 
-    SourceBrightness(E_l_a, E_ll_a)
+    SourceBrightness{T}(E_l_a, E_ll_a)
 end
 
 
@@ -210,12 +210,12 @@ Returns:
   - An array of SourceBrightness objects for each object in 1:ea.S.  Only
     sources in ea.active_sources will have derivative information.
 """
-function load_source_brightnesses{NumType <: Number}(
-                    ea::ElboArgs,
-                    vp::VariationalParams{NumType};
-                    calculate_gradient::Bool=true,
-                    calculate_hessian::Bool=true)
-    sbs = Vector{SourceBrightness{NumType}}(ea.S)
+function load_source_brightnesses(
+        ea::ElboArgs,
+        vp::VariationalParams{T};
+        calculate_gradient::Bool=true,
+        calculate_hessian::Bool=true) where {T<:Number}
+    sbs = Vector{SourceBrightness{T}}(ea.S)
 
     for s in 1:ea.S
         this_deriv = (s in ea.active_sources) && calculate_gradient

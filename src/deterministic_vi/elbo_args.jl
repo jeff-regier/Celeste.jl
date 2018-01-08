@@ -2,9 +2,9 @@
 Store pre-allocated memory in this data structures, which contains
 intermediate values used in the ELBO calculation.
 """
-struct HessianSubmatrices{NumType <: Number}
-    u_u::Matrix{NumType}
-    shape_shape::Matrix{NumType}
+struct HessianSubmatrices{T<:Number}
+    u_u::Matrix{T}
+    shape_shape::Matrix{T}
 end
 
 
@@ -13,51 +13,51 @@ Pre-allocated memory for efficiently accumulating certain sub-matrices
 of the E_G_s and E_G2_s Hessian.
 
 Args:
-    NumType: The numeric type of the hessian.
+    T: The numeric type of the hessian.
     i: The type of celestial source, from 1:NUM_SOURCE_TYPES
 """
-function HessianSubmatrices(NumType::DataType, i::Int)
+function HessianSubmatrices(::Type{T}, i::Int) where {T}
     @assert 1 <= i <= NUM_SOURCE_TYPES
     shape_p = length(shape_standard_alignment[i])
 
-    u_u = zeros(NumType, 2, 2)
-    shape_shape = zeros(NumType, shape_p, shape_p)
-    HessianSubmatrices{NumType}(u_u, shape_shape)
+    u_u = zeros(T, 2, 2)
+    shape_shape = zeros(T, shape_p, shape_p)
+    HessianSubmatrices{T}(u_u, shape_shape)
 end
 
 
-struct ElboIntermediateVariables{NumType <: Number}
+struct ElboIntermediateVariables{T<:Number}
     # Vectors of star and galaxy bvn quantities from all sources for a pixel.
     # The vector has one element for each active source, in the same order
     # as ea.active_sources.
 
-    fs0m::SensitiveFloat{NumType}
-    fs1m::SensitiveFloat{NumType}
+    fs0m::SensitiveFloat{T}
+    fs1m::SensitiveFloat{T}
 
     # Brightness values for a single source
-    E_G_s::SensitiveFloat{NumType}
-    E_G2_s::SensitiveFloat{NumType}
-    var_G_s::SensitiveFloat{NumType}
+    E_G_s::SensitiveFloat{T}
+    E_G2_s::SensitiveFloat{T}
+    var_G_s::SensitiveFloat{T}
 
     # Subsets of the Hessian of E_G_s and E_G2_s that allow us to use BLAS
     # functions to accumulate Hessian terms. There is one submatrix for
     # each celestial object type in 1:NUM_SOURCE_TYPES
-    E_G_s_hsub_vec::Vector{HessianSubmatrices{NumType}}
-    E_G2_s_hsub_vec::Vector{HessianSubmatrices{NumType}}
+    E_G_s_hsub_vec::Vector{HessianSubmatrices{T}}
+    E_G2_s_hsub_vec::Vector{HessianSubmatrices{T}}
 
     # Expected pixel intensity and variance for a pixel from all sources.
-    E_G::SensitiveFloat{NumType}
-    var_G::SensitiveFloat{NumType}
+    E_G::SensitiveFloat{T}
+    var_G::SensitiveFloat{T}
 
     # Pre-allocated memory for the gradient and Hessian of combine functions.
-    combine_grad::Vector{NumType}
-    combine_hess::Matrix{NumType}
+    combine_grad::Vector{T}
+    combine_hess::Matrix{T}
 
     # A placeholder for the log term in the ELBO.
-    elbo_log_term::SensitiveFloat{NumType}
+    elbo_log_term::SensitiveFloat{T}
 
     # The ELBO itself.
-    elbo::SensitiveFloat{NumType}
+    elbo::SensitiveFloat{T}
 
     active_pixel_counter::Ref{Int64}
     inactive_pixel_counter::Ref{Int64}
@@ -72,45 +72,46 @@ Args:
                 calculate_gradient = false, then hessians will not be
                 calculated irrespective of the value of calculate_hessian.
 """
-function ElboIntermediateVariables(NumType::DataType,
-                                   num_active_sources::Int,
-                                   calculate_gradient::Bool=true,
-                                   calculate_hessian::Bool=true)
-    @assert NumType <: Number
+function ElboIntermediateVariables(
+        ::Type{T},
+        num_active_sources::Int,
+        calculate_gradient::Bool=true,
+        calculate_hessian::Bool=true) where {T<:Number}
 
     # fs0m and fs1m accumulate contributions from all bvn components
     # for a given source.
-    fs0m = SensitiveFloat{NumType}(length(StarPosParams), 1,
-                                calculate_gradient, calculate_hessian)
-    fs1m = SensitiveFloat{NumType}(length(GalaxyPosParams), 1,
-                                calculate_gradient, calculate_hessian)
+    fs0m = SensitiveFloat{T}(length(StarPosParams), 1,
+                             calculate_gradient, calculate_hessian)
+    fs1m = SensitiveFloat{T}(length(GalaxyPosParams), 1,
+                             calculate_gradient, calculate_hessian)
 
-    E_G_s = SensitiveFloat{NumType}(length(CanonicalParams), 1,
-                                    calculate_gradient, calculate_hessian)
+    E_G_s = SensitiveFloat{T}(length(CanonicalParams), 1,
+                              calculate_gradient, calculate_hessian)
     E_G2_s = SensitiveFloat(E_G_s)
     var_G_s = SensitiveFloat(E_G_s)
 
     E_G_s_hsub_vec =
-        HessianSubmatrices{NumType}[ HessianSubmatrices(NumType, i) for i=1:NUM_SOURCE_TYPES ]
+        HessianSubmatrices{T}[ HessianSubmatrices(T, i) for i=1:NUM_SOURCE_TYPES ]
     E_G2_s_hsub_vec =
-        HessianSubmatrices{NumType}[ HessianSubmatrices(NumType, i) for i=1:NUM_SOURCE_TYPES ]
+        HessianSubmatrices{T}[ HessianSubmatrices(T, i) for i=1:NUM_SOURCE_TYPES ]
 
-    E_G = SensitiveFloat{NumType}(length(CanonicalParams), num_active_sources,
-                                  calculate_gradient, calculate_hessian)
+    E_G = SensitiveFloat{T}(length(CanonicalParams), num_active_sources,
+                            calculate_gradient, calculate_hessian)
     var_G = SensitiveFloat(E_G)
 
-    combine_grad = zeros(NumType, 2)
-    combine_hess = zeros(NumType, 2, 2)
+    combine_grad = zeros(T, 2)
+    combine_hess = zeros(T, 2, 2)
 
     elbo_log_term = SensitiveFloat(E_G)
     elbo = SensitiveFloat(E_G)
 
-    ElboIntermediateVariables{NumType}(
+    ElboIntermediateVariables{T}(
         fs0m, fs1m,
         E_G_s, E_G2_s, var_G_s, E_G_s_hsub_vec, E_G2_s_hsub_vec,
         E_G, var_G, combine_grad, combine_hess,
         elbo_log_term, elbo, 0, 0)
 end
+
 
 function zero!(elbo_vars::ElboIntermediateVariables{T}) where {T<:Number}
     SensitiveFloats.zero!(elbo_vars.fs0m)
@@ -141,7 +142,7 @@ end
 If Infs/NaNs have crept into the ELBO evaluation (a symptom of poorly conditioned optimization),
 this helps catch them immediately.
 """
-function assert_all_finite{NumType <: Number}(sf::SensitiveFloat{NumType})
+function assert_all_finite(sf::SensitiveFloat{T}) where {T<:Number}
     @assert isfinite(sf.v[]) "Value is Inf/NaNs"
     @assert all(isfinite, sf.d) "Gradient contains Inf/NaNs"
     @assert all(isfinite, sf.h) "Hessian contains Inf/NaNs"

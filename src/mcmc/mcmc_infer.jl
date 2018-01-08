@@ -56,8 +56,8 @@ function run_ais(entry::CatalogEntry,
     lnZ  = res_star[:lnZ]
     lnZs = res_star[:lnZ_bootstrap]
     lo, hi = percentile(lnZs, 2.5), percentile(lnZs, 97.5)
-    Log.info(@sprintf "STAR AIS estimate : %2.4f [%2.3f, %2.3f]\n" lnZ lo hi)
-    Log.info(@sprintf "  CI width : %2.5f \n" (hi-lo))
+    Log.info(@sprintf "STAR AIS estimate : %6.3f [%6.3f, %6.3f]\n" lnZ lo hi)
+    Log.info(@sprintf "  CI width : %6.5f \n" (hi-lo))
 
     ####################
     # run galaxy AIS   #
@@ -91,8 +91,8 @@ function run_ais(entry::CatalogEntry,
     lnZ = res_gal[:lnZ]
     lnZs = res_gal[:lnZ_bootstrap]
     lo, hi = percentile(lnZs, 2.5), percentile(lnZs, 97.5)
-    Log.info(@sprintf "GAL AIS estimate : %2.4f [%2.3f, %2.3f]\n" lnZ lo hi)
-    Log.info(@sprintf "  CI width : %2.5f \n" (hi-lo))
+    Log.info(@sprintf "GAL AIS estimate : %6.3f [%6.3f, %6.3f]\n" lnZ lo hi)
+    Log.info(@sprintf "  CI width : %6.5f \n" (hi-lo))
 
     #########################################################
     # Compute prob star vs gal based on marginal likelihood #

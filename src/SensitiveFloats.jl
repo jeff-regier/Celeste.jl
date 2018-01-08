@@ -20,15 +20,15 @@ Attributes:
       in the same format as d.  This is used for the full Hessian
       with respect to all the sources.
 """
-struct SensitiveFloat{NumType}
-    v::Base.RefValue{NumType}
+struct SensitiveFloat{T}
+    v::Base.RefValue{T}
 
     # local_P x local_S matrix of gradients
-    d::Matrix{NumType}
+    d::Matrix{T}
 
     # h is ordered so that p changes fastest.  For example, the indices
     # of a column of h correspond to the indices of d's stacked columns.
-    h::Matrix{NumType}
+    h::Matrix{T}
 
     local_P::Int64
     local_S::Int64
@@ -36,13 +36,13 @@ struct SensitiveFloat{NumType}
     has_gradient::Bool
     has_hessian::Bool
 
-    function (::Type{SensitiveFloat{NumType}}){NumType}(local_P, local_S, has_gradient, has_hessian)
+    function SensitiveFloat{T}(local_P, local_S, has_gradient, has_hessian) where {T}
         @assert has_gradient || !has_hessian
-        v = Ref(zero(NumType))
-        d = zeros(NumType, local_P * has_gradient, local_S * has_gradient)
+        v = Ref(zero(T))
+        d = zeros(T, local_P * has_gradient, local_S * has_gradient)
         h_dim = local_P * local_S * has_hessian
-        h = zeros(NumType, h_dim, h_dim)
-        new{NumType}(v, d, h, local_P, local_S, has_gradient, has_hessian)
+        h = zeros(T, h_dim, h_dim)
+        new(v, d, h, local_P, local_S, has_gradient, has_hessian)
     end
 end
 
@@ -52,11 +52,11 @@ function SensitiveFloat(local_P::Int64, local_S::Int64,
     return SensitiveFloat{Float64}(local_P, local_S, has_gradient, has_hessian)
 end
 
-function SensitiveFloat{NumType <: Number}(prototype_sf::SensitiveFloat{NumType})
-    SensitiveFloat{NumType}(prototype_sf.local_P,
-                            prototype_sf.local_S,
-                            prototype_sf.has_gradient,
-                            prototype_sf.has_hessian)
+function SensitiveFloat(prototype_sf::SensitiveFloat{T}) where {T}
+    SensitiveFloat{T}(prototype_sf.local_P,
+                      prototype_sf.local_S,
+                      prototype_sf.has_gradient,
+                      prototype_sf.has_hessian)
 end
 
 #########################################################
@@ -64,18 +64,17 @@ end
 """
 Set a SensitiveFloat's hessian term, maintaining symmetry.
 """
-function set_hess!{NumType <: Number}(
-                    sf::SensitiveFloat{NumType},
-                    i::Int,
-                    j::Int,
-                    v::NumType)
+function set_hess!(sf::SensitiveFloat{T},
+                   i::Int,
+                   j::Int,
+                   v::T) where {T<:Number}
     @assert sf.has_hessian
     # even if i == j, it's probably faster not to branch
     sf.h[i, j] = sf.h[j, i] = v
 end
 
 
-function zero!{T}(m::Array{T})
+function zero!(m::Array{T}) where {T}
     for i in eachindex(m)
         @inbounds m[i] = zero(T)
     end
@@ -97,12 +96,12 @@ end
 """
 Factor out the hessian part of combine_sfs!.
 """
-function combine_sfs_hessian!{T1 <: Number, T2 <: Number, T3 <: Number}(
-            sf1::SensitiveFloat{T1},
-            sf2::SensitiveFloat{T1},
-            sf_result::SensitiveFloat{T1},
-            g_d::Vector{T2},
-            g_h::Matrix{T3})
+function combine_sfs_hessian!(
+        sf1::SensitiveFloat{T1},
+        sf2::SensitiveFloat{T1},
+        sf_result::SensitiveFloat{T1},
+        g_d::Vector{T2},
+        g_h::Matrix{T3}) where {T1<:Number,T2<:Number,T3<:Number}
     p1, p2 = size(sf_result.h)
 
     @assert size(sf_result.d) == size(sf1.d) == size(sf2.d)
@@ -137,13 +136,13 @@ each evaluated at (sf1, sf2).
 The result is stored in sf_result.  The order is done in such a way that
 it can overwrite sf1 or sf2 and still be accurate.
 """
-function combine_sfs!{T1 <: Number, T2 <: Number, T3 <: Number}(
-                        sf1::SensitiveFloat{T1},
-                        sf2::SensitiveFloat{T1},
-                        sf_result::SensitiveFloat{T1},
-                        v::T1,
-                        g_d::Vector{T2},
-                        g_h::Matrix{T3})
+function combine_sfs!(
+        sf1::SensitiveFloat{T1},
+        sf2::SensitiveFloat{T1},
+        sf_result::SensitiveFloat{T1},
+        v::T1,
+        g_d::Vector{T2},
+        g_h::Matrix{T3}) where {T1<:Number,T2<:Number,T3<:Number}
     # You have to do this in the right order to not overwrite needed terms.
     if sf_result.has_hessian
         combine_sfs_hessian!(sf1, sf2, sf_result, g_d, g_h)
@@ -172,10 +171,10 @@ const multiply_sfs_hess = Float64[0 1; 1 0]
 """
 Updates sf1 in place with sf1 * sf2.
 """
-function multiply_sfs!{NumType <: Number}(sf1::SensitiveFloat{NumType},
-                                          sf2::SensitiveFloat{NumType})
+function multiply_sfs!(sf1::SensitiveFloat{T},
+                       sf2::SensitiveFloat{T}) where {T<:Number}
     v = sf1.v[] * sf2.v[]
-    g_d = NumType[sf2.v[], sf1.v[]]
+    g_d = T[sf2.v[], sf1.v[]]
     combine_sfs!(sf1, sf2, sf1, v, g_d, multiply_sfs_hess)
 end
 
@@ -183,10 +182,9 @@ end
 """
 Update sf1 in place with (sf1 + scale * sf2).
 """
-function add_scaled_sfs!{NumType <: Number}(
-                    sf1::SensitiveFloat{NumType},
-                    sf2::SensitiveFloat{NumType},
-                    scale::AbstractFloat)
+function add_scaled_sfs!(sf1::SensitiveFloat{T},
+                         sf2::SensitiveFloat{T},
+                         scale::AbstractFloat) where {T<:Number}
     sf1.v[] += scale * sf2.v[]
 
     @assert sf1.has_gradient == sf2.has_gradient
@@ -214,10 +212,9 @@ end
 Adds sf2_s to sf1, where sf1 is sensitive to multiple sources and sf2_s is only
 sensitive to source s.
 """
-function add_sources_sf!{NumType <: Number}(
-                    sf_all::SensitiveFloat{NumType},
-                    sf_s::SensitiveFloat{NumType},
-                    s::Int)
+function add_sources_sf!(sf_all::SensitiveFloat{T},
+                         sf_s::SensitiveFloat{T},
+                         s::Int) where {T<:Number}
     sf_all.v[] += sf_s.v[]
 
     @assert size(sf_all.d, 1) == size(sf_s.d, 1)
@@ -253,14 +250,14 @@ function add_sources_sf!{NumType <: Number}(
 end
 
 
-function zero_sensitive_float_array(NumType::DataType,
+function zero_sensitive_float_array(::Type{T},
                                     local_P::Int,
                                     local_S::Int,
-                                    d::Integer...)
-    sf_array = Array{SensitiveFloat{NumType}}(d)
+                                    d::Integer...) where {T}
+    sf_array = Array{SensitiveFloat{T}}(d)
     for ind in 1:length(sf_array)
         # Do we always want these arrays to have gradients and hessians?
-        sf_array[ind] = SensitiveFloat{NumType}(local_P, local_S, true, true)
+        sf_array[ind] = SensitiveFloat{T}(local_P, local_S, true, true)
     end
     sf_array
 end

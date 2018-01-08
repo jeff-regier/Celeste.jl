@@ -173,7 +173,7 @@ end
 
 const PARAM_LENGTH = length(CanonicalParams)
 
-function KLHelper{N,T}(::Type{Dual{N,T}})
+function KLHelper(::Type{Dual{N,T}}) where {N,T}
     dual_buffer = zeros(Dual{N,T}, PARAM_LENGTH)
     jacobian_config = JacobianConfig{N}(rand(T, PARAM_LENGTH))
     gradient_tape = CompiledTape{:kl_gradient}(GradientTape(subtract_kl, rand(T, PARAM_LENGTH)))
@@ -211,11 +211,11 @@ function subtract_kl_source!(kl_source::SensitiveFloat, result::DiffBase.DiffRes
     return kl_source
 end
 
-function subtract_kl_all_sources!{T}(ea::ElboArgs,
-                                     vp::VariationalParams{T},
-                                     accum::SensitiveFloat,
-                                     kl_source::SensitiveFloat = get_kl_source(T),
-                                     helper::KLHelper = get_kl_helper(T))
+function subtract_kl_all_sources!(ea::ElboArgs,
+                                  vp::VariationalParams{T},
+                                  accum::SensitiveFloat,
+                                  kl_source::SensitiveFloat = get_kl_source(T),
+                                  helper::KLHelper = get_kl_helper(T)) where {T}
     result = DiffBase.DiffResult(zero(T), kl_source.d)
     for sa in 1:length(ea.active_sources)
         subtract_kl_source!(kl_source, result, vp[ea.active_sources[sa]], helper)

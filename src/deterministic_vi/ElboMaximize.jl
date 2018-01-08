@@ -35,31 +35,34 @@ struct ElboConfig{N,T}
     trust_region::NewtonTrustRegion{T}
 end
 
-function ElboConfig{T}(ea::ElboArgs,
-                   vp::VariationalParams{T},
-                   bound_params::VariationalParams{T} = vp[ea.active_sources];
-                   termination_callback = nothing,
-                   loc_width::Float64 = 1e-4,
-                   loc_scale::Float64 = 1.0,
-                   max_iters::Int = 50,
-                   constraints::ConstraintBatch = elbo_constraints(bound_params, loc_width, loc_scale),
-                   optim_options::Options = elbo_optim_options(max_iters=max_iters,
-                                                               termination_callback=termination_callback),
-                   trust_region::NewtonTrustRegion = elbo_trust_region())
+function ElboConfig(
+    ea::ElboArgs,
+    vp::VariationalParams{T},
+    bound_params::VariationalParams{T} = vp[ea.active_sources];
+    termination_callback = nothing,
+    loc_width::Float64 = 1e-4,
+    loc_scale::Float64 = 1.0,
+    max_iters::Int = 50,
+    constraints::ConstraintBatch = elbo_constraints(bound_params, loc_width, loc_scale),
+    optim_options::Options = elbo_optim_options(max_iters=max_iters,
+                                                termination_callback=termination_callback),
+    trust_region::NewtonTrustRegion = elbo_trust_region()) where {T}
+
     free_params = allocate_free_params(bound_params, constraints)
     free_initial_input = to_flat_vector(free_params)
     free_previous_input = similar(free_initial_input)
     free_result = SensitiveFloat{Float64}(length(free_params[1]), length(bound_params), true, true)
     bvn_bundle = Model.BvnBundle{T}(ea.psf_K, ea.S)
     derivs = TransformDerivatives(bound_params, free_params)
+
     return ElboConfig(bound_params, free_params, free_initial_input,
-                  free_previous_input, free_result, bvn_bundle,
-                  constraints, derivs, optim_options, trust_region)
+                      free_previous_input, free_result, bvn_bundle,
+                      constraints, derivs, optim_options, trust_region)
 end
 
-function elbo_constraints{T}(bound::VariationalParams{T},
-                             loc_width::Real = 1.0e-4,
-                             loc_scale::Real = 1.0)
+function elbo_constraints(bound::VariationalParams{T},
+                          loc_width::Real = 1.0e-4,
+                          loc_scale::Real = 1.0) where {T}
     n_sources = length(bound)
     boxes = Vector{Vector{ParameterConstraint{BoxConstraint}}}(n_sources)
     simplexes = Vector{Vector{ParameterConstraint{SimplexConstraint}}}(n_sources)
@@ -104,7 +107,7 @@ function elbo_trust_region(; initial_delta = 1.0, delta_hat = 1e9)
                                    delta_hat = delta_hat)
 end
 
-function enforce_references!{T}(ea::ElboArgs, vp::VariationalParams{T}, cfg::ElboConfig)
+function enforce_references!(ea::ElboArgs, vp::VariationalParams{T}, cfg::ElboConfig) where {T}
     @assert length(cfg.bound_params) == length(ea.active_sources)
     for i in 1:length(ea.active_sources)
         cfg.bound_params[i] = vp[ea.active_sources[i]]
@@ -112,9 +115,9 @@ function enforce_references!{T}(ea::ElboArgs, vp::VariationalParams{T}, cfg::Elb
     return nothing
 end
 
-to_flat_vector{T}(sources::VariationalParams{T}) = vcat(sources...)::Vector{T}
+to_flat_vector(sources::VariationalParams{T}) where {T} = vcat(sources...)::Vector{T}
 
-function to_flat_vector!{T}(x::Vector{T}, sources::VariationalParams{T})
+function to_flat_vector!(x::Vector{T}, sources::VariationalParams{T}) where {T}
     i = 1
     for src in sources
         for j in eachindex(src)
@@ -125,7 +128,7 @@ function to_flat_vector!{T}(x::Vector{T}, sources::VariationalParams{T})
     return sources
 end
 
-function to_variational_params!{T}(sources::VariationalParams{T}, x::Vector{T})
+function to_variational_params!(sources::VariationalParams{T}, x::Vector{T}) where {T}
     i = 1
     for src in sources
         for j in eachindex(src)
@@ -155,7 +158,7 @@ __init__()
 # Callable Types Passed to Optim #
 ##################################
 
-function evaluate!{T}(ea::ElboArgs, vp::VariationalParams{T}, cfg::ElboConfig, x::Vector)
+function evaluate!(ea::ElboArgs, vp::VariationalParams{T}, cfg::ElboConfig, x::Vector) where {T}
     if x != cfg.free_previous_input
         copy!(cfg.free_previous_input, x)
         to_variational_params!(cfg.free_params, x)

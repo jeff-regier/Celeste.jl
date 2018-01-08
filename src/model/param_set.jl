@@ -147,7 +147,7 @@ getids(::Type{PsfParams}) = psf_ids
 length(::Type{PsfParams}) = 6
 
 # define length(value) in addition to length(Type) for ParamSets
-length{T<:ParamSet}(::T) = length(T)
+length(::T) where {T<:ParamSet} = length(T)
 
 #TODO: build these from ue_align, etc., here.
 align(::StarPosParams, ids) = ids.pos
