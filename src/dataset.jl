@@ -3,7 +3,15 @@ struct BoundingBox
     ramax::Float64
     decmin::Float64
     decmax::Float64
+
+    function BoundingBox(ramin::Float64, ramax::Float64,
+                         decmin::Float64, decmax::Float64)
+        @assert ramax > ramin "ramax must be greater than ramin"
+        @assert decmax > decmin "decmax must be greater than decmin"
+        new(ramin, ramax, decmin, decmax)
+    end
 end
+
 
 function BoundingBox(ramin::String, ramax::String,
                      decmin::String, decmax::String)

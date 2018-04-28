@@ -33,6 +33,7 @@ include("Synthetic.jl")
 include("AccuracyBenchmark.jl")
 include("GalsimBenchmark.jl")
 
+include("DECALSIO.jl")
 include("ArgumentParse.jl")
 include("main.jl")
 

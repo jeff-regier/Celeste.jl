@@ -33,7 +33,7 @@ where spherical coordinates are given in *degrees*.
 function _spherical_to_cartesian(lon::AbstractVector, lat::AbstractVector)
     length(lon) == length(lat) || error("lengths of `lon` and `lat` must match")
 
-    T = float(promote_type(eltype(lon), eltype(lat)))
+    T = promote_type(eltype(lon), eltype(lat))
     result = Array{T}(3, length(lon))
     for i in eachindex(lon)
         coslat = cosd(lat[i])

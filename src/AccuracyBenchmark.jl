@@ -921,10 +921,15 @@ function match_catalogs(truth::DataFrame, prediction_dfs::Vector{DataFrame};
     matched = trues(nrow(truth))
     idxs = Vector{Int}[]
     for prediction in prediction_dfs
-        idx, dists = match_coordinates(truth[:ra],
-                                       truth[:dec],
-                                       prediction[:ra],
-                                       prediction[:dec])
+        # remove missings before feeding to match_coordinates
+        @assert sum(ismissing.(truth[:ra])) == 0
+        @assert sum(ismissing.(truth[:dec])) == 0
+        @assert sum(ismissing.(prediction[:ra])) == 0
+        @assert sum(ismissing.(prediction[:dec])) == 0
+        idx, dists = match_coordinates(Vector{Float64}(truth[:ra]),
+                                       Vector{Float64}(truth[:dec]),
+                                       Vector{Float64}(prediction[:ra]),
+                                       Vector{Float64}(prediction[:dec]))
         matched .&= dists .< tol
         push!(idxs, idx)
     end
