@@ -6,6 +6,7 @@ import FITSIO
 using StaticArrays
 import WCS
 import CSV
+import PyPlot
 
 import ..Config
 import ..DeterministicVI
@@ -18,6 +19,8 @@ const ARCSEC_PER_DEGREE = 3600
 const SDSS_ARCSEC_PER_PIXEL = 0.396
 const SDSS_DATA_DIR = joinpath(Pkg.dir("Celeste"), "test", "data")
 const STRIPE82_RCF = SDSSIO.RunCamcolField(4263, 5, 119)
+const COADD_CATALOG_FITS = joinpath(Pkg.dir("Celeste"), "test", "data", "coadd_for_4263_5_119.fit")
+const GALAXY_ONLY_COLUMNS = [:gal_frac_dev, :gal_axis_ratio, :gal_radius_px, :gal_angle_deg]
 
 struct BenchmarkFitsFileNotFound <: Exception
     filename::String
@@ -251,6 +254,12 @@ function load_coadd_catalog(fits_filename)
     bad_rows = [x in BAD_COADD_OBJID for x in result[:, :objid]]
     result = result[.!bad_rows, :]
 
+    # for stars, ensure galaxy-only fields are "missing"
+    for col in GALAXY_ONLY_COLUMNS
+        result[col] = convert(Vector{Union{Missing, Float64}}, result[col])
+        result[result[:is_star], col] = missing
+    end
+
     return result
 end
 
@@ -447,9 +456,17 @@ Draw sources at random from Celeste prior, returning a catalog DF.
 function generate_catalog_from_celeste_prior(num_sources::Int64, seed::Int64)
     srand(seed)
     prior = Model.load_prior()
-    vcat(
+    result = vcat(
         [draw_source_params(prior) for index in 1:num_sources]...
     )
+
+    # for stars, ensure galaxy-only fields are "missing"
+    for col in GALAXY_ONLY_COLUMNS
+        result[col] = convert(Vector{Union{Missing, Float64}}, result[col])
+        result[result[:is_star], col] = missing
+    end
+
+    return result
 end
 
 
@@ -1013,6 +1030,23 @@ function score_uncertainty(uncertainty_df::DataFrame)
             within_3_sd=mean(abs_error_sds .<= 3),
         )
     end
+end
+
+
+function plot_image(img)
+    xs = img.pixels'
+
+    xs -= 550
+    black = minimum(filter(.!isnan, xs))
+    xs = map((x)->isnan(x) ? black : x, xs)
+    xs = min.(xs, 10_000)
+    xs = log.(xs + 100)
+    #cutoffs = quantile(xs2[:], 0:0.01:1)
+    #xs3 = map(x->findfirst(x .< cutoffs), xs2)
+    xs -= log(black + 100)
+    xs /= log(10_100)
+
+    PyPlot.imshow(xs)
 end
 
 

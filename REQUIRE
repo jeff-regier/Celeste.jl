@@ -19,3 +19,4 @@ CodecBzip2
 CodecZlib
 NearestNeighbors
 Interpolations
+PyPlot
