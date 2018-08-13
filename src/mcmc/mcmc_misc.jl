@@ -88,24 +88,24 @@ function catalog_to_data_frame_row(catalog_entry; objid="truth")
     ce = catalog_entry
     df = DataFrame()
     fluxes = ce.is_star ? ce.star_fluxes : ce.gal_fluxes
-    df[:objid]                          = [objid]
-    df[:ra]            = [ce.pos[1]]
-    df[:dec]                = [ce.pos[2]]
-    df[:is_star]                        = [ce.is_star]
-    df[:gal_frac_dev]  = [ce.gal_frac_dev]
-    df[:gal_axis_ratio]         = [ce.gal_axis_ratio]
-    df[:gal_radius_px]           = [ce.gal_radius_px]
-    df[:gal_angle_deg]                      = [ce.gal_angle]
+    df[:objid]             = [objid]
+    df[:ra]                = [ce.pos[1]]
+    df[:dec]               = [ce.pos[2]]
+    df[:is_star]           = [ce.is_star]
+    df[:gal_frac_dev]      = [ce.gal_frac_dev]
+    df[:gal_axis_ratio]    = [ce.gal_axis_ratio]
+    df[:gal_radius_px]     = [ce.gal_radius_px]
+    df[:gal_angle_deg]     = [ce.gal_angle]
     df[:flux_r_nmgy]       = [fluxes[3]]
     df[:log_flux_r_stderr] = [NaN]
-    df[:color_ug]             = [log(fluxes[2]) - log(fluxes[1])]
-    df[:color_gr]             = [log(fluxes[3]) - log(fluxes[2])]
-    df[:color_ri]             = [log(fluxes[4]) - log(fluxes[3])]
-    df[:color_iz]             = [log(fluxes[5]) - log(fluxes[4])]
-    df[:color_ug_stderr]      = [NaN]
-    df[:color_gr_stderr]      = [NaN]
-    df[:color_ri_stderr]      = [NaN]
-    df[:color_iz_stderr]      = [NaN]
+    df[:color_ug]          = [log(fluxes[2]) - log(fluxes[1])]
+    df[:color_gr]          = [log(fluxes[3]) - log(fluxes[2])]
+    df[:color_ri]          = [log(fluxes[4]) - log(fluxes[3])]
+    df[:color_iz]          = [log(fluxes[5]) - log(fluxes[4])]
+    df[:color_ug_stderr]   = [NaN]
+    df[:color_gr_stderr]   = [NaN]
+    df[:color_ri_stderr]   = [NaN]
+    df[:color_iz_stderr]   = [NaN]
     return df
 end
 
@@ -177,7 +177,7 @@ end
 function mean_angle(angles)
   # convert to radians in [0, 2pi]
   a    = (angles/180.)*2*pi
-  abar = atan2(mean(sin(a)), mean(cos(a)))
+  abar = atan2(mean(sin.(a)), mean(cos.(a)))
   aout = abar/(2*pi) * 180
   return aout
 end

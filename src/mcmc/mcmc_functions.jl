@@ -65,7 +65,9 @@ function make_gal_inference_functions(imgs::Vector,
                                patches=patches,
                                background_images=background_images,
                                pos_transform=uniform_to_deg)
-    gal_rad_max = min(8, entry.gal_radius_px*2)
+    #gal_rad_max = min(15, entry.gal_radius_px*2)
+    #gal_rad_max = clamp(entry.gal_radius_px*2
+    gal_rad_max = 15.
     println("Galaxy radius maximum = ", gal_rad_max)
     gal_logprior = make_gal_logprior(gal_radius_px_max=gal_rad_max)
     function logprior(th)

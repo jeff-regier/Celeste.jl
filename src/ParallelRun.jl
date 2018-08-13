@@ -566,6 +566,7 @@ function process_source_mcmc(config::Config,
 
     # check if the sky is bad --- record for later
     mcmc_results["is_sky_bad"] = bad_sky(entry, images)
+    mcmc_results["neighbor_ids"] = neighbor_ids
 
     # summary
     return mcmc_results

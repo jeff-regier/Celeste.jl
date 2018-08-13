@@ -83,7 +83,7 @@ function assert_columns_are_present(catalog_df::DataFrame, required_columns::Set
 end
 
 function read_catalog(csv_file::String)
-    catalog_df = CSV.read(csv_file, rows_for_type_detect=100)
+    catalog_df = CSV.read(csv_file, rows_for_type_detect=100; null="NA")
     assert_columns_are_present(catalog_df, CATALOG_COLUMNS)
     catalog_df
 end
