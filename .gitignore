@@ -20,3 +20,6 @@ deps/*
 *.jld
 
 .DS_Store
+.ipynb_checkpoints/
+*.csv
+__pycache__
