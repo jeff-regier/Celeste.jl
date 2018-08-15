@@ -6,7 +6,6 @@ import FITSIO
 using StaticArrays
 import WCS
 import CSV
-import PyPlot
 
 import ..Config
 import ..DeterministicVI
@@ -1045,8 +1044,7 @@ function plot_image(img)
     #xs3 = map(x->findfirst(x .< cutoffs), xs2)
     xs -= log(black + 100)
     xs /= log(10_100)
-
-    PyPlot.imshow(xs)
+    return xs
 end
 
 
