@@ -1,9 +1,10 @@
 #!/usr/bin/env julia
-# current command
-# acmiller@nid00744:~/Proj/celeste-stats-proj/src> julia run_celeste_on_field_mcmc.jl --use-full-initialization --initializatio
-# n-catalog ~/Proj/Celeste.jl/benchmark/accuracy/output/prior_6328dda483.csv --limit-num-sources 1 --images-jld ~/Proj/Celeste.
-# jl/benchmark/accuracy/output/prior_6328dda483_synthetic_6c24c1c9ad.jld#
-
+# current command for Stripe 82 Experiment
+# julia run_celeste_on_field_mcmc.jl \
+#   --ais-output-dir ais-output-s82 \
+#   --use-full-initialization \
+#   --initialization-catalog ~/Proj/Celeste.jl/benchmark/accuracy/output/sdss_4263_5_119_primary_b97a8fda22.csv \
+#   --target-source-range $SOURCE_RANGE
 import Celeste.ArgumentParse
 parser = Celeste.ArgumentParse.ArgumentParser()
 ArgumentParse.add_argument(parser, "--joint", help="Use joint inference", action=:store_true)
@@ -87,9 +88,9 @@ if haskey(parsed_args, "images-jld")
     images = JLD.load(parsed_args["images-jld"], "images")
     catalog_label = splitext(basename(parsed_args["images-jld"]))[1]
 else
-    rcf = AccuracyBenchmark.STRIPE82_RCF
+    dataset = SDSSIO.SDSSDataSet(AccuracyBenchmark.SDSS_DATA_DIR)
     strategy = SDSSIO.PlainFITSStrategy(AccuracyBenchmark.SDSS_DATA_DIR)
-    images = SDSSIO.load_field_images(strategy, [rcf])
+    images = SDSSIO.load_field_images(dataset, AccuracyBenchmark.STRIPE82_RCF)
     catalog_label = @sprintf("sdss_%s_%s_%s", rcf.run, rcf.camcol, rcf.field)
 end
 @assert length(images) == 5
@@ -101,6 +102,10 @@ end
 #  For synthetic experiment, use initialization catalog, but do not use
 #   full init
 ###########################################################################
+if !haskey(parsed_args, "initialization-catalog")
+    parsed_args["initialization-catalog"] = expanduser(
+      "~/Proj/Celeste.jl/benchmark/accuracy/output/sdss_4263_5_119_primary_b97a8fda22.csv")
+end
 if haskey(parsed_args, "initialization-catalog")
     catalog_data = AccuracyBenchmark.read_catalog(parsed_args["initialization-catalog"])
     if parsed_args["use-full-initialization"]
@@ -165,14 +170,12 @@ neighbor_map = Dict(id=>Model.find_neighbors(catalog_patches, id)
 #######################################
 function proc(ts)
     println("========== source ", ts, " of ", length(target_sources))
-    # config = px_radius, num_temperatures, num_samples
-    config = Config(25.0, 200, 25)
-    #config = Config(25.0, 200, 4)
+    # config = px_radius, num_temperatures, num_ais_samples, num_vi_iterations
+    config = Config(25.0, 200, 25, 0)
 
     neighbor_ids = neighbor_map[ts]
     res = ParallelRun.process_source_mcmc(
-        config, ts, catalog_entries, catalog_patches, neighbor_ids, images;
-        use_robust_likelihood=false)
+        config, ts, catalog_entries, catalog_patches, neighbor_ids, images)
 
     # save source samples
     println(" ... saving source ", ts)
@@ -195,22 +198,3 @@ if haskey(parsed_args, "target-source-range")
     println("====== inferring sources ", target_sources, " =========")
     target_sources = collect(target_sources)
 end
-
-
-################################################
-# run multi-processed MCMC infer per source    #
-################################################
-results = pmap(proc, target_sources)
-
-#############################
-# write to a single CSV     #
-#############################
-#import Celeste: MCMC
-#star_summary, gal_summary, results_df = MCMC.consolidate_samples(results)
-# save to output directory
-#if !isdir(OUTPUT_DIRECTORY)
-#    mkdir(OUTPUT_DIRECTORY)
-#end
-#csv_filename = joinpath(OUTPUT_DIRECTORY, @sprintf("%s_mcmc_predictions_%s.csv", catalog_label, parsed_args["target-source-range"]))
-#AccuracyBenchmark.write_catalog(csv_filename, results_df)
-#AccuracyBenchmark.append_hash_to_file(csv_filename)
