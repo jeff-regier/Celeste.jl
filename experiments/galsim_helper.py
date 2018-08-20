@@ -1,4 +1,5 @@
 import collections
+import hashlib
 import logging
 import os
 import sys
@@ -384,7 +385,12 @@ def add_header_to_hdu(hdu, header_dict):
     for name, (value, comment) in header_dict.items():
         header[name] = (value, FITS_COMMENT_PREPEND + comment)
 
+def ensure_containing_directory_exists(filename):
+    if not os.path.exists(os.path.dirname(filename)):
+        os.mkdir(os.path.dirname(filename))
+
 def save_multi_extension_fits(hdu_list, filename):
+    ensure_containing_directory_exists(filename)
     if os.path.exists(filename):
         os.remove(filename)
     hdu_list.writeto(filename)
@@ -393,12 +399,13 @@ def write_latest_filename(output_label, latest_filename):
     latest_fits_filename_holder = os.path.join(
         'latest_filenames', 'latest_{}.txt'.format(output_label)
     )
+    ensure_containing_directory_exists(latest_fits_filename_holder)
     with open(latest_fits_filename_holder, 'w') as stream:
         stream.write(latest_filename)
         stream.write('\n')
     _logger.info('Updated %r', latest_fits_filename_holder)
 
-def generate_fits_file(output_file_name, test_case_callbacks):
+def generate_fits_file(output_label, test_case_callbacks):
     _logger.info('Generating %d test cases', len(test_case_callbacks))
     fits_hdus = astropy.io.fits.HDUList()
     for case_index, test_case_fn in enumerate(test_case_callbacks):
@@ -412,5 +419,6 @@ def generate_fits_file(output_file_name, test_case_callbacks):
             fits_hdus[-1].name = '{}_{}'.format(test_case_fn.__name__, band_index + 1)
             add_header_to_hdu(fits_hdus[-1], test_case.get_fits_header(case_index, band_index))
 
-    save_multi_extension_fits(fits_hdus, output_file_name)
-    _logger.info('Wrote multi-extension FITS file to %r', output_file_name)
+    image_file_name = os.path.join(os.getcwd(), output_label + '.fits')
+    save_multi_extension_fits(fits_hdus, image_file_name)
+    print('Wrote multi-extension FITS file to', image_file_name)
