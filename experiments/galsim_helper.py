@@ -89,7 +89,7 @@ class OffsetFromCenterPosition(object):
 class CommonFields(object):
     def __init__(self):
         self.position = OffsetFromCenterPosition(0, 0) # or an AbsolutePosition
-        self.flux_r_nmgy = 40
+        self.flux_r_nmgy = 10
         # relative flux in each band defines "color" of light sources
         self._flux_relative_to_reference_band = DEFAULT_GALAXY_RELATIVE_INTENSITIES
 
