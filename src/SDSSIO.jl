@@ -458,10 +458,10 @@ function read_psfmap(fitsfile::FITSIO.FITS, band::Char)
     nrows = FITSIO.read_key(hdu, "NAXIS2")[1]::Int
     nrow_b = Int((read(hdu, "nrow_b")::Vector{Int32})[1])
     ncol_b = Int((read(hdu, "ncol_b")::Vector{Int32})[1])
-    rnrow = (read(hdu, "rnrow")::Vector{Int32})[1]
-    rncol = (read(hdu, "rncol")::Vector{Int32})[1]
+    rnrow = (read(hdu, "RNROW")::Vector{Int32})[1]
+    rncol = (read(hdu, "RNCOL")::Vector{Int32})[1]
     cmat_raw = read(hdu, "c")::Array{Float32, 3}
-    rrows_raw = read(hdu, "rrows")::Array{Array{Float32,1},1}
+    rrows_raw = read(hdu, "RROWS")::Array{Array{Float32,1},1}
 
     # Only the first (nrow_b, ncol_b) submatrix of cmat is used for
     # reasons obscure to the author.
@@ -594,16 +594,16 @@ function read_photoobj(f::FITSIO.FITS, band::Char='r', close_file=true)
 
     hdu = f[2]::FITSIO.TableHDU
 
-    objid = read(hdu, "objid")::Vector{String}
-    ra = read(hdu, "ra")::Vector{Float64}
-    dec = read(hdu, "dec")::Vector{Float64}
-    mode = read(hdu, "mode")::Vector{UInt8}
-    thing_id = read(hdu, "thing_id")::Vector{Int32}
+    objid = read(hdu, "OBJID")::Vector{String}
+    ra = read(hdu, "RA")::Vector{Float64}
+    dec = read(hdu, "DEC")::Vector{Float64}
+    mode = read(hdu, "MODE")::Vector{UInt8}
+    thing_id = read(hdu, "THING_ID")::Vector{Int32}
 
     # Get "bright" objects.
     # (In objc_flags, the bit pattern Int32(2) corresponds to bright objects.)
-    objc_flags = read(hdu, "objc_flags")::Vector{Int32}
-    objc_flags2 = read(hdu, "objc_flags2")::Vector{Int32}
+    objc_flags = read(hdu, "OBJC_FLAGS")::Vector{Int32}
+    objc_flags2 = read(hdu, "OBJC_FLAGS2")::Vector{Int32}
 
     # bright, saturated, or large
     bad_flags1 = objc_flags .& UInt32(1^2 + 2^18 + 2^24) .!= 0
@@ -611,15 +611,15 @@ function read_photoobj(f::FITSIO.FITS, band::Char='r', close_file=true)
     # nopeak, DEBLEND_DEGENERATE, or saturated center
     bad_flags2 = objc_flags2 .& UInt32(2^14 + 2^18 + 2^11) .!= 0
 
-    has_child = read(hdu, "nchild")::Vector{Int16} .> 0
+    has_child = read(hdu, "NCHILD")::Vector{Int16} .> 0
 
     # 6 = star, 3 = galaxy, others can be ignored.
-    objc_type = read(hdu, "objc_type")::Vector{Int32}
+    objc_type = read(hdu, "OBJC_TYPE")::Vector{Int32}
     is_star = objc_type .== 6
     is_gal = objc_type .== 3
     bad_type = ((!).(is_star .| is_gal))
 
-    fracdev = vec((read(hdu, "fracdev")::Matrix{Float32})[b, :])
+    fracdev = vec((read(hdu, "FRACDEV")::Matrix{Float32})[b, :])
 
     # determine mask for rows
     has_dev = fracdev .> 0.
@@ -635,23 +635,23 @@ function read_photoobj(f::FITSIO.FITS, band::Char='r', close_file=true)
     # Read the fluxes.
     # Record the cmodelflux if the galaxy is composite, otherwise use
     # the flux for the appropriate type.
-    psfflux = read(hdu, "psfflux")::Matrix{Float32}
-    cmodelflux = read(hdu, "cmodelflux")::Matrix{Float32}
-    devflux = read(hdu, "devflux")::Matrix{Float32}
-    expflux = read(hdu, "expflux")::Matrix{Float32}
+    psfflux = read(hdu, "PSFFLUX")::Matrix{Float32}
+    cmodelflux = read(hdu, "CMODELFLUX")::Matrix{Float32}
+    devflux = read(hdu, "DEVFLUX")::Matrix{Float32}
+    expflux = read(hdu, "EXPFLUX")::Matrix{Float32}
 
     # We actually only store the following properties for the given band
     # (see below in Dict construction) NB: the phi quantites in tractor are
     # multiplied by -1.
-    phi_dev_deg = read(hdu, "phi_dev_deg")::Matrix{Float32}
-    phi_exp_deg = read(hdu, "phi_exp_deg")::Matrix{Float32}
-    phi_offset = read(hdu, "phi_offset")::Matrix{Float32}
+    phi_dev_deg = read(hdu, "PHI_DEV_DEG")::Matrix{Float32}
+    phi_exp_deg = read(hdu, "PHI_EXP_DEG")::Matrix{Float32}
+    phi_offset = read(hdu, "PHI_OFFSET")::Matrix{Float32}
 
-    theta_dev = read(hdu, "theta_dev")::Matrix{Float32}
-    theta_exp = read(hdu, "theta_exp")::Matrix{Float32}
+    theta_dev = read(hdu, "THETA_DEV")::Matrix{Float32}
+    theta_exp = read(hdu, "THETA_EXP")::Matrix{Float32}
 
-    ab_exp = read(hdu, "ab_exp")::Matrix{Float32}
-    ab_dev = read(hdu, "ab_dev")::Matrix{Float32}
+    ab_exp = read(hdu, "AB_EXP")::Matrix{Float32}
+    ab_dev = read(hdu, "AB_DEV")::Matrix{Float32}
 
     close_file && close(f)
 
