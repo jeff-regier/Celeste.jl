@@ -12,7 +12,7 @@ It performs approximate Bayesian inference as described in
 
 > [Jeffrey Regier, Andrew Miller, David Schlegel, Ryan Adams, Jon McAuliffe, and Prabhat.
 > "Approximate inference for constructing astronomical catalogs from images."
-> In submission.](https://arxiv.org/pdf/1803.00113.pdf)
+> In: Annals of Applied Statistics, 13 (3), 2019.](https://projecteuclid.org/euclid.aoas/1571277777)
 
 and
 
