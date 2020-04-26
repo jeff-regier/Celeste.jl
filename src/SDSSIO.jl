@@ -106,9 +106,9 @@ Construct an image of the sky from the sky HDU of a SDSS \"frame\" file.
 This is typically the 3rd HDU of the file.
 """
 function read_sky(hdu::FITSIO.TableHDU)
-    sky_small = squeeze(read(hdu, "ALLSKY"), 3)::Array{Float32, 2}
-    sky_x = vec(read(hdu, "XINTERP"))::Vector{Float32}
-    sky_y = vec(read(hdu, "YINTERP"))::Vector{Float32}
+    sky_small = squeeze(read(hdu, "ALLSKY", case_sensitive=false), 3)::Array{Float32, 2}
+    sky_x = vec(read(hdu, "XINTERP", case_sensitive=false))::Vector{Float32}
+    sky_y = vec(read(hdu, "YINTERP", case_sensitive=false))::Vector{Float32}
 
     # convert sky interpolation coordinates from 0-indexed to 1-indexed
     for i=1:length(sky_x)
@@ -157,8 +157,8 @@ Return the image gains for field number `fieldnum` in an SDSS
 \"photoField\" file `f`.
 """
 function read_field_gains(f::FITSIO.FITS, fieldnum)
-    fieldnums = read(f[2], "FIELD")::Vector{Int32}
-    gains = read(f[2], "GAIN")::Array{Float32, 2}
+    fieldnums = read(f[2], "FIELD", case_sensitive=false)::Vector{Int32}
+    gains = read(f[2], "GAIN", case_sensitive=false)::Array{Float32, 2}
 
     # Find first occurance of `fieldnum` and return the corresponding gain.
     for i=1:length(fieldnums)
@@ -183,9 +183,9 @@ function read_mask(f::FITSIO.FITS, mask_planes=DEFAULT_MASK_PLANES)
     # The last (12th) HDU contains a key describing what each of the
     # other HDUs are. Use this to find the indicies of all the relevant
     # HDUs (those with attributeName matching a value in `mask_planes`).
-    value = read(f[12], "Value")::Vector{Int32}
-    def = read(f[12], "defName")::Vector{String}
-    attribute = read(f[12], "attributeName")::Vector{String}
+    value = read(f[12], "Value", case_sensitive=false)::Vector{Int32}
+    def = read(f[12], "defName", case_sensitive=false)::Vector{String}
+    attribute = read(f[12], "attributeName", case_sensitive=false)::Vector{String}
 
     # initialize return values
     xranges = UnitRange{Int}[]
@@ -200,10 +200,10 @@ function read_mask(f::FITSIO.FITS, mask_planes=DEFAULT_MASK_PLANES)
             # `value` starts from 0, but first table hdu is hdu number 2
             hdunum = value[i] + 2
 
-            cmin = read(f[hdunum], "cmin")::Vector{Int32}
-            cmax = read(f[hdunum], "cmax")::Vector{Int32}
-            rmin = read(f[hdunum], "rmin")::Vector{Int32}
-            rmax = read(f[hdunum], "rmax")::Vector{Int32}
+            cmin = read(f[hdunum], "cmin", case_sensitive=false)::Vector{Int32}
+            cmax = read(f[hdunum], "cmax", case_sensitive=false)::Vector{Int32}
+            rmin = read(f[hdunum], "rmin", case_sensitive=false)::Vector{Int32}
+            rmax = read(f[hdunum], "rmax", case_sensitive=false)::Vector{Int32}
 
             # "c" ("column") refers to mask's NAXIS1 (x axis);
             # "r" ("row") refers to mask's NAXIS2 (y axis).
@@ -314,12 +314,12 @@ function read_psfmap(fitsfile::FITSIO.FITS, band::Char)
     hdu = fitsfile[extnum]::FITSIO.TableHDU
 
     nrows = FITSIO.read_key(hdu, "NAXIS2")[1]::Int
-    nrow_b = Int((read(hdu, "nrow_b")::Vector{Int32})[1])
-    ncol_b = Int((read(hdu, "ncol_b")::Vector{Int32})[1])
-    rnrow = (read(hdu, "rnrow")::Vector{Int32})[1]
-    rncol = (read(hdu, "rncol")::Vector{Int32})[1]
-    cmat_raw = read(hdu, "c")::Array{Float32, 3}
-    rrows_raw = read(hdu, "rrows")::Array{Array{Float32,1},1}
+    nrow_b = Int((read(hdu, "nrow_b", case_sensitive=false)::Vector{Int32})[1])
+    ncol_b = Int((read(hdu, "ncol_b", case_sensitive=false)::Vector{Int32})[1])
+    rnrow = (read(hdu, "rnrow", case_sensitive=false)::Vector{Int32})[1]
+    rncol = (read(hdu, "rncol", case_sensitive=false)::Vector{Int32})[1]
+    cmat_raw = read(hdu, "c", case_sensitive=false)::Array{Float32, 3}
+    rrows_raw = read(hdu, "rrows", case_sensitive=false)::Array{Array{Float32,1},1}
 
     # Only the first (nrow_b, ncol_b) submatrix of cmat is used for
     # reasons obscure to the author.
@@ -383,16 +383,16 @@ function read_photoobj(f::FITSIO.FITS, band::Char='r')
 
     hdu = f[2]::FITSIO.TableHDU
 
-    objid = read(hdu, "objid")::Vector{String}
-    ra = read(hdu, "ra")::Vector{Float64}
-    dec = read(hdu, "dec")::Vector{Float64}
-    mode = read(hdu, "mode")::Vector{UInt8}
-    thing_id = read(hdu, "thing_id")::Vector{Int32}
+    objid = read(hdu, "objid", case_sensitive=false)::Vector{String}
+    ra = read(hdu, "ra", case_sensitive=false)::Vector{Float64}
+    dec = read(hdu, "dec", case_sensitive=false)::Vector{Float64}
+    mode = read(hdu, "mode", case_sensitive=false)::Vector{UInt8}
+    thing_id = read(hdu, "thing_id", case_sensitive=false)::Vector{Int32}
 
     # Get "bright" objects.
     # (In objc_flags, the bit pattern Int32(2) corresponds to bright objects.)
-    objc_flags = read(hdu, "objc_flags")::Vector{Int32}
-    objc_flags2 = read(hdu, "objc_flags2")::Vector{Int32}
+    objc_flags = read(hdu, "objc_flags", case_sensitive=false)::Vector{Int32}
+    objc_flags2 = read(hdu, "objc_flags2", case_sensitive=false)::Vector{Int32}
 
     # bright, saturated, or large
     bad_flags1 = objc_flags .& UInt32(1^2 + 2^18 + 2^24) .!= 0
@@ -400,15 +400,15 @@ function read_photoobj(f::FITSIO.FITS, band::Char='r')
     # nopeak, DEBLEND_DEGENERATE, or saturated center
     bad_flags2 = objc_flags2 .& UInt32(2^14 + 2^18 + 2^11) .!= 0
 
-    has_child = read(hdu, "nchild")::Vector{Int16} .> 0
+    has_child = read(hdu, "nchild", case_sensitive=false)::Vector{Int16} .> 0
 
     # 6 = star, 3 = galaxy, others can be ignored.
-    objc_type = read(hdu, "objc_type")::Vector{Int32}
+    objc_type = read(hdu, "objc_type", case_sensitive=false)::Vector{Int32}
     is_star = objc_type .== 6
     is_gal = objc_type .== 3
     bad_type = ((!).(is_star .| is_gal))
 
-    fracdev = vec((read(hdu, "fracdev")::Matrix{Float32})[b, :])
+    fracdev = vec((read(hdu, "fracdev", case_sensitive=false)::Matrix{Float32})[b, :])
 
     # determine mask for rows
     has_dev = fracdev .> 0.
@@ -424,23 +424,23 @@ function read_photoobj(f::FITSIO.FITS, band::Char='r')
     # Read the fluxes.
     # Record the cmodelflux if the galaxy is composite, otherwise use
     # the flux for the appropriate type.
-    psfflux = read(hdu, "psfflux")::Matrix{Float32}
-    cmodelflux = read(hdu, "cmodelflux")::Matrix{Float32}
-    devflux = read(hdu, "devflux")::Matrix{Float32}
-    expflux = read(hdu, "expflux")::Matrix{Float32}
+    psfflux = read(hdu, "psfflux", case_sensitive=false)::Matrix{Float32}
+    cmodelflux = read(hdu, "cmodelflux", case_sensitive=false)::Matrix{Float32}
+    devflux = read(hdu, "devflux", case_sensitive=false)::Matrix{Float32}
+    expflux = read(hdu, "expflux", case_sensitive=false)::Matrix{Float32}
 
     # We actually only store the following properties for the given band
     # (see below in Dict construction) NB: the phi quantites in tractor are
     # multiplied by -1.
-    phi_dev_deg = read(hdu, "phi_dev_deg")::Matrix{Float32}
-    phi_exp_deg = read(hdu, "phi_exp_deg")::Matrix{Float32}
-    phi_offset = read(hdu, "phi_offset")::Matrix{Float32}
+    phi_dev_deg = read(hdu, "phi_dev_deg", case_sensitive=false)::Matrix{Float32}
+    phi_exp_deg = read(hdu, "phi_exp_deg", case_sensitive=false)::Matrix{Float32}
+    phi_offset = read(hdu, "phi_offset", case_sensitive=false)::Matrix{Float32}
 
-    theta_dev = read(hdu, "theta_dev")::Matrix{Float32}
-    theta_exp = read(hdu, "theta_exp")::Matrix{Float32}
+    theta_dev = read(hdu, "theta_dev", case_sensitive=false)::Matrix{Float32}
+    theta_exp = read(hdu, "theta_exp", case_sensitive=false)::Matrix{Float32}
 
-    ab_exp = read(hdu, "ab_exp")::Matrix{Float32}
-    ab_dev = read(hdu, "ab_dev")::Matrix{Float32}
+    ab_exp = read(hdu, "ab_exp", case_sensitive=false)::Matrix{Float32}
+    ab_dev = read(hdu, "ab_dev", case_sensitive=false)::Matrix{Float32}
 
     # construct result catalog
     catalog = Dict("objid"=>objid[mask],

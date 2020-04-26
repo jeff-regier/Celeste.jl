@@ -19,12 +19,12 @@ field: GalsimBenchmark.jl run_galsim_field.jl $(FIELD_FITS_PATH)
 $(BENCHMARK_FITS_PATH):
 	echo "Fetching GalSim test images from $(TEST_IMAGES_BASE_URL)/$(BENCHMARK_FITS_FILENAME)"
 	mkdir -p $(OUTPUT_DIR)
-	curl --fail -o $(BENCHMARK_FITS_PATH) $(TEST_IMAGES_BASE_URL)/$(BENCHMARK_FITS_FILENAME)
+	curl -L --fail -o $(BENCHMARK_FITS_PATH) $(TEST_IMAGES_BASE_URL)/$(BENCHMARK_FITS_FILENAME)
 
 $(FIELD_FITS_PATH):
 	echo "Fetching GalSim test images from $(TEST_IMAGES_BASE_URL)/$(FIELD_FITS_FILENAME)"
 	mkdir -p $(OUTPUT_DIR)
-	curl --fail -o $(FIELD_FITS_PATH) $(TEST_IMAGES_BASE_URL)/$(FIELD_FITS_FILENAME)
+	curl -L --fail -o $(FIELD_FITS_PATH) $(TEST_IMAGES_BASE_URL)/$(FIELD_FITS_FILENAME)
 
 generate_benchmark_fits: Vagrantfile bootstrap.sh generate_test_image.py galsim_benchmarks.py
 	vagrant up

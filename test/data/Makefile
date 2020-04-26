@@ -31,25 +31,25 @@ all : $(SUBDIR3)/fpM-$(RUN6)-u$(CAMCOL)-$(FIELD4).fit \
 photoobj : $(SUBDIR3)/photoObj-$(RUN6)-$(CAMCOL)-$(FIELD4).fits
 
 field_extents.fits :
-	curl -O http://portal.nersc.gov/project/dasrepo/celeste/field_extents.fits
+	curl -L -O http://portal.nersc.gov/project/dasrepo/celeste/field_extents.fits
 
 $(SUBDIR3)/fpM-$(RUN6)-%$(CAMCOL)-$(FIELD4).fit.gz :
-	curl --create-dirs -o $(SUBDIR3)/fpM-$(RUN6)-$*$(CAMCOL)-$(FIELD4).fit.gz $(URLBASE)/photo/redux/301/$(RUN_STRIPPED)/objcs/$(CAMCOL)/fpM-$(RUN6)-$*$(CAMCOL)-$(FIELD4).fit.gz
+	curl -L --create-dirs -o $(SUBDIR3)/fpM-$(RUN6)-$*$(CAMCOL)-$(FIELD4).fit.gz $(URLBASE)/photo/redux/301/$(RUN_STRIPPED)/objcs/$(CAMCOL)/fpM-$(RUN6)-$*$(CAMCOL)-$(FIELD4).fit.gz
 $(SUBDIR3)/fpM-$(RUN6)-%$(CAMCOL)-$(FIELD4).fit : $(SUBDIR3)/fpM-$(RUN6)-%$(CAMCOL)-$(FIELD4).fit.gz
 	gunzip < $(SUBDIR3)/fpM-$(RUN6)-$*$(CAMCOL)-$(FIELD4).fit.gz > $(SUBDIR3)/fpM-$(RUN6)-$*$(CAMCOL)-$(FIELD4).fit
 
 $(SUBDIR3)/psField-$(RUN6)-$(CAMCOL)-$(FIELD4).fit :
-	curl --create-dirs -o $(SUBDIR3)/psField-$(RUN6)-$(CAMCOL)-$(FIELD4).fit $(URLBASE)/photo/redux/301/$(RUN_STRIPPED)/objcs/$(CAMCOL)/psField-$(RUN6)-$(CAMCOL)-$(FIELD4).fit
+	curl -L --create-dirs -o $(SUBDIR3)/psField-$(RUN6)-$(CAMCOL)-$(FIELD4).fit $(URLBASE)/photo/redux/301/$(RUN_STRIPPED)/objcs/$(CAMCOL)/psField-$(RUN6)-$(CAMCOL)-$(FIELD4).fit
 
 $(SUBDIR3)/frame-%-$(RUN6)-$(CAMCOL)-$(FIELD4).fits.bz2 :
-	curl --create-dirs -o $(SUBDIR3)/frame-$*-$(RUN6)-$(CAMCOL)-$(FIELD4).fits.bz2 $(URLBASE)/photoObj/frames/301/$(RUN_STRIPPED)/$(CAMCOL)/frame-$*-$(RUN6)-$(CAMCOL)-$(FIELD4).fits.bz2
+	curl -L --create-dirs -o $(SUBDIR3)/frame-$*-$(RUN6)-$(CAMCOL)-$(FIELD4).fits.bz2 $(URLBASE)/photoObj/frames/301/$(RUN_STRIPPED)/$(CAMCOL)/frame-$*-$(RUN6)-$(CAMCOL)-$(FIELD4).fits.bz2
 $(SUBDIR3)/frame-%-$(RUN6)-$(CAMCOL)-$(FIELD4).fits : $(SUBDIR3)/frame-%-$(RUN6)-$(CAMCOL)-$(FIELD4).fits.bz2
 	bunzip2 < $(SUBDIR3)/frame-$*-$(RUN6)-$(CAMCOL)-$(FIELD4).fits.bz2 > $(SUBDIR3)/frame-$*-$(RUN6)-$(CAMCOL)-$(FIELD4).fits
 
 $(SUBDIR3)/photoObj-$(RUN6)-$(CAMCOL)-$(FIELD4).fits :
-	curl --create-dirs -o $(SUBDIR3)/photoObj-$(RUN6)-$(CAMCOL)-$(FIELD4).fits $(URLBASE)/photoObj/301/$(RUN_STRIPPED)/$(CAMCOL)/photoObj-$(RUN6)-$(CAMCOL)-$(FIELD4).fits
+	curl -L --create-dirs -o $(SUBDIR3)/photoObj-$(RUN6)-$(CAMCOL)-$(FIELD4).fits $(URLBASE)/photoObj/301/$(RUN_STRIPPED)/$(CAMCOL)/photoObj-$(RUN6)-$(CAMCOL)-$(FIELD4).fits
 
 $(SUBDIR2)/photoField-$(RUN6)-$(CAMCOL).fits :
-	curl --create-dirs -o $(SUBDIR2)/photoField-$(RUN6)-$(CAMCOL).fits $(URLBASE)/photoObj/301/$(RUN_STRIPPED)/photoField-$(RUN6)-$(CAMCOL).fits
+	curl -L --create-dirs -o $(SUBDIR2)/photoField-$(RUN6)-$(CAMCOL).fits $(URLBASE)/photoObj/301/$(RUN_STRIPPED)/photoField-$(RUN6)-$(CAMCOL).fits
 
 .PRECIOUS: $(SUBDIR3)/frame-%-$(RUN6)-$(CAMCOL)-$(FIELD4).fits.bz2 $(SUBDIR3)/fpM-$(RUN6)-%$(CAMCOL)-$(FIELD4).fit.gz
